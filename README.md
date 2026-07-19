@@ -197,11 +197,10 @@ Detailed project context is available in:
 
 - [Product vision](docs/product-vision.md)
 - [Initial requirements](docs/requirements.md)
+- [High-level architecture](docs/architecture.md)
+- [Project glossary](docs/glossary.md)
 - [Architecture Decision Records](docs/adr/)
 - [Coding-agent instructions](AGENTS.md)
-
-The documentation inside `docs/` is the authoritative source for product scope
-and architectural decisions.
 
 ## Development workflow
 
