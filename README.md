@@ -172,6 +172,21 @@ npm run format:check
 
 Checks formatting without modifying files.
 
+### Tests
+
+```bash
+npm test
+```
+
+Runs the test suite once using Vitest.
+
+```bash
+npm run test:watch
+```
+
+Runs Vitest in watch mode and executes affected tests again when project files
+change.
+
 ## Repository structure
 
 ```text
