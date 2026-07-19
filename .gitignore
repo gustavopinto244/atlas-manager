@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+logs/
+
+# Runtime files
+*.pid
+*.pid.lock
+
+# Editor and operating system
+.vscode/
+.idea/
+.DS_Store
+
+# TypeScript incremental build
+*.tsbuildinfo
