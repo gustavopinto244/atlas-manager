@@ -200,6 +200,7 @@ Detailed project context is available in:
 - [High-level architecture](docs/architecture.md)
 - [Project glossary](docs/glossary.md)
 - [Project roadmap](docs/roadmap.md)
+- [Security model](docs/security-model.md)
 - [Architecture Decision Records](docs/adr/)
 - [Coding-agent instructions](AGENTS.md)
 
