@@ -199,6 +199,7 @@ Detailed project context is available in:
 - [Initial requirements](docs/requirements.md)
 - [High-level architecture](docs/architecture.md)
 - [Project glossary](docs/glossary.md)
+- [Project roadmap](docs/roadmap.md)
 - [Architecture Decision Records](docs/adr/)
 - [Coding-agent instructions](AGENTS.md)
 
