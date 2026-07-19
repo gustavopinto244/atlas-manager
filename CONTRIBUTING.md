@@ -254,6 +254,7 @@ Run the relevant validation commands before opening a Pull Request:
 npm run format:check
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 
@@ -465,7 +466,7 @@ A contribution is complete when:
 - the related Issue and acceptance criteria are satisfied;
 - the implementation remains within the agreed scope;
 - relevant validation commands pass;
-- behavior changes include appropriate tests when testing is available;
+- behavior changes include appropriate automated tests;
 - architecture and security boundaries are respected;
 - documentation is updated where necessary;
 - no credentials, secrets, or generated files are included;
