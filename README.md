@@ -17,10 +17,14 @@ The repository currently includes:
 - the architectural decision to use Express.js;
 - Node.js and TypeScript configuration;
 - ESLint and Prettier configuration;
-- coding-agent instructions.
+- coding-agent instructions;
+- an initial Express application with a liveness endpoint;
+- HTTP integration testing with Vitest and Supertest.
 
 The administrative API and server-management features have not been
-implemented yet.
+implemented yet. The current `GET /health/live` endpoint reports only whether
+the HTTP application is alive; it does not report the health of the Atlas
+server.
 
 ## Planned capabilities
 
@@ -50,15 +54,15 @@ Currently configured:
 - npm;
 - TypeScript;
 - ESLint;
-- Prettier.
+- Prettier;
+- Express.js;
+- Vitest;
+- Supertest.
 
 Approved for upcoming implementation:
 
-- Express.js;
 - Zod;
-- Pino;
-- Vitest;
-- Supertest.
+- Pino.
 
 Relevant infrastructure technologies include:
 
@@ -105,6 +109,19 @@ Run the development entry point:
 ```bash
 npm run dev
 ```
+
+While the application is running, access the liveness endpoint at
+`http://127.0.0.1:3000/health/live`. A successful response has HTTP status 200
+and the following JSON body:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+This endpoint reports only whether the Atlas Manager HTTP process is alive. It
+does not collect or expose health information about the Atlas host.
 
 Stop the development process with `Ctrl+C`.
 
@@ -196,7 +213,13 @@ atlas-manager/
 │   ├── product-vision.md
 │   └── requirements.md
 ├── src/
+│   ├── http/
+│   │   └── create-app.ts
 │   └── main.ts
+├── tests/
+│   ├── http/
+│   │   └── app.test.ts
+│   └── test-infrastructure.test.ts
 ├── AGENTS.md
 ├── eslint.config.js
 ├── package.json
