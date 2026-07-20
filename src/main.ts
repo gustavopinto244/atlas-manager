@@ -30,7 +30,7 @@ function start(): void {
   const logger = createLogger(config.logLevel);
 
   try {
-    const app = createApp();
+    const app = createApp(logger);
     const server = app.listen(config.port, config.host);
 
     server.once("listening", () => {

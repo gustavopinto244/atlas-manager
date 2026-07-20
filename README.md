@@ -170,8 +170,29 @@ LOG_LEVEL=debug npm start
 
 Successful startup writes an `http_server_started` event containing the
 configured host and port. Startup logging does not include the complete process
-environment. HTTP request logging and centralized Express error handling are
-not configured yet.
+environment. HTTP request logging is not configured.
+
+## HTTP error responses
+
+HTTP errors use a stable JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "route_not_found",
+    "message": "Route not found"
+  }
+}
+```
+
+Unknown routes return status `404` with code `route_not_found`. Unexpected
+failures return status `500` with code `internal_error` and the message
+`Internal server error`. Responses never include raw errors, stack traces, or
+internal paths.
+
+Unexpected HTTP failures produce a structured `http_request_failed` log event
+containing only the request method, path, and error type. Request bodies,
+headers, cookies, query contents, and complete error stacks are not logged.
 
 ## Available scripts
 
@@ -264,6 +285,8 @@ atlas-manager/
 │   ├── config/
 │   │   └── environment.ts
 │   ├── http/
+│   │   ├── errors/
+│   │   ├── middleware/
 │   │   └── create-app.ts
 │   ├── logging/
 │   │   └── logger.ts
