@@ -16,6 +16,9 @@ coverage/
 *.log
 logs/
 
+# Local development session notes
+docs/development-session.md
+
 # Runtime files
 *.pid
 *.pid.lock
