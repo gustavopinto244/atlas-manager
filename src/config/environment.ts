@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+export const LOG_LEVELS = [
+  "trace",
+  "debug",
+  "info",
+  "warn",
+  "error",
+  "fatal",
+  "silent",
+] as const;
+
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 const environmentSchema = z.object({
   HOST: z
     .string()
@@ -12,11 +24,17 @@ const environmentSchema = z.object({
     .min(1, { error: "must be between 1 and 65535" })
     .max(65_535, { error: "must be between 1 and 65535" })
     .default(3000),
+  LOG_LEVEL: z
+    .enum(LOG_LEVELS, {
+      error: `must be one of: ${LOG_LEVELS.join(", ")}`,
+    })
+    .default("info"),
 });
 
 export interface EnvironmentConfig {
   host: string;
   port: number;
+  logLevel: LogLevel;
 }
 
 export function parseEnvironment(
@@ -27,6 +45,7 @@ export function parseEnvironment(
   return {
     host: parsedEnvironment.HOST,
     port: parsedEnvironment.PORT,
+    logLevel: parsedEnvironment.LOG_LEVEL,
   };
 }
 

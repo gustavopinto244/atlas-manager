@@ -130,10 +130,11 @@ Stop the development process with `Ctrl+C`.
 Atlas Manager validates its environment configuration before starting the HTTP
 server. Both supported variables are optional:
 
-| Variable | Default     | Purpose                            |
-| -------- | ----------- | ---------------------------------- |
-| `HOST`   | `127.0.0.1` | Address used by the HTTP listener  |
-| `PORT`   | `3000`      | TCP port used by the HTTP listener |
+| Variable    | Default     | Purpose                            |
+| ----------- | ----------- | ---------------------------------- |
+| `HOST`      | `127.0.0.1` | Address used by the HTTP listener  |
+| `PORT`      | `3000`      | TCP port used by the HTTP listener |
+| `LOG_LEVEL` | `info`      | Minimum structured logging level   |
 
 The repository includes a safe `.env.example` documenting these variables. The
 application reads variables from the process environment; it does not load
@@ -154,6 +155,23 @@ HOST=0.0.0.0 PORT=8080 npm start
 
 `PORT` must be an integer from `1` through `65535`. Invalid configuration stops
 startup before the server begins listening.
+
+### Structured logging
+
+Atlas Manager writes application lifecycle events as newline-delimited JSON
+using Pino. The initial supported levels are `trace`, `debug`, `info`, `warn`,
+`error`, `fatal`, and `silent`. The default level is `info`.
+
+For example, start the application with debug-level logging:
+
+```bash
+LOG_LEVEL=debug npm start
+```
+
+Successful startup writes an `http_server_started` event containing the
+configured host and port. Startup logging does not include the complete process
+environment. HTTP request logging and centralized Express error handling are
+not configured yet.
 
 ## Available scripts
 
@@ -247,12 +265,16 @@ atlas-manager/
 │   │   └── environment.ts
 │   ├── http/
 │   │   └── create-app.ts
+│   ├── logging/
+│   │   └── logger.ts
 │   └── main.ts
 ├── tests/
 │   ├── config/
 │   │   └── environment.test.ts
 │   ├── http/
 │   │   └── app.test.ts
+│   ├── logging/
+│   │   └── logger.test.ts
 │   └── test-infrastructure.test.ts
 ├── AGENTS.md
 ├── eslint.config.js

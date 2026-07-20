@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatEnvironmentValidationError,
+  LOG_LEVELS,
   parseEnvironment,
 } from "../../src/config/environment.js";
 
@@ -10,6 +11,7 @@ describe("parseEnvironment", () => {
     expect(parseEnvironment({})).toEqual({
       host: "127.0.0.1",
       port: 3000,
+      logLevel: "info",
     });
   });
 
@@ -22,7 +24,16 @@ describe("parseEnvironment", () => {
     ).toEqual({
       host: "0.0.0.0",
       port: 8080,
+      logLevel: "info",
     });
+  });
+
+  it.each(LOG_LEVELS)("accepts the %s log level", (logLevel) => {
+    expect(parseEnvironment({ LOG_LEVEL: logLevel }).logLevel).toBe(logLevel);
+  });
+
+  it("rejects an unsupported log level", () => {
+    expect(() => parseEnvironment({ LOG_LEVEL: "verbose" })).toThrow();
   });
 
   it.each([
@@ -53,6 +64,21 @@ describe("parseEnvironment", () => {
   it("does not format unexpected errors as configuration errors", () => {
     expect(formatEnvironmentValidationError(new Error("unexpected"))).toBe(
       undefined,
+    );
+  });
+
+  it("formats an invalid log level without exposing its value", () => {
+    let validationError: unknown;
+
+    try {
+      parseEnvironment({ LOG_LEVEL: "verbose" });
+    } catch (error) {
+      validationError = error;
+    }
+
+    expect(formatEnvironmentValidationError(validationError)).toBe(
+      "Invalid environment configuration:\n" +
+        "- LOG_LEVEL: must be one of: trace, debug, info, warn, error, fatal, silent",
     );
   });
 });
