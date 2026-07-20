@@ -1,9 +1,29 @@
+import {
+  formatEnvironmentValidationError,
+  parseEnvironment,
+} from "./config/environment.js";
 import { createApp } from "./http/create-app.js";
 
-const host = "127.0.0.1";
-const port = 3000;
-const app = createApp();
+function start(): void {
+  try {
+    const config = parseEnvironment(process.env);
+    const app = createApp();
 
-app.listen(port, host, () => {
-  console.log(`Atlas Manager is listening on http://${host}:${port}.`);
-});
+    app.listen(config.port, config.host, () => {
+      console.log(
+        `Atlas Manager is listening on http://${config.host}:${config.port}.`,
+      );
+    });
+  } catch (error) {
+    const message = formatEnvironmentValidationError(error);
+
+    if (message === undefined) {
+      throw error;
+    }
+
+    console.error(message);
+    process.exitCode = 1;
+  }
+}
+
+start();

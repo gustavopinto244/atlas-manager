@@ -125,6 +125,36 @@ does not collect or expose health information about the Atlas host.
 
 Stop the development process with `Ctrl+C`.
 
+## Environment configuration
+
+Atlas Manager validates its environment configuration before starting the HTTP
+server. Both supported variables are optional:
+
+| Variable | Default     | Purpose                            |
+| -------- | ----------- | ---------------------------------- |
+| `HOST`   | `127.0.0.1` | Address used by the HTTP listener  |
+| `PORT`   | `3000`      | TCP port used by the HTTP listener |
+
+The repository includes a safe `.env.example` documenting these variables. The
+application reads variables from the process environment; it does not load
+`.env` files automatically.
+
+Start the development process with custom values:
+
+```bash
+HOST=0.0.0.0 PORT=8080 npm run dev
+```
+
+Or configure the compiled production entry point:
+
+```bash
+npm run build
+HOST=0.0.0.0 PORT=8080 npm start
+```
+
+`PORT` must be an integer from `1` through `65535`. Invalid configuration stops
+startup before the server begins listening.
+
 ## Available scripts
 
 ### Development
@@ -213,10 +243,14 @@ atlas-manager/
 │   ├── product-vision.md
 │   └── requirements.md
 ├── src/
+│   ├── config/
+│   │   └── environment.ts
 │   ├── http/
 │   │   └── create-app.ts
 │   └── main.ts
 ├── tests/
+│   ├── config/
+│   │   └── environment.test.ts
 │   ├── http/
 │   │   └── app.test.ts
 │   └── test-infrastructure.test.ts
