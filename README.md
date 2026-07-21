@@ -194,6 +194,21 @@ Unexpected HTTP failures produce a structured `http_request_failed` log event
 containing only the request method, path, and error type. Request bodies,
 headers, cookies, query contents, and complete error stacks are not logged.
 
+## Graceful shutdown
+
+The production process handles `SIGINT` and `SIGTERM`. When either signal is
+received, Atlas Manager stops accepting new HTTP connections, waits for the
+listener to close, and then allows the process to terminate naturally.
+
+Use `Ctrl+C` to send `SIGINT` during local development. Process managers and
+operating systems may send `SIGTERM`.
+
+A successful shutdown emits the structured lifecycle events
+`application_shutdown_started` and `application_shutdown_completed`. A closure
+failure emits `application_shutdown_failed` and sets a non-zero process exit
+code. Repeated termination signals share the shutdown already in progress and
+do not close the server more than once.
+
 ## Available scripts
 
 ### Development
@@ -290,6 +305,8 @@ atlas-manager/
 │   │   └── create-app.ts
 │   ├── logging/
 │   │   └── logger.ts
+│   ├── lifecycle/
+│   │   └── graceful-shutdown.ts
 │   └── main.ts
 ├── tests/
 │   ├── config/
@@ -298,6 +315,8 @@ atlas-manager/
 │   │   └── app.test.ts
 │   ├── logging/
 │   │   └── logger.test.ts
+│   ├── lifecycle/
+│   │   └── graceful-shutdown.test.ts
 │   └── test-infrastructure.test.ts
 ├── AGENTS.md
 ├── eslint.config.js
