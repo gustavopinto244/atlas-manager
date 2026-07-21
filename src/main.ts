@@ -5,6 +5,10 @@ import {
 } from "./config/environment.js";
 import { createApp } from "./http/create-app.js";
 import {
+  createGracefulShutdown,
+  registerShutdownSignals,
+} from "./lifecycle/graceful-shutdown.js";
+import {
   createLogger,
   logHttpServerStarted,
   logUnexpectedStartupFailure,
@@ -32,6 +36,15 @@ function start(): void {
   try {
     const app = createApp(logger);
     const server = app.listen(config.port, config.host);
+    const requestShutdown = createGracefulShutdown({
+      server,
+      logger,
+      setFailureExitCode: () => {
+        process.exitCode = 1;
+      },
+    });
+
+    registerShutdownSignals(process, requestShutdown);
 
     server.once("listening", () => {
       logHttpServerStarted(logger, {
