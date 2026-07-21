@@ -13,6 +13,8 @@ import {
   logHttpServerStarted,
   logUnexpectedStartupFailure,
 } from "./logging/logger.js";
+import { GetServerHealth } from "./server-health/application/get-server-health.js";
+import { NodeServerHealthReader } from "./server-health/infrastructure/node-server-health-reader.js";
 
 function start(): void {
   let config: EnvironmentConfig;
@@ -34,7 +36,9 @@ function start(): void {
   const logger = createLogger(config.logLevel);
 
   try {
-    const app = createApp(logger);
+    const serverHealthReader = new NodeServerHealthReader();
+    const getServerHealth = new GetServerHealth(serverHealthReader);
+    const app = createApp({ logger, getServerHealth });
     const server = app.listen(config.port, config.host);
     const requestShutdown = createGracefulShutdown({
       server,
