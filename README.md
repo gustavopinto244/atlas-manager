@@ -209,6 +209,16 @@ failure emits `application_shutdown_failed` and sets a non-zero process exit
 code. Repeated termination signals share the shutdown already in progress and
 do not close the server more than once.
 
+## Continuous integration
+
+GitHub Actions automatically validates Pull Requests targeting `main` and
+pushes merged into `main`. The CI workflow installs dependencies with `npm ci`
+on Node.js 24, then checks formatting, linting, types, tests, and the production
+build. A failure in any step fails the workflow.
+
+The same validation commands remain available locally in the following
+sections.
+
 ## Available scripts
 
 ### Development
