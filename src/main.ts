@@ -36,7 +36,7 @@ function start(): void {
   const logger = createLogger(config.logLevel);
 
   try {
-    const serverHealthReader = new NodeServerHealthReader();
+    const serverHealthReader = new NodeServerHealthReader("/");
     const getServerHealth = new GetServerHealth(serverHealthReader);
     const app = createApp({ logger, getServerHealth });
     const server = app.listen(config.port, config.host);

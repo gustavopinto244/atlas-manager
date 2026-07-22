@@ -14,6 +14,10 @@ const snapshot: ServerHealthSnapshot = {
   cpuLoadAverage1Minute: 0.42,
   cpuLoadAverage5Minutes: 0.31,
   cpuLoadAverage15Minutes: 0.24,
+  diskTotalBytes: 240_000,
+  diskAvailableBytes: 90_000,
+  diskUsedBytes: 150_000,
+  diskUsagePercent: 62.5,
 };
 
 describe("GET /health/server", () => {
@@ -41,6 +45,12 @@ describe("GET /health/server", () => {
         oneMinute: 0.42,
         fiveMinutes: 0.31,
         fifteenMinutes: 0.24,
+      },
+      disk: {
+        totalBytes: 240_000,
+        availableBytes: 90_000,
+        usedBytes: 150_000,
+        usagePercentage: 62.5,
       },
     });
     expect(execute).toHaveBeenCalledOnce();

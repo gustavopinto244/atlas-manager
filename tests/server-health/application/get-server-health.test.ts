@@ -14,6 +14,10 @@ const snapshot: ServerHealthSnapshot = {
   cpuLoadAverage1Minute: 0.75,
   cpuLoadAverage5Minutes: 0.5,
   cpuLoadAverage15Minutes: 0.25,
+  diskTotalBytes: 240_000,
+  diskAvailableBytes: 90_000,
+  diskUsedBytes: 150_000,
+  diskUsagePercent: 62.5,
 };
 
 describe("GetServerHealth", () => {

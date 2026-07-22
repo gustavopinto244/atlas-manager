@@ -26,6 +26,12 @@ export function createServerHealthHandler(
         fiveMinutes: snapshot.cpuLoadAverage5Minutes,
         fifteenMinutes: snapshot.cpuLoadAverage15Minutes,
       },
+      disk: {
+        totalBytes: snapshot.diskTotalBytes,
+        availableBytes: snapshot.diskAvailableBytes,
+        usedBytes: snapshot.diskUsedBytes,
+        usagePercentage: snapshot.diskUsagePercent,
+      },
     });
   };
 }
