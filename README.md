@@ -18,13 +18,13 @@ The repository currently includes:
 - Node.js and TypeScript configuration;
 - ESLint and Prettier configuration;
 - coding-agent instructions;
-- an initial Express application with a liveness endpoint;
+- an initial Express application with liveness and server-health endpoints;
+- host uptime, memory, and CPU load-average monitoring;
 - HTTP integration testing with Vitest and Supertest.
 
 The administrative API and server-management features have not been
-implemented yet. The current `GET /health/live` endpoint reports only whether
-the HTTP application is alive; it does not report the health of the Atlas
-server.
+implemented yet. The current health endpoints do not report Docker, PM2,
+systemd, database, or managed-service health.
 
 ## Planned capabilities
 
@@ -110,9 +110,11 @@ Run the development entry point:
 npm run dev
 ```
 
-While the application is running, access the liveness endpoint at
-`http://127.0.0.1:3000/health/live`. A successful response has HTTP status 200
-and the following JSON body:
+### Health endpoints
+
+While the application is running, access `GET /health/live` at
+`http://127.0.0.1:3000/health/live` to verify that the HTTP process is alive. A
+successful response has HTTP status 200 and the following JSON body:
 
 ```json
 {
@@ -122,6 +124,38 @@ and the following JSON body:
 
 This endpoint reports only whether the Atlas Manager HTTP process is alive. It
 does not collect or expose health information about the Atlas host.
+
+Access `GET /health/server` at
+`http://127.0.0.1:3000/health/server` to retrieve the approved operational
+metrics collected from the host. A successful response has HTTP status 200 and
+the following structure:
+
+```json
+{
+  "capturedAt": "2026-07-20T12:00:00.000Z",
+  "uptimeSeconds": 7200,
+  "memory": {
+    "totalBytes": 8000000000,
+    "freeBytes": 2000000000,
+    "usedBytes": 6000000000,
+    "usagePercentage": 75
+  },
+  "cpuLoadAverage": {
+    "oneMinute": 0.42,
+    "fiveMinutes": 0.31,
+    "fifteenMinutes": 0.24
+  }
+}
+```
+
+The timestamp uses ISO 8601, uptime uses seconds, memory values use bytes,
+memory usage is a percentage from 0 through 100, and CPU values are
+dimensionless load averages for their stated time windows. This endpoint does
+not expose hostnames, usernames, network configuration, process listings,
+environment variables, credentials, or filesystem paths.
+
+Neither health endpoint represents Docker, PM2, systemd, database, or managed-
+service health.
 
 Stop the development process with `Ctrl+C`.
 
