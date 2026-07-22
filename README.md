@@ -144,15 +144,27 @@ the following structure:
     "oneMinute": 0.42,
     "fiveMinutes": 0.31,
     "fifteenMinutes": 0.24
+  },
+  "disk": {
+    "totalBytes": 240000000000,
+    "availableBytes": 90000000000,
+    "usedBytes": 150000000000,
+    "usagePercentage": 62.5
   }
 }
 ```
 
 The timestamp uses ISO 8601, uptime uses seconds, memory values use bytes,
 memory usage is a percentage from 0 through 100, and CPU values are
-dimensionless load averages for their stated time windows. This endpoint does
-not expose hostnames, usernames, network configuration, process listings,
-environment variables, credentials, or filesystem paths.
+dimensionless load averages for their stated time windows. The disk object
+represents the root filesystem: `totalBytes` is its total capacity,
+`availableBytes` is the capacity available to the unprivileged Atlas Manager
+process, `usedBytes` is total capacity minus available capacity, and
+`usagePercentage` is the used proportion from 0 through 100. The monitored
+path is an infrastructure detail and is not returned. This endpoint does not
+expose hostnames, usernames, network configuration, process listings,
+environment variables, credentials, filesystem paths, mount information, or
+device identifiers.
 
 Neither health endpoint represents Docker, PM2, systemd, database, or managed-
 service health.

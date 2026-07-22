@@ -1,4 +1,5 @@
 import { freemem, loadavg, totalmem, uptime } from "node:os";
+import { statfs } from "node:fs/promises";
 
 import type { ServerHealthReader } from "../application/ports/server-health-reader.js";
 import type { ServerHealthSnapshot } from "../domain/server-health-snapshot.js";
@@ -9,6 +10,13 @@ export interface NodeServerHealthReaderDependencies {
   totalMemoryBytes(): number;
   freeMemoryBytes(): number;
   cpuLoadAverages(): readonly number[];
+  filesystemStats(path: string): Promise<FilesystemStats>;
+}
+
+export interface FilesystemStats {
+  readonly blockSizeBytes: number | bigint;
+  readonly totalBlocks: number | bigint;
+  readonly availableBlocks: number | bigint;
 }
 
 const nodeDependencies: NodeServerHealthReaderDependencies = {
@@ -17,6 +25,15 @@ const nodeDependencies: NodeServerHealthReaderDependencies = {
   totalMemoryBytes: () => totalmem(),
   freeMemoryBytes: () => freemem(),
   cpuLoadAverages: () => loadavg(),
+  filesystemStats: async (path) => {
+    const statistics = await statfs(path, { bigint: true });
+
+    return {
+      blockSizeBytes: statistics.bsize,
+      totalBlocks: statistics.blocks,
+      availableBlocks: statistics.bavail,
+    };
+  },
 };
 
 /**
@@ -25,14 +42,21 @@ const nodeDependencies: NodeServerHealthReaderDependencies = {
  */
 export class NodeServerHealthReader implements ServerHealthReader {
   public constructor(
+    private readonly filesystemPath: string,
     private readonly dependencies: NodeServerHealthReaderDependencies = nodeDependencies,
   ) {}
 
-  public read(): Promise<ServerHealthSnapshot> {
-    return Promise.resolve().then(() => this.captureSnapshot());
+  public async read(): Promise<ServerHealthSnapshot> {
+    const filesystemStats = await this.dependencies.filesystemStats(
+      this.filesystemPath,
+    );
+
+    return this.captureSnapshot(filesystemStats);
   }
 
-  private captureSnapshot(): ServerHealthSnapshot {
+  private captureSnapshot(
+    filesystemStats: FilesystemStats,
+  ): ServerHealthSnapshot {
     const capturedAt = this.dependencies.now();
 
     if (!Number.isFinite(capturedAt.getTime())) {
@@ -79,6 +103,38 @@ export class NodeServerHealthReader implements ServerHealthReader {
     const usedMemoryBytes = totalMemoryBytes - freeMemoryBytes;
     const memoryUsagePercent =
       totalMemoryBytes === 0 ? 0 : (usedMemoryBytes / totalMemoryBytes) * 100;
+    const blockSizeBytes = requireNonNegativeSafeInteger(
+      filesystemStats.blockSizeBytes,
+      "filesystem block size",
+    );
+    const totalBlocks = requireNonNegativeSafeInteger(
+      filesystemStats.totalBlocks,
+      "filesystem total blocks",
+    );
+    const availableBlocks = requireNonNegativeSafeInteger(
+      filesystemStats.availableBlocks,
+      "filesystem available blocks",
+    );
+    const diskTotalBytes = requireSafeProduct(
+      blockSizeBytes,
+      totalBlocks,
+      "filesystem total capacity",
+    );
+    const diskAvailableBytes = requireSafeProduct(
+      blockSizeBytes,
+      availableBlocks,
+      "filesystem available capacity",
+    );
+
+    if (diskAvailableBytes > diskTotalBytes) {
+      throw new Error(
+        "Invalid server health value: filesystem available capacity exceeds total capacity",
+      );
+    }
+
+    const diskUsedBytes = diskTotalBytes - diskAvailableBytes;
+    const diskUsagePercent =
+      diskTotalBytes === 0 ? 0 : (diskUsedBytes / diskTotalBytes) * 100;
 
     return {
       capturedAtIso: capturedAt.toISOString(),
@@ -90,8 +146,41 @@ export class NodeServerHealthReader implements ServerHealthReader {
       cpuLoadAverage1Minute,
       cpuLoadAverage5Minutes,
       cpuLoadAverage15Minutes,
+      diskTotalBytes,
+      diskAvailableBytes,
+      diskUsedBytes,
+      diskUsagePercent,
     };
   }
+}
+
+function requireNonNegativeSafeInteger(
+  value: number | bigint,
+  name: string,
+): number {
+  if (typeof value === "bigint") {
+    if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error(`Invalid server health value: ${name}`);
+    }
+
+    return Number(value);
+  }
+
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Invalid server health value: ${name}`);
+  }
+
+  return value;
+}
+
+function requireSafeProduct(left: number, right: number, name: string): number {
+  const product = left * right;
+
+  if (!Number.isSafeInteger(product) || product < 0) {
+    throw new Error(`Invalid server health value: ${name}`);
+  }
+
+  return product;
 }
 
 function requireNonNegativeFiniteValue(
