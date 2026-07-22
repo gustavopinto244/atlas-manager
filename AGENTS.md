@@ -100,6 +100,27 @@ Before making non-trivial changes:
 Prefer clear and conventional implementations over clever or highly abstract
 solutions.
 
+### Implementation explanation style
+
+Use a medium level of technical complexity when explaining implementations.
+The explanation should be detailed enough for the primary developer to
+understand and reproduce the reasoning without becoming a line-by-line code
+commentary or an exhaustive discussion of language internals.
+
+Implementation explanations should:
+
+- begin with the problem solved and the resulting behavior;
+- describe the responsibilities of the main files, types, and functions;
+- explain important validation rules, data flow, architectural boundaries, and
+  security decisions;
+- include the reason behind non-obvious implementation choices and relevant
+  tradeoffs;
+- connect tests to the behavior and risks they protect;
+- define unfamiliar technical terms briefly when they first appear;
+- use small code examples only when they materially improve understanding;
+- avoid unexplained jargon, unnecessary theory, and incidental implementation
+  details that do not affect behavior or maintainability.
+
 ## Development workflow
 
 Follow this workflow:
