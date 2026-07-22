@@ -14,7 +14,11 @@ import {
   logUnexpectedStartupFailure,
 } from "./logging/logger.js";
 import { GetServerHealth } from "./server-health/application/get-server-health.js";
-import { NodeServerHealthReader } from "./server-health/infrastructure/node-server-health-reader.js";
+import { LinuxCoretempCpuTemperatureReader } from "./server-health/infrastructure/linux-coretemp-cpu-temperature-reader.js";
+import {
+  createNodeServerHealthReaderDependencies,
+  NodeServerHealthReader,
+} from "./server-health/infrastructure/node-server-health-reader.js";
 
 function start(): void {
   let config: EnvironmentConfig;
@@ -36,7 +40,11 @@ function start(): void {
   const logger = createLogger(config.logLevel);
 
   try {
-    const serverHealthReader = new NodeServerHealthReader("/");
+    const cpuTemperatureReader = new LinuxCoretempCpuTemperatureReader();
+    const serverHealthReader = new NodeServerHealthReader(
+      "/",
+      createNodeServerHealthReaderDependencies(cpuTemperatureReader),
+    );
     const getServerHealth = new GetServerHealth(serverHealthReader);
     const app = createApp({ logger, getServerHealth });
     const server = app.listen(config.port, config.host);

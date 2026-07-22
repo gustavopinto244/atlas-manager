@@ -31,6 +31,7 @@ function createDependencies(
     cpuLoadAverages: () => [0.42, 0.31, 0.24],
     cpuTimes,
     waitForCpuSample: () => Promise.resolve(),
+    cpuTemperatureCelsius: () => Promise.resolve(47.25),
     filesystemStats: () =>
       Promise.resolve({
         blockSizeBytes: 1_000,
@@ -66,6 +67,7 @@ describe("NodeServerHealthReader", () => {
       usedMemoryBytes: 6_000,
       memoryUsagePercent: 75,
       cpuUsagePercent: 25,
+      cpuTemperatureCelsius: 47.25,
       cpuLoadAverage1Minute: 0.42,
       cpuLoadAverage5Minutes: 0.31,
       cpuLoadAverage15Minutes: 0.24,
@@ -218,6 +220,32 @@ describe("NodeServerHealthReader", () => {
 
     expect(filesystemStats).toHaveBeenCalledOnce();
     expect(filesystemStats).toHaveBeenCalledWith("/test-root");
+  });
+
+  it("includes an unavailable optional CPU temperature as null", async () => {
+    const reader = new NodeServerHealthReader(
+      "/test-root",
+      createDependencies({
+        cpuTemperatureCelsius: () => Promise.resolve(null),
+      }),
+    );
+
+    await expect(reader.read()).resolves.toMatchObject({
+      cpuUsagePercent: 25,
+      cpuTemperatureCelsius: null,
+    });
+  });
+
+  it("passes CPU temperature failures through unchanged", async () => {
+    const failure = new Error("temperature integration failed");
+    const reader = new NodeServerHealthReader(
+      "/test-root",
+      createDependencies({
+        cpuTemperatureCelsius: () => Promise.reject(failure),
+      }),
+    );
+
+    await expect(reader.read()).rejects.toBe(failure);
   });
 
   it("calculates used disk capacity and its percentage", async () => {

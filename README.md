@@ -140,6 +140,10 @@ the following structure:
     "usedBytes": 6000000000,
     "usagePercentage": 75
   },
+  "cpu": {
+    "usagePercentage": 23.5,
+    "temperatureCelsius": 47.25
+  },
   "cpuLoadAverage": {
     "oneMinute": 0.42,
     "fiveMinutes": 0.31,
@@ -155,8 +159,11 @@ the following structure:
 ```
 
 The timestamp uses ISO 8601, uptime uses seconds, memory values use bytes,
-memory usage is a percentage from 0 through 100, and CPU values are
-dimensionless load averages for their stated time windows. The disk object
+memory usage is a percentage from 0 through 100, CPU utilization is a
+percentage from 0 through 100, and CPU load averages are dimensionless values
+for their stated time windows. `cpu.temperatureCelsius` reports the approved
+CPU package sensor in degrees Celsius, or `null` when that optional sensor is
+unavailable. The disk object
 represents the root filesystem: `totalBytes` is its total capacity,
 `availableBytes` is the capacity available to the unprivileged Atlas Manager
 process, `usedBytes` is total capacity minus available capacity, and
