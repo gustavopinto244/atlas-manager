@@ -1,21 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  calculateCpuUsagePercentFromDeltas,
   NodeServerHealthReader,
+  type CpuTimes,
   type NodeServerHealthReaderDependencies,
 } from "../../../src/server-health/infrastructure/node-server-health-reader.js";
 
 const capturedAt = "2026-07-20T12:00:00.000Z";
+const firstCpuSample: readonly CpuTimes[] = [
+  { user: 100, nice: 0, sys: 50, idle: 250, irq: 0 },
+];
+const secondCpuSample: readonly CpuTimes[] = [
+  { user: 120, nice: 0, sys: 60, idle: 340, irq: 0 },
+];
 
 function createDependencies(
   overrides: Partial<NodeServerHealthReaderDependencies> = {},
 ): NodeServerHealthReaderDependencies {
+  const cpuTimes = vi
+    .fn<() => readonly CpuTimes[]>()
+    .mockReturnValueOnce(firstCpuSample)
+    .mockReturnValueOnce(secondCpuSample);
+
   return {
     now: () => new Date(capturedAt),
     uptimeSeconds: () => 7_200,
     totalMemoryBytes: () => 8_000,
     freeMemoryBytes: () => 2_000,
     cpuLoadAverages: () => [0.42, 0.31, 0.24],
+    cpuTimes,
+    waitForCpuSample: () => Promise.resolve(),
     filesystemStats: () =>
       Promise.resolve({
         blockSizeBytes: 1_000,
@@ -24,6 +39,16 @@ function createDependencies(
       }),
     ...overrides,
   };
+}
+
+function createCpuTimesReader(
+  first: readonly CpuTimes[],
+  second: readonly CpuTimes[],
+): () => readonly CpuTimes[] {
+  return vi
+    .fn<() => readonly CpuTimes[]>()
+    .mockReturnValueOnce(first)
+    .mockReturnValueOnce(second);
 }
 
 describe("NodeServerHealthReader", () => {
@@ -40,6 +65,7 @@ describe("NodeServerHealthReader", () => {
       freeMemoryBytes: 2_000,
       usedMemoryBytes: 6_000,
       memoryUsagePercent: 75,
+      cpuUsagePercent: 25,
       cpuLoadAverage1Minute: 0.42,
       cpuLoadAverage5Minutes: 0.31,
       cpuLoadAverage15Minutes: 0.24,
@@ -49,6 +75,133 @@ describe("NodeServerHealthReader", () => {
       diskUsagePercent: 62.5,
     });
   });
+
+  it.each([
+    [
+      "zero utilization",
+      [{ user: 10, nice: 10, sys: 10, idle: 10, irq: 10 }],
+      [{ user: 10, nice: 10, sys: 10, idle: 60, irq: 10 }],
+      0,
+    ],
+    [
+      "full utilization",
+      [{ user: 10, nice: 10, sys: 10, idle: 10, irq: 10 }],
+      [{ user: 30, nice: 15, sys: 20, idle: 10, irq: 25 }],
+      100,
+    ],
+    [
+      "partial decimal utilization",
+      [{ user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }],
+      [{ user: 30, nice: 7, sys: 10, idle: 153, irq: 0 }],
+      23.5,
+    ],
+    [
+      "multiple logical CPUs",
+      [
+        { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 },
+        { user: 100, nice: 0, sys: 0, idle: 100, irq: 0 },
+      ],
+      [
+        { user: 25, nice: 0, sys: 0, idle: 75, irq: 0 },
+        { user: 175, nice: 0, sys: 0, idle: 125, irq: 0 },
+      ],
+      50,
+    ],
+  ] as const)(
+    "calculates %s",
+    async (_description, first, second, expected) => {
+      const reader = new NodeServerHealthReader(
+        "/test-root",
+        createDependencies({ cpuTimes: createCpuTimesReader(first, second) }),
+      );
+
+      const snapshot = await reader.read();
+
+      expect(snapshot.cpuUsagePercent).toBe(expected);
+    },
+  );
+
+  it("rejects an idle delta greater than the total delta", () => {
+    expect(() => calculateCpuUsagePercentFromDeltas(100, 101)).toThrow(
+      "CPU idle time delta",
+    );
+  });
+
+  it("uses the injected wait between CPU samples without a real delay", async () => {
+    const events: string[] = [];
+    const cpuTimes = vi
+      .fn<() => readonly CpuTimes[]>()
+      .mockImplementationOnce(() => {
+        events.push("first sample");
+        return firstCpuSample;
+      })
+      .mockImplementationOnce(() => {
+        events.push("second sample");
+        return secondCpuSample;
+      });
+    const waitForCpuSample = vi.fn().mockImplementation(() => {
+      events.push("wait");
+      return Promise.resolve();
+    });
+    const reader = new NodeServerHealthReader(
+      "/test-root",
+      createDependencies({ cpuTimes, waitForCpuSample }),
+    );
+
+    await reader.read();
+
+    expect(events).toEqual(["first sample", "wait", "second sample"]);
+    expect(waitForCpuSample).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["empty samples", [], []],
+    [
+      "mismatched logical CPU counts",
+      firstCpuSample,
+      [...secondCpuSample, ...secondCpuSample],
+    ],
+    [
+      "a negative time",
+      [{ user: -1, nice: 0, sys: 0, idle: 0, irq: 0 }],
+      [{ user: 1, nice: 0, sys: 0, idle: 1, irq: 0 }],
+    ],
+    [
+      "a non-finite time",
+      [{ user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }],
+      [
+        {
+          user: Number.POSITIVE_INFINITY,
+          nice: 0,
+          sys: 0,
+          idle: 1,
+          irq: 0,
+        },
+      ],
+    ],
+    [
+      "a decreasing counter",
+      [{ user: 2, nice: 0, sys: 0, idle: 0, irq: 0 }],
+      [{ user: 1, nice: 0, sys: 0, idle: 1, irq: 0 }],
+    ],
+    [
+      "a zero total delta",
+      [{ user: 1, nice: 1, sys: 1, idle: 1, irq: 1 }],
+      [{ user: 1, nice: 1, sys: 1, idle: 1, irq: 1 }],
+    ],
+  ] as const)(
+    "rejects %s in CPU samples",
+    async (_description, first, second) => {
+      const reader = new NodeServerHealthReader(
+        "/test-root",
+        createDependencies({ cpuTimes: createCpuTimesReader(first, second) }),
+      );
+
+      await expect(reader.read()).rejects.toThrow(
+        "Invalid server health value",
+      );
+    },
+  );
 
   it("passes the configured filesystem path only to the injected reader", async () => {
     const filesystemStats = vi.fn().mockResolvedValue({
