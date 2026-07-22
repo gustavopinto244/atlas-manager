@@ -130,10 +130,14 @@ Examples:
 
 Before modifying files:
 
-1. Inspect the relevant files.
-2. Explain the problem briefly.
-3. Present a small implementation plan.
-4. Wait for explicit approval when the task involves architecture, dependencies,
+1. Confirm that the current branch is a short-lived branch created for the
+   requested Issue. Never modify files directly on `main`.
+2. If uncommitted Issue changes are found on `main`, move them to a dedicated
+   branch before continuing and leave `main` unchanged.
+3. Inspect the relevant files.
+4. Explain the problem briefly.
+5. Present a small implementation plan.
+6. Wait for explicit approval when the task involves architecture, dependencies,
    security, infrastructure, or broad refactoring.
 
 During implementation:

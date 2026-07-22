@@ -1,5 +1,6 @@
-import { freemem, loadavg, totalmem, uptime } from "node:os";
+import { cpus, freemem, loadavg, totalmem, uptime } from "node:os";
 import { statfs } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
 
 import type { ServerHealthReader } from "../application/ports/server-health-reader.js";
 import type { ServerHealthSnapshot } from "../domain/server-health-snapshot.js";
@@ -10,7 +11,17 @@ export interface NodeServerHealthReaderDependencies {
   totalMemoryBytes(): number;
   freeMemoryBytes(): number;
   cpuLoadAverages(): readonly number[];
+  cpuTimes(): readonly CpuTimes[];
+  waitForCpuSample(): Promise<void>;
   filesystemStats(path: string): Promise<FilesystemStats>;
+}
+
+export interface CpuTimes {
+  readonly user: number;
+  readonly nice: number;
+  readonly sys: number;
+  readonly idle: number;
+  readonly irq: number;
 }
 
 export interface FilesystemStats {
@@ -25,6 +36,8 @@ const nodeDependencies: NodeServerHealthReaderDependencies = {
   totalMemoryBytes: () => totalmem(),
   freeMemoryBytes: () => freemem(),
   cpuLoadAverages: () => loadavg(),
+  cpuTimes: () => cpus().map((cpu) => cpu.times),
+  waitForCpuSample: () => setTimeout(100),
   filesystemStats: async (path) => {
     const statistics = await statfs(path, { bigint: true });
 
@@ -47,15 +60,24 @@ export class NodeServerHealthReader implements ServerHealthReader {
   ) {}
 
   public async read(): Promise<ServerHealthSnapshot> {
+    const firstCpuSample = this.dependencies.cpuTimes();
+    await this.dependencies.waitForCpuSample();
+    const secondCpuSample = this.dependencies.cpuTimes();
     const filesystemStats = await this.dependencies.filesystemStats(
       this.filesystemPath,
     );
 
-    return this.captureSnapshot(filesystemStats);
+    return this.captureSnapshot(
+      filesystemStats,
+      firstCpuSample,
+      secondCpuSample,
+    );
   }
 
   private captureSnapshot(
     filesystemStats: FilesystemStats,
+    firstCpuSample: readonly CpuTimes[],
+    secondCpuSample: readonly CpuTimes[],
   ): ServerHealthSnapshot {
     const capturedAt = this.dependencies.now();
 
@@ -135,6 +157,10 @@ export class NodeServerHealthReader implements ServerHealthReader {
     const diskUsedBytes = diskTotalBytes - diskAvailableBytes;
     const diskUsagePercent =
       diskTotalBytes === 0 ? 0 : (diskUsedBytes / diskTotalBytes) * 100;
+    const cpuUsagePercent = calculateCpuUsagePercent(
+      firstCpuSample,
+      secondCpuSample,
+    );
 
     return {
       capturedAtIso: capturedAt.toISOString(),
@@ -143,6 +169,7 @@ export class NodeServerHealthReader implements ServerHealthReader {
       freeMemoryBytes,
       usedMemoryBytes,
       memoryUsagePercent,
+      cpuUsagePercent,
       cpuLoadAverage1Minute,
       cpuLoadAverage5Minutes,
       cpuLoadAverage15Minutes,
@@ -152,6 +179,83 @@ export class NodeServerHealthReader implements ServerHealthReader {
       diskUsagePercent,
     };
   }
+}
+
+const CPU_TIME_FIELDS = ["user", "nice", "sys", "idle", "irq"] as const;
+
+function calculateCpuUsagePercent(
+  firstSample: readonly CpuTimes[],
+  secondSample: readonly CpuTimes[],
+): number {
+  if (firstSample.length === 0 || secondSample.length === 0) {
+    throw new Error("Invalid server health value: CPU samples are empty");
+  }
+
+  if (firstSample.length !== secondSample.length) {
+    throw new Error("Invalid server health value: CPU sample sizes differ");
+  }
+
+  let totalDelta = 0;
+  let idleDelta = 0;
+
+  for (let cpuIndex = 0; cpuIndex < firstSample.length; cpuIndex += 1) {
+    const firstTimes = firstSample[cpuIndex];
+    const secondTimes = secondSample[cpuIndex];
+
+    if (firstTimes === undefined || secondTimes === undefined) {
+      throw new Error("Invalid server health value: CPU sample entry");
+    }
+
+    for (const field of CPU_TIME_FIELDS) {
+      const firstValue = requireNonNegativeFiniteValue(
+        firstTimes[field],
+        `first CPU ${field} time`,
+      );
+      const secondValue = requireNonNegativeFiniteValue(
+        secondTimes[field],
+        `second CPU ${field} time`,
+      );
+      const delta = secondValue - firstValue;
+
+      if (!Number.isFinite(delta) || delta < 0) {
+        throw new Error(`Invalid server health value: CPU ${field} time delta`);
+      }
+
+      totalDelta += delta;
+
+      if (field === "idle") {
+        idleDelta += delta;
+      }
+    }
+  }
+
+  return calculateCpuUsagePercentFromDeltas(totalDelta, idleDelta);
+}
+
+/** @internal Validates aggregated CPU deltas before calculating utilization. */
+export function calculateCpuUsagePercentFromDeltas(
+  totalDelta: number,
+  idleDelta: number,
+): number {
+  if (!Number.isFinite(totalDelta) || totalDelta <= 0) {
+    throw new Error("Invalid server health value: CPU total time delta");
+  }
+
+  if (!Number.isFinite(idleDelta) || idleDelta < 0 || idleDelta > totalDelta) {
+    throw new Error("Invalid server health value: CPU idle time delta");
+  }
+
+  const usagePercent = ((totalDelta - idleDelta) / totalDelta) * 100;
+
+  if (
+    !Number.isFinite(usagePercent) ||
+    usagePercent < 0 ||
+    usagePercent > 100
+  ) {
+    throw new Error("Invalid server health value: CPU usage percentage");
+  }
+
+  return usagePercent;
 }
 
 function requireNonNegativeSafeInteger(

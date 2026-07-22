@@ -21,6 +21,9 @@ export function createServerHealthHandler(
         usedBytes: snapshot.usedMemoryBytes,
         usagePercentage: snapshot.memoryUsagePercent,
       },
+      cpu: {
+        usagePercentage: snapshot.cpuUsagePercent,
+      },
       cpuLoadAverage: {
         oneMinute: snapshot.cpuLoadAverage1Minute,
         fiveMinutes: snapshot.cpuLoadAverage5Minutes,

@@ -5,6 +5,8 @@ export interface ServerHealthSnapshot {
   readonly freeMemoryBytes: number;
   readonly usedMemoryBytes: number;
   readonly memoryUsagePercent: number;
+  /** System-wide CPU utilization measured as a percentage. */
+  readonly cpuUsagePercent: number;
   /** Dimensionless CPU load average measured over one minute. */
   readonly cpuLoadAverage1Minute: number;
   /** Dimensionless CPU load average measured over five minutes. */

@@ -11,6 +11,7 @@ const snapshot: ServerHealthSnapshot = {
   freeMemoryBytes: 2_000_000_000,
   usedMemoryBytes: 6_000_000_000,
   memoryUsagePercent: 75,
+  cpuUsagePercent: 23.5,
   cpuLoadAverage1Minute: 0.42,
   cpuLoadAverage5Minutes: 0.31,
   cpuLoadAverage15Minutes: 0.24,
@@ -41,6 +42,9 @@ describe("GET /health/server", () => {
         usedBytes: 6_000_000_000,
         usagePercentage: 75,
       },
+      cpu: {
+        usagePercentage: 23.5,
+      },
       cpuLoadAverage: {
         oneMinute: 0.42,
         fiveMinutes: 0.31,
@@ -53,6 +57,19 @@ describe("GET /health/server", () => {
         usagePercentage: 62.5,
       },
     });
+    const responseText = JSON.stringify(response.body);
+
+    for (const rawCpuDetail of [
+      "model",
+      "speed",
+      "user",
+      "nice",
+      "sys",
+      "idle",
+      "irq",
+    ]) {
+      expect(responseText).not.toContain(`"${rawCpuDetail}"`);
+    }
     expect(execute).toHaveBeenCalledOnce();
   });
 
