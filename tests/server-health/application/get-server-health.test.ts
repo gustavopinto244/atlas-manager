@@ -12,6 +12,7 @@ const snapshot: ServerHealthSnapshot = {
   usedMemoryBytes: 10_737_418_240,
   memoryUsagePercent: 62.5,
   cpuUsagePercent: 23.5,
+  cpuTemperatureCelsius: 47.25,
   cpuLoadAverage1Minute: 0.75,
   cpuLoadAverage5Minutes: 0.5,
   cpuLoadAverage15Minutes: 0.25,

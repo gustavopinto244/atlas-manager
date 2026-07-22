@@ -23,6 +23,7 @@ export function createServerHealthHandler(
       },
       cpu: {
         usagePercentage: snapshot.cpuUsagePercent,
+        temperatureCelsius: snapshot.cpuTemperatureCelsius,
       },
       cpuLoadAverage: {
         oneMinute: snapshot.cpuLoadAverage1Minute,

@@ -7,6 +7,8 @@ export interface ServerHealthSnapshot {
   readonly memoryUsagePercent: number;
   /** System-wide CPU utilization measured as a percentage. */
   readonly cpuUsagePercent: number;
+  /** Optional CPU package temperature reported in degrees Celsius. */
+  readonly cpuTemperatureCelsius: number | null;
   /** Dimensionless CPU load average measured over one minute. */
   readonly cpuLoadAverage1Minute: number;
   /** Dimensionless CPU load average measured over five minutes. */

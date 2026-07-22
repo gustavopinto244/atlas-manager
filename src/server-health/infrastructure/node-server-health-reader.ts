@@ -13,6 +13,7 @@ export interface NodeServerHealthReaderDependencies {
   cpuLoadAverages(): readonly number[];
   cpuTimes(): readonly CpuTimes[];
   waitForCpuSample(): Promise<void>;
+  cpuTemperatureCelsius(): Promise<number | null>;
   filesystemStats(path: string): Promise<FilesystemStats>;
 }
 
@@ -30,24 +31,33 @@ export interface FilesystemStats {
   readonly availableBlocks: number | bigint;
 }
 
-const nodeDependencies: NodeServerHealthReaderDependencies = {
-  now: () => new Date(),
-  uptimeSeconds: () => uptime(),
-  totalMemoryBytes: () => totalmem(),
-  freeMemoryBytes: () => freemem(),
-  cpuLoadAverages: () => loadavg(),
-  cpuTimes: () => cpus().map((cpu) => cpu.times),
-  waitForCpuSample: () => setTimeout(100),
-  filesystemStats: async (path) => {
-    const statistics = await statfs(path, { bigint: true });
+interface CpuTemperatureReader {
+  read(): Promise<number | null>;
+}
 
-    return {
-      blockSizeBytes: statistics.bsize,
-      totalBlocks: statistics.blocks,
-      availableBlocks: statistics.bavail,
-    };
-  },
-};
+export function createNodeServerHealthReaderDependencies(
+  cpuTemperatureReader: CpuTemperatureReader,
+): NodeServerHealthReaderDependencies {
+  return {
+    now: () => new Date(),
+    uptimeSeconds: () => uptime(),
+    totalMemoryBytes: () => totalmem(),
+    freeMemoryBytes: () => freemem(),
+    cpuLoadAverages: () => loadavg(),
+    cpuTimes: () => cpus().map((cpu) => cpu.times),
+    waitForCpuSample: () => setTimeout(100),
+    cpuTemperatureCelsius: () => cpuTemperatureReader.read(),
+    filesystemStats: async (path) => {
+      const statistics = await statfs(path, { bigint: true });
+
+      return {
+        blockSizeBytes: statistics.bsize,
+        totalBlocks: statistics.blocks,
+        availableBlocks: statistics.bavail,
+      };
+    },
+  };
+}
 
 /**
  * Reads host metrics from Node.js and rejects invalid or inconsistent source
@@ -56,7 +66,7 @@ const nodeDependencies: NodeServerHealthReaderDependencies = {
 export class NodeServerHealthReader implements ServerHealthReader {
   public constructor(
     private readonly filesystemPath: string,
-    private readonly dependencies: NodeServerHealthReaderDependencies = nodeDependencies,
+    private readonly dependencies: NodeServerHealthReaderDependencies,
   ) {}
 
   public async read(): Promise<ServerHealthSnapshot> {
@@ -66,11 +76,14 @@ export class NodeServerHealthReader implements ServerHealthReader {
     const filesystemStats = await this.dependencies.filesystemStats(
       this.filesystemPath,
     );
+    const cpuTemperatureCelsius =
+      await this.dependencies.cpuTemperatureCelsius();
 
     return this.captureSnapshot(
       filesystemStats,
       firstCpuSample,
       secondCpuSample,
+      cpuTemperatureCelsius,
     );
   }
 
@@ -78,6 +91,7 @@ export class NodeServerHealthReader implements ServerHealthReader {
     filesystemStats: FilesystemStats,
     firstCpuSample: readonly CpuTimes[],
     secondCpuSample: readonly CpuTimes[],
+    cpuTemperatureCelsius: number | null,
   ): ServerHealthSnapshot {
     const capturedAt = this.dependencies.now();
 
@@ -170,6 +184,7 @@ export class NodeServerHealthReader implements ServerHealthReader {
       usedMemoryBytes,
       memoryUsagePercent,
       cpuUsagePercent,
+      cpuTemperatureCelsius,
       cpuLoadAverage1Minute,
       cpuLoadAverage5Minutes,
       cpuLoadAverage15Minutes,
