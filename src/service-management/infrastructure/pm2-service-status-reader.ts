@@ -6,7 +6,7 @@ import { Pm2ServiceStatusReaderError } from "./pm2-service-status-reader-error.j
 
 interface Pm2ProcessReference {
   readonly name: string;
-  readonly value: Record<string, unknown>;
+  readonly status: unknown;
 }
 
 export class Pm2ServiceStatusReader implements ServiceStatusReader {
@@ -37,7 +37,7 @@ export class Pm2ServiceStatusReader implements ServiceStatusReader {
       throw new Pm2ServiceStatusReaderError("pm2_status_output_invalid");
     }
 
-    return mapPm2Status(readPm2Status(matchingProcess.value));
+    return mapPm2Status(readPm2Status(matchingProcess.status));
   }
 }
 
@@ -61,21 +61,21 @@ function parseProcessReferences(
       throw new Pm2ServiceStatusReaderError("pm2_status_output_invalid");
     }
 
+    const environment = entry["pm2_env"];
+
     return {
       name: entry["name"],
-      value: entry,
+      status: isObject(environment) ? environment["status"] : undefined,
     };
   });
 }
 
-function readPm2Status(process: Record<string, unknown>): string {
-  const environment = process["pm2_env"];
-
-  if (!isObject(environment) || typeof environment["status"] !== "string") {
+function readPm2Status(status: unknown): string {
+  if (typeof status !== "string") {
     throw new Pm2ServiceStatusReaderError("pm2_status_output_invalid");
   }
 
-  return environment["status"];
+  return status;
 }
 
 function mapPm2Status(status: string): ServiceRuntimeState {
