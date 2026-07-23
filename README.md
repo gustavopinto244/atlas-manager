@@ -190,8 +190,14 @@ inside the infrastructure boundary and translates PM2 statuses into
 The PM2 integration executes only the fixed read-only `pm2 jlist` operation
 without a shell. Its execution time and output size are bounded. Raw PM2
 statuses, process metadata, paths, environment values, and complete process
-list output are not part of the application contract. No HTTP endpoint or
-production service catalog is configured for this capability.
+list output are not part of the application contract.
+
+A narrow infrastructure dispatcher selects the explicitly injected `mock` or
+`pm2` status reader using only the registered service's validated management
+adapter. The application use case remains independent of concrete readers.
+Reader mappings cannot be registered or replaced dynamically, and failures
+continue to originate from the selected reader without fallback. No HTTP
+endpoint or production service catalog is configured for this capability.
 
 Stop the development process with `Ctrl+C`.
 
