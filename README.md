@@ -9,7 +9,8 @@ deployment through practical implementation.
 
 ## Project status
 
-Atlas Manager is currently in its initial foundation phase.
+Atlas Manager is currently implementing the server-health and registered-
+service foundations.
 
 The repository currently includes:
 
@@ -19,12 +20,14 @@ The repository currently includes:
 - ESLint and Prettier configuration;
 - coding-agent instructions;
 - an initial Express application with liveness and server-health endpoints;
-- host uptime, memory, and CPU load-average monitoring;
+- host uptime, memory, CPU, temperature, and disk monitoring;
+- a validated registered-service model and controlled in-memory catalog;
+- deterministic mock and read-only PM2 service-status adapters;
 - HTTP integration testing with Vitest and Supertest.
 
-The administrative API and server-management features have not been
-implemented yet. The current health endpoints do not report Docker, PM2,
-systemd, database, or managed-service health.
+Service control and the administrative API have not been implemented yet. The
+current health endpoints do not report Docker, PM2, systemd, database, or
+managed-service health.
 
 ## Planned capabilities
 
@@ -175,6 +178,20 @@ device identifiers.
 
 Neither health endpoint represents Docker, PM2, systemd, database, or managed-
 service health.
+
+### Registered-service status infrastructure
+
+The service-management feature can retrieve project-defined runtime states
+through isolated adapters. PM2 is the first production status integration. It
+uses the registered service's catalog-owned external resource identifier only
+inside the infrastructure boundary and translates PM2 statuses into
+`running`, `stopped`, `failed`, or `unknown`.
+
+The PM2 integration executes only the fixed read-only `pm2 jlist` operation
+without a shell. Its execution time and output size are bounded. Raw PM2
+statuses, process metadata, paths, environment values, and complete process
+list output are not part of the application contract. No HTTP endpoint or
+production service catalog is configured for this capability.
 
 Stop the development process with `Ctrl+C`.
 
