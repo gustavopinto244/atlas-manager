@@ -84,6 +84,37 @@ describe("InMemoryRegisteredServiceCatalog", () => {
     await expect(catalog.list()).resolves.toEqual([mockService, pm2Service]);
   });
 
+  it("finds the first and a later registered service by exact identifier", async () => {
+    const firstService = createService("first-service");
+    const secondService = createService("second-service");
+    const catalog = InMemoryRegisteredServiceCatalog.create([
+      firstService,
+      secondService,
+    ]);
+
+    await expect(catalog.findById("first-service")).resolves.toBe(firstService);
+    await expect(catalog.findById("second-service")).resolves.toBe(
+      secondService,
+    );
+  });
+
+  it("returns null for unknown identifiers in an empty catalog", async () => {
+    const catalog = InMemoryRegisteredServiceCatalog.create([]);
+
+    await expect(catalog.findById("unknown-service")).resolves.toBeNull();
+  });
+
+  it.each(["Task-manager", " task-manager", "task-manager "])(
+    "does not normalize a lookup identifier: %s",
+    async (serviceId) => {
+      const service = createService("task-manager");
+      const catalog = InMemoryRegisteredServiceCatalog.create([service]);
+
+      await expect(catalog.findById(serviceId)).resolves.toBeNull();
+      await expect(catalog.list()).resolves.toEqual([service]);
+    },
+  );
+
   it("rejects duplicate stable service identifiers", () => {
     const duplicateId = "task-manager";
 

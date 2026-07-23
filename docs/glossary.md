@@ -280,13 +280,22 @@ that operation supported by Atlas Manager.
 
 ### Service status
 
-The current operational state reported for a registered service.
+The current operational state reported for a registered service. The initial
+project-defined runtime states are:
 
-Possible status values will be defined during implementation and may differ
-between service-management technologies.
+- `running`: the service is active;
+- `stopped`: the service is inactive through an expected stopped state;
+- `failed`: the service reached a recognized failure state;
+- `unknown`: the status read succeeded, but the infrastructure state could not
+  be classified into another approved runtime state.
 
 Infrastructure-specific values should be translated into project-defined
 status models.
+
+Runtime status is separate from health and readiness. A service may be running
+while its application is unhealthy or not ready to perform its expected
+function. The `unknown` state does not replace infrastructure errors, missing
+registrations, or invalid status data.
 
 ### Health state
 

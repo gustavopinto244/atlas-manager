@@ -30,6 +30,14 @@ export class InMemoryRegisteredServiceCatalog implements RegisteredServiceCatalo
   public list(): Promise<readonly RegisteredService[]> {
     return Promise.resolve(this.services);
   }
+
+  public findById(serviceId: string): Promise<RegisteredService | null> {
+    const service = this.services.find(
+      (registeredService) => registeredService.id === serviceId,
+    );
+
+    return Promise.resolve(service ?? null);
+  }
 }
 
 function validateServices(services: readonly RegisteredService[]): void {

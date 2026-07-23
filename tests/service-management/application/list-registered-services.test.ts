@@ -17,7 +17,10 @@ function createService(id: string): RegisteredService {
 describe("ListRegisteredServices", () => {
   it("lists an empty catalog through the application port", async () => {
     const list = vi.fn().mockResolvedValue([]);
-    const catalog: RegisteredServiceCatalog = { list };
+    const catalog: RegisteredServiceCatalog = {
+      list,
+      findById: vi.fn(),
+    };
     const listRegisteredServices = new ListRegisteredServices(catalog);
 
     await expect(listRegisteredServices.execute()).resolves.toEqual([]);
@@ -30,6 +33,7 @@ describe("ListRegisteredServices", () => {
     const catalogServices = Object.freeze([firstService, secondService]);
     const catalog: RegisteredServiceCatalog = {
       list: vi.fn().mockResolvedValue(catalogServices),
+      findById: vi.fn(),
     };
     const listRegisteredServices = new ListRegisteredServices(catalog);
 
@@ -43,6 +47,7 @@ describe("ListRegisteredServices", () => {
     const failure = new Error("catalog unavailable");
     const catalog: RegisteredServiceCatalog = {
       list: vi.fn().mockRejectedValue(failure),
+      findById: vi.fn(),
     };
     const listRegisteredServices = new ListRegisteredServices(catalog);
 
