@@ -164,7 +164,7 @@ describe("Pm2ServiceStatusReader", () => {
     );
   });
 
-  it("ignores unrelated PM2 fields and returns only the project state", async () => {
+  it("discards unrelated PM2 fields and returns only the project state", async () => {
     const output = JSON.stringify([
       processEntry("atlas-api-process", "online"),
     ]);
