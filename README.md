@@ -229,6 +229,23 @@ before dispatch, and receives controller-specific failures unchanged without
 fallback. No HTTP endpoint, production service configuration, or production
 control composition is introduced.
 
+### Service-management composition
+
+A feature-level composition factory assembles `ListRegisteredServices`,
+`GetRegisteredServiceStatus`, and `ControlRegisteredService` behind a frozen
+capability bundle. All three use cases share one environment-created catalog.
+Status and control share one application clock, while PM2 status and control
+share one bounded process-list executor.
+
+The factory explicitly assembles the mock and PM2 adapters with their status
+and controller dispatchers. Construction performs only bounded configuration
+parsing and object creation: it does not execute PM2, retrieve status, control a
+service, start HTTP, or register signal handlers. The capability bundle exposes
+only the three application use cases.
+
+This feature composition is not connected to `main.ts`, `createApp`, or HTTP
+delivery. Production startup integration remains a separate future Issue.
+
 Stop the development process with `Ctrl+C`.
 
 ## Environment configuration
@@ -291,9 +308,9 @@ bytes.
 
 Configuration is loaded only through the explicit feature loader and cannot be
 registered or reloaded through HTTP at runtime. Changes will require an
-application restart after a future production-composition Issue connects this
-catalog to the running application. This Issue does not configure production
-services or compose service management in `main.ts`.
+application restart after a future startup-composition Issue connects the
+feature capability bundle to the running application. No production services
+are configured, and service management remains absent from `main.ts`.
 
 ### Structured logging
 
