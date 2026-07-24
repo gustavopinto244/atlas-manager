@@ -234,13 +234,14 @@ Stop the development process with `Ctrl+C`.
 ## Environment configuration
 
 Atlas Manager validates its environment configuration before starting the HTTP
-server. Both supported variables are optional:
+server. The supported variables are optional:
 
-| Variable    | Default     | Purpose                            |
-| ----------- | ----------- | ---------------------------------- |
-| `HOST`      | `127.0.0.1` | Address used by the HTTP listener  |
-| `PORT`      | `3000`      | TCP port used by the HTTP listener |
-| `LOG_LEVEL` | `info`      | Minimum structured logging level   |
+| Variable                   | Default     | Purpose                            |
+| -------------------------- | ----------- | ---------------------------------- |
+| `HOST`                     | `127.0.0.1` | Address used by the HTTP listener  |
+| `PORT`                     | `3000`      | TCP port used by the HTTP listener |
+| `LOG_LEVEL`                | `info`      | Minimum structured logging level   |
+| `REGISTERED_SERVICES_JSON` | `[]`        | Deployment-owned service allowlist |
 
 The repository includes a safe `.env.example` documenting these variables. The
 application reads variables from the process environment; it does not load
@@ -261,6 +262,38 @@ HOST=0.0.0.0 PORT=8080 npm start
 
 `PORT` must be an integer from `1` through `65535`. Invalid configuration stops
 startup before the server begins listening.
+
+### Registered-service catalog configuration
+
+`REGISTERED_SERVICES_JSON` is a deployment-owned JSON array used to construct a
+validated, immutable registered-service catalog. An absent variable or explicit
+`[]` produces an empty catalog; an empty string is invalid. Each entry must
+contain exactly `id`, `displayName`, `managementAdapter`,
+`externalResourceId`, and `supportedOperations`.
+
+```json
+[
+  {
+    "id": "example-service",
+    "displayName": "Example Service",
+    "managementAdapter": "mock",
+    "externalResourceId": "example-service-target",
+    "supportedOperations": ["readStatus", "start", "stop", "restart"]
+  }
+]
+```
+
+Approved adapters are `mock` and `pm2`. Approved operations are `readStatus`,
+`start`, `stop`, and `restart`, and every service must include `readStatus`.
+Duplicate stable IDs and duplicate external resources under the same adapter
+are rejected. The configuration is limited to 100 services and 65,536 UTF-8
+bytes.
+
+Configuration is loaded only through the explicit feature loader and cannot be
+registered or reloaded through HTTP at runtime. Changes will require an
+application restart after a future production-composition Issue connects this
+catalog to the running application. This Issue does not configure production
+services or compose service management in `main.ts`.
 
 ### Structured logging
 
