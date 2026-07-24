@@ -199,6 +199,22 @@ Reader mappings cannot be registered or replaced dynamically, and failures
 continue to originate from the selected reader without fallback. No HTTP
 endpoint or production service catalog is configured for this capability.
 
+### Registered-service control infrastructure
+
+Service control is separate from status retrieval. The application control
+flow resolves a catalog-owned service by its stable identifier and permits only
+the `start`, `stop`, or `restart` operations explicitly included in that
+service's supported-operation allowlist before delegating to infrastructure.
+The safe completion result contains only the stable service identifier,
+approved operation, and completion timestamp.
+
+The initial service controller is deterministic and mock-only: it changes no
+host or simulated status state. Successful delegation means only that the
+adapter operation completed without reporting a failure; it does not imply
+service health, readiness, reachability, or a resulting runtime state. No PM2
+control command, HTTP endpoint, or production control composition is
+introduced.
+
 Stop the development process with `Ctrl+C`.
 
 ## Environment configuration
