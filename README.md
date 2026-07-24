@@ -208,12 +208,18 @@ service's supported-operation allowlist before delegating to infrastructure.
 The safe completion result contains only the stable service identifier,
 approved operation, and completion timestamp.
 
-The initial service controller is deterministic and mock-only: it changes no
-host or simulated status state. Successful delegation means only that the
-adapter operation completed without reporting a failure; it does not imply
-service health, readiness, reachability, or a resulting runtime state. No PM2
-control command, HTTP endpoint, or production control composition is
-introduced.
+The deterministic mock controller changes no host or simulated status state.
+PM2 is the first real service-control adapter. It resolves the registered
+external resource identifier through an exact `pm2 jlist` name match, validates
+the selected internal PM2 ID, and executes only `start`, `stop`, or `restart`
+against that ID. Both PM2 process boundaries use direct execution without a
+shell, a fixed five-second timeout, and a bounded 1 MiB output buffer.
+
+Successful delegation means only that the adapter operation completed without
+reporting a failure; it does not imply service health, readiness, reachability,
+or a resulting runtime state. Raw PM2 data and internal IDs are not part of the
+application result. No HTTP endpoint, production service configuration,
+controller dispatcher, or production control composition is introduced.
 
 Stop the development process with `Ctrl+C`.
 
