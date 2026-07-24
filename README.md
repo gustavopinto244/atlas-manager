@@ -63,9 +63,13 @@ overnight, and overlapping windows are rejected, while adjacent windows are
 accepted. Schedules contain between 1 and 64 windows and return them in
 canonical weekday and time order.
 
-Timezone evaluation, reconciliation, automatic service control, default
-policies, and registered-service configuration integration are not implemented
-yet.
+The scheduling domain also approves exactly one explicit timezone identifier:
+`America/Sao_Paulo`. Validation is exact and case-sensitive, accepts no aliases,
+does not infer the host timezone, and provides no implicit default.
+
+Timezone-aware schedule evaluation, environment or production composition,
+reconciliation, automatic service control, default policies, and
+registered-service configuration integration are not implemented yet.
 
 ## Technology context
 
