@@ -1,18 +1,13 @@
 import { RegisteredServiceStatus } from "../domain/registered-service-status.js";
+import { RegisteredServiceNotFoundError } from "./registered-service-not-found-error.js";
+import type { Clock } from "./ports/clock.js";
 import type { RegisteredServiceCatalog } from "./ports/registered-service-catalog.js";
 import type { ServiceStatusReader } from "./ports/service-status-reader.js";
 
-export interface ServiceStatusClock {
-  now(): Date;
-}
+export type ServiceStatusClock = Clock;
 
-export class GetRegisteredServiceStatusError extends Error {
+export class GetRegisteredServiceStatusError extends RegisteredServiceNotFoundError {
   public override readonly name = "GetRegisteredServiceStatusError";
-  public readonly code = "registered_service_not_found";
-
-  public constructor() {
-    super("Registered service not found");
-  }
 }
 
 export class GetRegisteredServiceStatus {
