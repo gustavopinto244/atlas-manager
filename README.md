@@ -55,8 +55,17 @@ Work on `v0.4 — Service availability scheduling` has started with the domain
 vocabulary for the approved modes: `always`, `scheduled`, `manual`, and
 `disabled`. The model provides exact runtime validation only.
 
-Weekly schedules, reconciliation, automatic service control, default modes,
-and registered-service configuration integration are not implemented yet.
+The immutable weekly schedule model uses the lowercase weekday identifiers
+`monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, and
+`sunday`, plus canonical minute-precision local times in `HH:mm` format. Its
+availability windows use half-open `[start, end)` semantics. Zero-length,
+overnight, and overlapping windows are rejected, while adjacent windows are
+accepted. Schedules contain between 1 and 64 windows and return them in
+canonical weekday and time order.
+
+Timezone evaluation, reconciliation, automatic service control, default
+policies, and registered-service configuration integration are not implemented
+yet.
 
 ## Technology context
 
