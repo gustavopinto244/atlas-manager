@@ -218,8 +218,16 @@ shell, a fixed five-second timeout, and a bounded 1 MiB output buffer.
 Successful delegation means only that the adapter operation completed without
 reporting a failure; it does not imply service health, readiness, reachability,
 or a resulting runtime state. Raw PM2 data and internal IDs are not part of the
-application result. No HTTP endpoint, production service configuration,
-controller dispatcher, or production control composition is introduced.
+application result.
+
+A narrow infrastructure dispatcher selects the explicitly injected `mock` or
+`pm2` controller using only the registered service's validated management
+adapter. Controller mappings are fixed after construction and cannot be
+registered or replaced dynamically. The application use case remains
+independent of concrete controllers, continues to enforce supported operations
+before dispatch, and receives controller-specific failures unchanged without
+fallback. No HTTP endpoint, production service configuration, or production
+control composition is introduced.
 
 Stop the development process with `Ctrl+C`.
 
