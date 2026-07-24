@@ -49,6 +49,15 @@ Database engines are treated as Docker-managed services in the initial release.
 Logical PostgreSQL or MongoDB administration, backup, and restoration are
 outside the initial scope.
 
+### Service availability modes
+
+Work on `v0.4 — Service availability scheduling` has started with the domain
+vocabulary for the approved modes: `always`, `scheduled`, `manual`, and
+`disabled`. The model provides exact runtime validation only.
+
+Weekly schedules, reconciliation, automatic service control, default modes,
+and registered-service configuration integration are not implemented yet.
+
 ## Technology context
 
 Currently configured:
