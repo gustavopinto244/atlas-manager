@@ -109,13 +109,20 @@ A separate cancellation use case resolves the service through the catalog and
 removes its stored override association using the catalog-owned ID. Removal is
 idempotent for known services, including repeated cancellation when no override
 is stored, and returns no domain result. Cancellation uses no clock, performs no
-availability evaluation or immediate service operation, and is not connected to
-production composition or HTTP delivery.
+availability evaluation or immediate service operation.
+
+Service-management composition exposes both set and cancel commands backed by
+one private override store per composition instance. The default store is in
+memory, and a custom implementation can be injected through the composition
+seam. Setting uses the existing composition clock; cancellation does not. The
+temporary state is isolated between composition instances and is lost when its
+instance or process is discarded. No active-override query, scheduler,
+automatic service operation, or HTTP override endpoint exists yet.
 
 Implicit current-time acquisition, environment or registered-service
-configuration integration, production composition, reconciliation, default
-policies, scheduler execution, override execution, and automatic service control
-are not implemented yet.
+configuration integration, reconciliation, default policies, scheduler
+execution, override execution, and automatic service control are not implemented
+yet.
 
 ## Technology context
 
