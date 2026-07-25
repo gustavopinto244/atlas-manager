@@ -103,8 +103,14 @@ service through the registered-service catalog. It obtains the reference
 instant from the injected application clock, delegates construction to the
 scheduling-domain factory, saves under the catalog-owned service ID, and returns
 the exact canonical override. Setting an override performs no immediate service
-operation or policy-compatibility check. Cancellation, production composition,
-and HTTP delivery are not implemented.
+operation or policy-compatibility check.
+
+A separate cancellation use case resolves the service through the catalog and
+removes its stored override association using the catalog-owned ID. Removal is
+idempotent for known services, including repeated cancellation when no override
+is stored, and returns no domain result. Cancellation uses no clock, performs no
+availability evaluation or immediate service operation, and is not connected to
+production composition or HTTP delivery.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, production composition, reconciliation, default
