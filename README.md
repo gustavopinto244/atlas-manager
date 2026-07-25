@@ -90,6 +90,14 @@ produces `available`, while active `suspend_schedule` produces `manual`.
 `disabled` always has higher precedence. Override evaluation introduces no
 storage, cancellation, scheduler, or automatic service control.
 
+Service management defines an application port for associating at most one
+active override with each exact registered-service identifier. Its initial
+adapter stores only in process memory: saving replaces the existing association,
+and removing a missing association is an idempotent success. Expired overrides
+are not removed or evaluated automatically. The store is not connected to
+production composition, HTTP creation or cancellation flows, and all stored
+state is lost with the adapter instance or process.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, production composition, reconciliation, default
 policies, scheduler execution, override execution, and automatic service control
