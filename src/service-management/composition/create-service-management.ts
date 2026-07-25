@@ -1,10 +1,14 @@
+import { CancelRegisteredServiceAvailabilityOverride } from "../application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../application/control-registered-service.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
 import type { Clock } from "../application/ports/clock.js";
+import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
+import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
 import { DispatchingServiceStatusReader } from "../infrastructure/dispatching-service-status-reader.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../infrastructure/environment-registered-service-catalog.js";
+import { InMemoryServiceAvailabilityOverrideStore } from "../infrastructure/in-memory-service-availability-override-store.js";
 import { MockServiceController } from "../infrastructure/mock-service-controller.js";
 import {
   MockServiceStatusReader,
@@ -25,10 +29,13 @@ export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
   readonly getRegisteredServiceStatus: GetRegisteredServiceStatus;
   readonly controlRegisteredService: ControlRegisteredService;
+  readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
+  readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
 }
 
 export interface ServiceManagementCompositionOverrides {
   readonly clock?: Clock;
+  readonly serviceAvailabilityOverrideStore?: ServiceAvailabilityOverrideStore;
   readonly mockStatusConfiguration?: readonly MockServiceStatusConfiguration[];
   readonly pm2ProcessListExecutor?: Pm2ProcessListExecutor;
   readonly pm2ControlExecutor?: Pm2ServiceControlExecutor;
@@ -40,6 +47,9 @@ export function createServiceManagement(
 ): ServiceManagementCapabilities {
   const catalog = createRegisteredServiceCatalogFromEnvironment(environment);
   const clock = overrides?.clock ?? createSystemClock();
+  const overrideStore =
+    overrides?.serviceAvailabilityOverrideStore ??
+    new InMemoryServiceAvailabilityOverrideStore();
   const mockStatusConfiguration = overrides?.mockStatusConfiguration ?? [];
   const processListExecutor =
     overrides?.pm2ProcessListExecutor ?? new NodePm2ProcessListExecutor();
@@ -76,6 +86,14 @@ export function createServiceManagement(
       controller,
       clock,
     ),
+    setRegisteredServiceAvailabilityOverride:
+      new SetRegisteredServiceAvailabilityOverride(
+        catalog,
+        overrideStore,
+        clock,
+      ),
+    cancelRegisteredServiceAvailabilityOverride:
+      new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
   });
 }
 
