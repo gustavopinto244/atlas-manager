@@ -130,6 +130,14 @@ cancel, and query observe one consistent override state. Independent composition
 instances remain isolated. No active-override data query, scheduler, automatic
 service operation, or HTTP override endpoint exists yet.
 
+A pure reconciliation decision model compares an effective availability
+expectation with an observed runtime state. Only `available + stopped` selects
+`start`, and only `unavailable + running` selects `stop`. Already satisfied
+states, `manual`, `disabled`, `failed`, and `unknown` produce an explicit
+no-operation decision; reconciliation never selects `restart`. The model
+retrieves no status and executes no control. Scheduler execution and duplicate
+execution prevention are not implemented yet.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
