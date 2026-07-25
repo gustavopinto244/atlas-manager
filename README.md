@@ -98,6 +98,14 @@ are not removed or evaluated automatically. The store is not connected to
 production composition, HTTP creation or cancellation flows, and all stored
 state is lost with the adapter instance or process.
 
+An application use case can set or replace an override after resolving the
+service through the registered-service catalog. It obtains the reference
+instant from the injected application clock, delegates construction to the
+scheduling-domain factory, saves under the catalog-owned service ID, and returns
+the exact canonical override. Setting an override performs no immediate service
+operation or policy-compatibility check. Cancellation, production composition,
+and HTTP delivery are not implemented.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, production composition, reconciliation, default
 policies, scheduler execution, override execution, and automatic service control
