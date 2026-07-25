@@ -138,6 +138,15 @@ no-operation decision; reconciliation never selects `restart`. The model
 retrieves no status and executes no control. Scheduler execution and duplicate
 execution prevention are not implemented yet.
 
+A read-only application use case plans availability reconciliation for one
+catalog-owned service. It reads the stored override and current runtime state,
+then obtains one instant from the application clock and delegates effective
+availability and reconciliation rules to the existing domain functions. The
+result is `execute start`, `execute stop`, or `none`. Planning does not inspect
+supported operations, mutate override state, execute service control, or prevent
+duplicate execution. It is not connected to production composition, a scheduler,
+or HTTP delivery.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
