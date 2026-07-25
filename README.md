@@ -72,9 +72,16 @@ An immutable availability-policy model combines these existing validators.
 schedule. A `scheduled` policy requires the approved `America/Sao_Paulo`
 timezone and a valid non-empty weekly schedule.
 
-Current-time evaluation, environment or registered-service configuration
-integration, production composition, reconciliation, default policies,
-scheduler execution, and automatic service control are not implemented yet.
+Policies can be evaluated at an explicit instant. `always` produces the
+`available` expectation, while `manual` and `disabled` preserve those explicit
+states. A `scheduled` policy produces `available` or `unavailable` by evaluating
+its half-open, minute-precision windows in `America/Sao_Paulo`. Conversion uses
+the Node.js runtime timezone database rather than a fixed UTC offset.
+
+Implicit current-time acquisition, environment or registered-service
+configuration integration, production composition, reconciliation, default
+policies, scheduler execution, temporary overrides, and automatic service
+control are not implemented yet.
 
 ## Technology context
 
