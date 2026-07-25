@@ -67,9 +67,14 @@ The scheduling domain also approves exactly one explicit timezone identifier:
 `America/Sao_Paulo`. Validation is exact and case-sensitive, accepts no aliases,
 does not infer the host timezone, and provides no implicit default.
 
-Timezone-aware schedule evaluation, environment or production composition,
-reconciliation, automatic service control, default policies, and
-registered-service configuration integration are not implemented yet.
+An immutable availability-policy model combines these existing validators.
+`always`, `manual`, and `disabled` policies contain no timezone or weekly
+schedule. A `scheduled` policy requires the approved `America/Sao_Paulo`
+timezone and a valid non-empty weekly schedule.
+
+Current-time evaluation, environment or registered-service configuration
+integration, production composition, reconciliation, default policies,
+scheduler execution, and automatic service control are not implemented yet.
 
 ## Technology context
 
