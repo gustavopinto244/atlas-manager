@@ -78,10 +78,16 @@ states. A `scheduled` policy produces `available` or `unavailable` by evaluating
 its half-open, minute-precision windows in `America/Sao_Paulo`. Conversion uses
 the Node.js runtime timezone database rather than a fixed UTC offset.
 
+The scheduling domain also defines immutable temporary overrides with the
+canonical kinds `keep_available` and `suspend_schedule`. Every override requires
+a canonical millisecond-precision UTC expiration timestamp later than an
+explicit reference instant. Overrides currently have no service association,
+policy evaluation, cancellation, or persistence behavior.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, production composition, reconciliation, default
-policies, scheduler execution, temporary overrides, and automatic service
-control are not implemented yet.
+policies, scheduler execution, override execution, and automatic service control
+are not implemented yet.
 
 ## Technology context
 
