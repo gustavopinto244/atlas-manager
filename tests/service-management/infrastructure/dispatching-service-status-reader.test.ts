@@ -17,6 +17,7 @@ function createService(managementAdapter: "mock" | "pm2"): RegisteredService {
     managementAdapter,
     externalResourceId: `${managementAdapter}-external-resource`,
     supportedOperations: ["readStatus", "restart"],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 
@@ -70,6 +71,7 @@ describe("DispatchingServiceStatusReader", () => {
       managementAdapter: "mock",
       externalResourceId: "pm2-external-resource",
       supportedOperations: ["readStatus", "start", "stop", "restart"],
+      availabilityPolicy: { mode: "disabled" },
     });
     const pm2Service = RegisteredService.create({
       id: "mock-named-service",
@@ -77,6 +79,11 @@ describe("DispatchingServiceStatusReader", () => {
       managementAdapter: "pm2",
       externalResourceId: "mock-external-resource",
       supportedOperations: ["readStatus"],
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
     });
     const mock = createReader("stopped");
     const pm2 = createReader("failed");

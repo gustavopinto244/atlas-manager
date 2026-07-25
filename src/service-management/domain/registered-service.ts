@@ -1,3 +1,12 @@
+import { ServiceAvailabilityModeValidationError } from "../../service-scheduling/domain/service-availability-mode.js";
+import {
+  createServiceAvailabilityPolicy,
+  type ServiceAvailabilityPolicy,
+} from "../../service-scheduling/domain/service-availability-policy.js";
+import { ServiceAvailabilityPolicyValidationError } from "../../service-scheduling/domain/service-availability-policy-validation-error.js";
+import { ServiceScheduleTimezoneValidationError } from "../../service-scheduling/domain/service-schedule-timezone.js";
+import { ServiceScheduleValidationError } from "../../service-scheduling/domain/service-schedule-validation-error.js";
+
 export const SERVICE_MANAGEMENT_ADAPTERS = Object.freeze([
   "mock",
   "pm2",
@@ -21,7 +30,8 @@ export type RegisteredServiceValidationErrorCode =
   | "invalid_display_name"
   | "invalid_management_adapter"
   | "invalid_external_resource_id"
-  | "invalid_supported_operations";
+  | "invalid_supported_operations"
+  | "invalid_availability_policy";
 
 export class RegisteredServiceValidationError extends Error {
   public override readonly name = "RegisteredServiceValidationError";
@@ -39,6 +49,7 @@ export interface CreateRegisteredServiceInput {
   readonly managementAdapter: string;
   readonly externalResourceId: string;
   readonly supportedOperations: readonly string[];
+  readonly availabilityPolicy: unknown;
 }
 
 export class RegisteredService {
@@ -48,6 +59,7 @@ export class RegisteredService {
     public readonly managementAdapter: ServiceManagementAdapter,
     public readonly externalResourceId: string,
     public readonly supportedOperations: readonly SupportedServiceOperation[],
+    public readonly availabilityPolicy: ServiceAvailabilityPolicy,
   ) {
     Object.freeze(this);
   }
@@ -64,6 +76,9 @@ export class RegisteredService {
     const supportedOperations = validateSupportedOperations(
       input.supportedOperations,
     );
+    const availabilityPolicy = validateAvailabilityPolicy(
+      input.availabilityPolicy,
+    );
 
     return new RegisteredService(
       id,
@@ -71,7 +86,25 @@ export class RegisteredService {
       managementAdapter,
       externalResourceId,
       supportedOperations,
+      availabilityPolicy,
     );
+  }
+}
+
+function validateAvailabilityPolicy(input: unknown): ServiceAvailabilityPolicy {
+  try {
+    return createServiceAvailabilityPolicy(input);
+  } catch (error) {
+    if (
+      error instanceof ServiceAvailabilityModeValidationError ||
+      error instanceof ServiceAvailabilityPolicyValidationError ||
+      error instanceof ServiceScheduleTimezoneValidationError ||
+      error instanceof ServiceScheduleValidationError
+    ) {
+      throw new RegisteredServiceValidationError("invalid_availability_policy");
+    }
+
+    throw error;
   }
 }
 

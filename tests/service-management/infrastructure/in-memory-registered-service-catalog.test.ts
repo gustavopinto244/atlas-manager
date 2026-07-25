@@ -23,6 +23,7 @@ function createService(
     managementAdapter: overrides.managementAdapter ?? "mock",
     externalResourceId: overrides.externalResourceId ?? id,
     supportedOperations: ["readStatus"],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 
@@ -217,6 +218,11 @@ describe("InMemoryRegisteredServiceCatalog", () => {
       managementAdapter: "pm2" as const,
       externalResourceId: "task-manager-api",
       supportedOperations: ["readStatus" as const],
+      availabilityPolicy: {
+        mode: "manual" as const,
+        timezone: null,
+        schedule: null,
+      },
     };
 
     expectCatalogError([unvalidatedService], "invalid_registered_service");

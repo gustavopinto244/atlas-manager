@@ -33,6 +33,7 @@ function createService(
       "stop",
       "restart",
     ],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

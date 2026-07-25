@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { RegisteredService } from "../../../src/service-management/domain/registered-service.js";
 import {
@@ -13,6 +13,7 @@ interface ConfiguredService {
   readonly managementAdapter: unknown;
   readonly externalResourceId: unknown;
   readonly supportedOperations: unknown;
+  readonly availabilityPolicy: unknown;
 }
 
 function createConfiguredService(
@@ -25,6 +26,7 @@ function createConfiguredService(
     managementAdapter: "mock",
     externalResourceId: `external-resource-${index}`,
     supportedOperations: ["readStatus"],
+    availabilityPolicy: { mode: "manual" },
     ...overrides,
   };
 }
@@ -183,6 +185,11 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
       managementAdapter: "mock",
       externalResourceId: "first-resource",
       supportedOperations: ["readStatus"],
+      availabilityPolicy: {
+        mode: "manual",
+        timezone: null,
+        schedule: null,
+      },
     });
     expect(services[1]?.managementAdapter).toBe("pm2");
     expect(
@@ -226,6 +233,7 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     "managementAdapter",
     "externalResourceId",
     "supportedOperations",
+    "availabilityPolicy",
   ] as const)("rejects an entry missing %s", (missingField) => {
     const entry = { ...createConfiguredService() };
 
@@ -241,6 +249,22 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     );
   });
 
+  it.each([
+    ["mode", "manual"],
+    ["timezone", "America/Sao_Paulo"],
+    ["windows", []],
+    ["availabilityMode", "manual"],
+    ["schedule", null],
+  ])(
+    "rejects scheduling field %s at the service-entry level",
+    (field, value) => {
+      expectConfigurationError(
+        [{ ...createConfiguredService(), [field]: value }],
+        "registered_services_invalid_shape",
+      );
+    },
+  );
+
   it("does not accept inherited fields as required fields", () => {
     const inheritedEntry = Object.create({
       id: "inherited-service",
@@ -251,6 +275,7 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
       managementAdapter: "mock",
       externalResourceId: "inherited-resource",
       supportedOperations: ["readStatus"],
+      availabilityPolicy: { mode: "manual" },
     });
 
     expectConfigurationError(
@@ -284,11 +309,102 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
       { supportedOperations: ["readStatus", "readStatus"] },
     ],
     ["missing readStatus", { supportedOperations: ["start"] }],
+    ["a null policy", { availabilityPolicy: null }],
+    ["a primitive policy", { availabilityPolicy: "manual" }],
+    ["an invalid policy mode", { availabilityPolicy: { mode: "automatic" } }],
+    [
+      "an invalid policy shape",
+      { availabilityPolicy: { mode: "manual", timezone: null } },
+    ],
+    [
+      "an invalid policy timezone",
+      {
+        availabilityPolicy: {
+          mode: "scheduled",
+          timezone: "sentinel-private-timezone",
+          windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+        },
+      },
+    ],
+    [
+      "an invalid policy window",
+      {
+        availabilityPolicy: {
+          mode: "scheduled",
+          timezone: "America/Sao_Paulo",
+          windows: [
+            {
+              weekday: "sentinel-private-weekday",
+              start: "09:00",
+              end: "17:00",
+            },
+          ],
+        },
+      },
+    ],
+    [
+      "overlapping policy windows",
+      {
+        availabilityPolicy: {
+          mode: "scheduled",
+          timezone: "America/Sao_Paulo",
+          windows: [
+            { weekday: "monday", start: "09:00", end: "12:00" },
+            { weekday: "monday", start: "11:00", end: "17:00" },
+          ],
+        },
+      },
+    ],
   ])("translates %s from domain validation", (_description, overrides) => {
     expectConfigurationError(
       [createConfiguredService(0, overrides)],
       "registered_service_invalid",
     );
+  });
+
+  it("creates and lists a canonical scheduled availability policy", async () => {
+    const catalog = createRegisteredServiceCatalogFromEnvironment(
+      createEnvironment([
+        createConfiguredService(1, {
+          availabilityPolicy: {
+            mode: "scheduled",
+            timezone: "America/Sao_Paulo",
+            windows: [
+              { weekday: "friday", start: "13:00", end: "17:00" },
+              { weekday: "monday", start: "09:00", end: "12:00" },
+            ],
+          },
+        }),
+      ]),
+    );
+
+    const service = (await catalog.list())[0];
+
+    expect(service?.availabilityPolicy).toEqual({
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      schedule: {
+        windows: [
+          { weekday: "monday", start: "09:00", end: "12:00" },
+          { weekday: "friday", start: "13:00", end: "17:00" },
+        ],
+      },
+    });
+    expect(Object.isFrozen(service?.availabilityPolicy)).toBe(true);
+  });
+
+  it("rejects an own symbol field returned by JSON parsing", () => {
+    const entry = {
+      ...createConfiguredService(),
+      [Symbol("sentinel-private-metadata")]: true,
+    };
+    const parseSpy = vi.spyOn(JSON, "parse").mockReturnValue([entry]);
+
+    try {
+      expectConfigurationError("[]", "registered_services_invalid_shape");
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 
   it("rejects the complete configuration when a later service is invalid", () => {
@@ -378,6 +494,26 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
         }),
       ]),
       "registered_service_catalog_invalid",
+    ],
+    [
+      "invalid policy data",
+      JSON.stringify([
+        createConfiguredService(0, {
+          id: "private-policy-service",
+          availabilityPolicy: {
+            mode: "scheduled",
+            timezone: "private-policy-timezone",
+            windows: [
+              {
+                weekday: "private-policy-weekday",
+                start: "09:17",
+                end: "10:23",
+              },
+            ],
+          },
+        }),
+      ]),
+      "registered_service_invalid",
     ],
   ] as const)(
     "does not expose configured values for %s",

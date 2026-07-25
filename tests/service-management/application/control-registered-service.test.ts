@@ -21,6 +21,7 @@ function createService(
     managementAdapter: "mock",
     externalResourceId: "private-mock-target",
     supportedOperations,
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

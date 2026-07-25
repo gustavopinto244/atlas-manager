@@ -17,6 +17,7 @@ const requiredEntryFields = Object.freeze([
   "managementAdapter",
   "externalResourceId",
   "supportedOperations",
+  "availabilityPolicy",
 ] as const);
 const requiredEntryFieldSet = new Set<string>(requiredEntryFields);
 
@@ -125,6 +126,7 @@ function parseEntryShape(entry: unknown): CreateRegisteredServiceInput {
   const managementAdapter = entry["managementAdapter"];
   const externalResourceId = entry["externalResourceId"];
   const supportedOperations = entry["supportedOperations"];
+  const availabilityPolicy = entry["availabilityPolicy"];
 
   if (
     typeof id !== "string" ||
@@ -147,20 +149,25 @@ function parseEntryShape(entry: unknown): CreateRegisteredServiceInput {
     managementAdapter,
     externalResourceId,
     supportedOperations,
+    availabilityPolicy,
   };
 }
 
-function hasExactlyRequiredFields(entry: Record<string, unknown>): boolean {
-  const fields = Object.keys(entry);
+function hasExactlyRequiredFields(
+  entry: Record<PropertyKey, unknown>,
+): boolean {
+  const fields = Reflect.ownKeys(entry);
 
   return (
     fields.length === requiredEntryFields.length &&
     requiredEntryFields.every((field) => Object.hasOwn(entry, field)) &&
-    fields.every((field) => requiredEntryFieldSet.has(field))
+    fields.every(
+      (field) => typeof field === "string" && requiredEntryFieldSet.has(field),
+    )
   );
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+function isPlainObject(value: unknown): value is Record<PropertyKey, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
