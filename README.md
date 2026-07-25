@@ -81,8 +81,14 @@ the Node.js runtime timezone database rather than a fixed UTC offset.
 The scheduling domain also defines immutable temporary overrides with the
 canonical kinds `keep_available` and `suspend_schedule`. Every override requires
 a canonical millisecond-precision UTC expiration timestamp later than an
-explicit reference instant. Overrides currently have no service association,
-policy evaluation, cancellation, or persistence behavior.
+explicit reference instant.
+
+Policies can be evaluated with a validated override or `null` when none exists.
+Overrides are active strictly before expiration; expired overrides delegate to
+normal policy evaluation. For non-disabled policies, active `keep_available`
+produces `available`, while active `suspend_schedule` produces `manual`.
+`disabled` always has higher precedence. Override evaluation introduces no
+storage, cancellation, scheduler, or automatic service control.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, production composition, reconciliation, default
