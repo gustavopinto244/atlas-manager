@@ -1,5 +1,6 @@
 import { CancelRegisteredServiceAvailabilityOverride } from "../application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../application/control-registered-service.js";
+import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
 import type { Clock } from "../application/ports/clock.js";
@@ -31,6 +32,7 @@ export interface ServiceManagementCapabilities {
   readonly controlRegisteredService: ControlRegisteredService;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
+  readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
 }
 
 export interface ServiceManagementCompositionOverrides {
@@ -94,6 +96,12 @@ export function createServiceManagement(
       ),
     cancelRegisteredServiceAvailabilityOverride:
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
+    getRegisteredServiceEffectiveAvailability:
+      new GetRegisteredServiceEffectiveAvailability(
+        catalog,
+        overrideStore,
+        clock,
+      ),
   });
 }
 

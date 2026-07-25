@@ -116,8 +116,7 @@ one private override store per composition instance. The default store is in
 memory, and a custom implementation can be injected through the composition
 seam. Setting uses the existing composition clock; cancellation does not. The
 temporary state is isolated between composition instances and is lost when its
-instance or process is discarded. No active-override query, scheduler,
-automatic service operation, or HTTP override endpoint exists yet.
+instance or process is discarded.
 
 An application query resolves a registered service through the catalog, reads
 its stored override, obtains one instant from the injected clock, and delegates
@@ -125,7 +124,11 @@ effective availability calculation to the existing domain evaluator. It returns
 only `available`, `unavailable`, `manual`, or `disabled`. Missing and expired
 overrides fall back to the base policy without deleting stored state. The query
 does not retrieve actual service status or execute a service operation, and is
-not yet connected to composition, HTTP delivery, or a scheduler.
+exposed through service-management composition. It shares the same catalog,
+private override store, and clock used by the existing capabilities, so set,
+cancel, and query observe one consistent override state. Independent composition
+instances remain isolated. No active-override data query, scheduler, automatic
+service operation, or HTTP override endpoint exists yet.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, reconciliation, default policies, scheduler
