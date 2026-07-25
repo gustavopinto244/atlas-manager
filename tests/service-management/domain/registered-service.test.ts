@@ -17,6 +17,7 @@ function createValidInput(
     managementAdapter: "pm2",
     externalResourceId: "task-manager-api",
     supportedOperations: ["readStatus", "start", "stop", "restart"],
+    availabilityPolicy: { mode: "manual" },
     ...overrides,
   };
 }
@@ -43,6 +44,11 @@ describe("RegisteredService", () => {
       managementAdapter: "pm2",
       externalResourceId: "task-manager-api",
       supportedOperations: ["readStatus", "start", "stop", "restart"],
+      availabilityPolicy: {
+        mode: "manual",
+        timezone: null,
+        schedule: null,
+      },
     });
   });
 
@@ -59,6 +65,147 @@ describe("RegisteredService", () => {
 
     expect(service.managementAdapter).toBe("mock");
     expect(service.supportedOperations).toEqual(["readStatus"]);
+  });
+
+  it.each(["always", "manual", "disabled"] as const)(
+    "associates a canonical frozen %s availability policy",
+    (mode) => {
+      const service = RegisteredService.create(
+        createValidInput({ availabilityPolicy: { mode } }),
+      );
+
+      expect(service.availabilityPolicy).toEqual({
+        mode,
+        timezone: null,
+        schedule: null,
+      });
+      expect(Object.isFrozen(service)).toBe(true);
+      expect(Object.isFrozen(service.availabilityPolicy)).toBe(true);
+    },
+  );
+
+  it("associates a deeply immutable canonical scheduled policy", () => {
+    const sourceWindow = {
+      weekday: "friday",
+      start: "13:00",
+      end: "17:00",
+    };
+    const windows = [
+      sourceWindow,
+      { weekday: "monday", start: "09:00", end: "12:00" },
+    ];
+    const availabilityPolicy = {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows,
+    };
+    const input = createValidInput({ availabilityPolicy });
+    const service = RegisteredService.create(input);
+
+    expect(service.availabilityPolicy).toEqual({
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      schedule: {
+        windows: [
+          { weekday: "monday", start: "09:00", end: "12:00" },
+          { weekday: "friday", start: "13:00", end: "17:00" },
+        ],
+      },
+    });
+    expect(Object.isFrozen(service.availabilityPolicy)).toBe(true);
+
+    if (service.availabilityPolicy.schedule === null) {
+      throw new Error("Expected a scheduled policy");
+    }
+
+    expect(Object.isFrozen(service.availabilityPolicy.schedule)).toBe(true);
+    expect(Object.isFrozen(service.availabilityPolicy.schedule.windows)).toBe(
+      true,
+    );
+    expect(
+      service.availabilityPolicy.schedule.windows.every(Object.isFrozen),
+    ).toBe(true);
+
+    Reflect.set(input, "availabilityPolicy", { mode: "disabled" });
+    availabilityPolicy.timezone = "UTC";
+    windows.reverse();
+    sourceWindow.start = "14:00";
+
+    expect(service.availabilityPolicy).toEqual({
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      schedule: {
+        windows: [
+          { weekday: "monday", start: "09:00", end: "12:00" },
+          { weekday: "friday", start: "13:00", end: "17:00" },
+        ],
+      },
+    });
+  });
+
+  it.each([
+    undefined,
+    null,
+    "manual",
+    {},
+    { mode: "automatic" },
+    { mode: "manual", timezone: null },
+    { mode: "scheduled" },
+    {
+      mode: "scheduled",
+      timezone: "UTC",
+      windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+    },
+    {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows: [],
+    },
+    {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows: [{ weekday: "holiday", start: "09:00", end: "17:00" }],
+    },
+    {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows: [{ weekday: "monday", start: "9:00", end: "17:00" }],
+    },
+    {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows: [
+        { weekday: "monday", start: "09:00", end: "12:00" },
+        { weekday: "monday", start: "11:00", end: "17:00" },
+      ],
+    },
+    {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      windows: Array.from({ length: 65 }, () => ({
+        weekday: "monday",
+        start: "09:00",
+        end: "17:00",
+      })),
+    },
+  ])("rejects invalid availability policy %#", (availabilityPolicy) => {
+    expectValidationError(
+      createValidInput({ availabilityPolicy }),
+      "invalid_availability_policy",
+    );
+  });
+
+  it("does not translate unexpected policy factory failures", () => {
+    const unexpectedError = new Error("unexpected-programming-failure");
+    const availabilityPolicy = {
+      get mode(): never {
+        throw unexpectedError;
+      },
+    };
+
+    expect(() =>
+      RegisteredService.create(createValidInput({ availabilityPolicy })),
+    ).toThrow(unexpectedError);
   });
 
   it("defines exactly the initial adapters and supported operations", () => {

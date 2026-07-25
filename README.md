@@ -320,7 +320,9 @@ startup before the server begins listening.
 validated, immutable registered-service catalog. An absent variable or explicit
 `[]` produces an empty catalog; an empty string is invalid. Each entry must
 contain exactly `id`, `displayName`, `managementAdapter`,
-`externalResourceId`, and `supportedOperations`.
+`externalResourceId`, `supportedOperations`, and `availabilityPolicy`. The
+previous five-field entry shape is no longer valid, and no policy default is
+selected.
 
 ```json
 [
@@ -329,10 +331,38 @@ contain exactly `id`, `displayName`, `managementAdapter`,
     "displayName": "Example Service",
     "managementAdapter": "mock",
     "externalResourceId": "example-service-target",
-    "supportedOperations": ["readStatus", "start", "stop", "restart"]
+    "supportedOperations": ["readStatus", "start", "stop", "restart"],
+    "availabilityPolicy": {
+      "mode": "manual"
+    }
   }
 ]
 ```
+
+Non-scheduled policies use exactly one of the modes `always`, `manual`, or
+`disabled` and contain no scheduling fields. A scheduled entry has this nested
+policy shape:
+
+```json
+{
+  "availabilityPolicy": {
+    "mode": "scheduled",
+    "timezone": "America/Sao_Paulo",
+    "windows": [
+      {
+        "weekday": "monday",
+        "start": "09:00",
+        "end": "17:00"
+      }
+    ]
+  }
+}
+```
+
+Every scheduled policy requires the explicit `America/Sao_Paulo` timezone and
+at least one valid weekly window. Policy association does not create a
+scheduler or automatic start and stop behavior; existing manual status and
+control flows remain unchanged.
 
 Approved adapters are `mock` and `pm2`. Approved operations are `readStatus`,
 `start`, `stop`, and `restart`, and every service must include `readStatus`.

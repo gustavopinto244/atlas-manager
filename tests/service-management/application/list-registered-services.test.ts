@@ -11,6 +11,7 @@ function createService(id: string): RegisteredService {
     managementAdapter: "mock",
     externalResourceId: id,
     supportedOperations: ["readStatus"],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

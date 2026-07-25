@@ -28,6 +28,7 @@ function createService(
     managementAdapter,
     externalResourceId,
     supportedOperations,
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

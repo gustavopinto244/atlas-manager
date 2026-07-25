@@ -17,6 +17,7 @@ function createService(): RegisteredService {
     managementAdapter: "mock",
     externalResourceId: "task-manager-fixture",
     supportedOperations: ["readStatus"],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

@@ -14,6 +14,7 @@ function createService(managementAdapter: "mock" | "pm2"): RegisteredService {
     managementAdapter,
     externalResourceId: `${managementAdapter}-external-resource`,
     supportedOperations: ["readStatus"],
+    availabilityPolicy: { mode: "manual" },
   });
 }
 

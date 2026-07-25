@@ -21,6 +21,7 @@ interface ConfiguredService {
   readonly managementAdapter: "mock" | "pm2";
   readonly externalResourceId: string;
   readonly supportedOperations: readonly string[];
+  readonly availabilityPolicy: unknown;
 }
 
 function createConfiguredService(
@@ -33,6 +34,7 @@ function createConfiguredService(
     managementAdapter,
     externalResourceId: `${managementAdapter}-target`,
     supportedOperations: ["readStatus", "start", "stop", "restart"],
+    availabilityPolicy: { mode: "manual" },
     ...overrides,
   };
 }
@@ -169,6 +171,13 @@ describe("createServiceManagement", () => {
       "second-service",
       "third-service",
     ]);
+    expect(listedServices.map((service) => service.availabilityPolicy)).toEqual(
+      [
+        { mode: "manual", timezone: null, schedule: null },
+        { mode: "manual", timezone: null, schedule: null },
+        { mode: "manual", timezone: null, schedule: null },
+      ],
+    );
   });
 
   it.each([
