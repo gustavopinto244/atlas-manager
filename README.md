@@ -119,6 +119,14 @@ temporary state is isolated between composition instances and is lost when its
 instance or process is discarded. No active-override query, scheduler,
 automatic service operation, or HTTP override endpoint exists yet.
 
+An application query resolves a registered service through the catalog, reads
+its stored override, obtains one instant from the injected clock, and delegates
+effective availability calculation to the existing domain evaluator. It returns
+only `available`, `unavailable`, `manual`, or `disabled`. Missing and expired
+overrides fall back to the base policy without deleting stored state. The query
+does not retrieve actual service status or execute a service operation, and is
+not yet connected to composition, HTTP delivery, or a scheduler.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
