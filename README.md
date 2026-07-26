@@ -510,6 +510,15 @@ the at-most-once limitation after claim acquisition; it does not promise
 automatic replay, cross-service atomicity, or transactional exactly-once
 execution.
 
+A post-advance claim-cleanup integration scenario covers two consecutive
+successful scheduler intervals with reconstructed file-backed stores. Claims
+created while processing `T0` to `T1` are pruned only during the later cycle
+that begins with `T1` authoritative; claims created during `T1` to `T2` remain
+protected while that cycle advances the cursor to `T2`. The scenario verifies
+one controlled effect per occurrence and final cursor/claim continuity. Claim
+pruning and cursor advancement remain separate persistence operations and do
+not provide a global exactly-once transaction.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
