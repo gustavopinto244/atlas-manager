@@ -448,6 +448,16 @@ protected until a later cycle can prune through the previously authoritative
 cursor, demonstrating that recovery does not depend on process-local adapter or
 composition state.
 
+Retry-safety integration coverage also exercises a service effect that
+completes before scheduler cursor advancement fails. After reconstructing every
+file-backed store and the service-management composition, the same interval
+regenerates the canonical occurrence and its persisted duplicate claim prevents
+the effect from running again. A successful retry establishes the authoritative
+cursor, and a later cycle prunes that completed claim while preserving claims
+after the pruning boundary. This validates retry coordination through the
+persisted claim and cursor contracts; it does not provide transactional
+exactly-once execution across independent processes.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
