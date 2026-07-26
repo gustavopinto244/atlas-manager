@@ -2,15 +2,27 @@ import { randomUUID } from "node:crypto";
 import { open as openFile, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
+import type {
+  ServiceAvailabilityOverrideConditionalRemovalResult,
+  ServiceAvailabilityOverrideStore,
+} from "../application/ports/service-availability-override-store.js";
 import {
   createServiceAvailabilityOverride,
+  isSameServiceAvailabilityOverride,
   type ServiceAvailabilityOverride,
 } from "../../service-scheduling/domain/service-availability-override.js";
 
 const OVERRIDE_FILE_VERSION = 1;
 const TEMPORARY_FILE_MODE = 0o600;
 const EARLIEST_REFERENCE_TIMESTAMP = -8_640_000_000_000_000;
+
+const REMOVED_RESULT = Object.freeze({
+  kind: "removed",
+} as const satisfies ServiceAvailabilityOverrideConditionalRemovalResult);
+
+const NOT_REMOVED_RESULT = Object.freeze({
+  kind: "not_removed",
+} as const satisfies ServiceAvailabilityOverrideConditionalRemovalResult);
 
 export type FileServiceAvailabilityOverrideStoreErrorCode =
   "invalid_override_file" | "override_read_failed" | "override_write_failed";
@@ -121,6 +133,34 @@ export class FileServiceAvailabilityOverrideStore implements ServiceAvailability
       }
 
       await this.#persistOverrides(candidateOverrides);
+    });
+  }
+
+  public removeByServiceIdIfMatches(
+    serviceId: string,
+    expectedOverride: ServiceAvailabilityOverride,
+  ): Promise<ServiceAvailabilityOverrideConditionalRemovalResult> {
+    return this.#enqueue(async () => {
+      const currentOverrides = await this.#readPersistedOverrides();
+      const currentOverride = currentOverrides.find(
+        (storedOverride) => storedOverride.serviceId === serviceId,
+      );
+
+      if (
+        currentOverride === undefined ||
+        !isSameServiceAvailabilityOverride(
+          currentOverride.override,
+          expectedOverride,
+        )
+      ) {
+        return NOT_REMOVED_RESULT;
+      }
+
+      const candidateOverrides = currentOverrides.filter(
+        (storedOverride) => storedOverride.serviceId !== serviceId,
+      );
+      await this.#persistOverrides(candidateOverrides);
+      return REMOVED_RESULT;
     });
   }
 

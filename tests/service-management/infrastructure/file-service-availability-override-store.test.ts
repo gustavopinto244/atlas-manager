@@ -49,7 +49,13 @@ describe("FileServiceAvailabilityOverrideStore", () => {
     expect(
       Object.getOwnPropertyNames(Object.getPrototypeOf(store) as object).sort(),
     ).toEqual(
-      ["constructor", "findByServiceId", "removeByServiceId", "save"].sort(),
+      [
+        "constructor",
+        "findByServiceId",
+        "removeByServiceId",
+        "removeByServiceIdIfMatches",
+        "save",
+      ].sort(),
     );
     expect(dependencies.readFile).not.toHaveBeenCalled();
     expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
@@ -354,6 +360,266 @@ describe("FileServiceAvailabilityOverrideStore", () => {
 
     await expect(readFile(filePath, "utf8")).resolves.toBe(
       '{"version":1,"overrides":[]}\n',
+    );
+  });
+
+  it("returns frozen not_removed for conditional removal from a missing target", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockRejectedValue(missingFileError());
+    const store = new FileServiceAvailabilityOverrideStore(
+      "/trusted/overrides.json",
+      dependencies,
+    );
+
+    const result = await store.removeByServiceIdIfMatches(
+      "api",
+      createOverride(),
+    );
+
+    expect(result).toEqual({ kind: "not_removed" });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toEqual(["kind"]);
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+    expect(dependencies.open).not.toHaveBeenCalled();
+    expect(dependencies.rename).not.toHaveBeenCalled();
+  });
+
+  it("returns not_removed for conditional removal from an explicit empty file", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockResolvedValue(encodeOverrideFile([]));
+    const store = new FileServiceAvailabilityOverrideStore(
+      "/trusted/overrides.json",
+      dependencies,
+    );
+
+    await expect(
+      store.removeByServiceIdIfMatches("api", createOverride()),
+    ).resolves.toEqual({ kind: "not_removed" });
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+    expect(dependencies.open).not.toHaveBeenCalled();
+    expect(dependencies.rename).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["kind", createOverride("suspend_schedule")],
+    [
+      "expiration",
+      createOverride("keep_available", "2026-07-26T13:00:00.000Z"),
+    ],
+  ])(
+    "does not write when conditional removal mismatches by %s",
+    async (_difference, expectedOverride) => {
+      const dependencies = createControlledDependencies();
+      const originalContents = encodeOverrideFile([persistedOverride()]);
+      dependencies.readFile.mockResolvedValue(originalContents);
+      const store = new FileServiceAvailabilityOverrideStore(
+        "/trusted/overrides.json",
+        dependencies,
+      );
+
+      const result = await store.removeByServiceIdIfMatches(
+        "api",
+        expectedOverride,
+      );
+
+      expect(result).toEqual({ kind: "not_removed" });
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+      expect(dependencies.open).not.toHaveBeenCalled();
+      expect(dependencies.rename).not.toHaveBeenCalled();
+    },
+  );
+
+  it("conditionally removes a value-equal override and preserves unrelated entries", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    await writeFile(
+      filePath,
+      overrideFile([
+        persistedOverride(),
+        persistedOverride({
+          serviceId: "web",
+          kind: "suspend_schedule",
+        }),
+      ]),
+      "utf8",
+    );
+    const store = new FileServiceAvailabilityOverrideStore(filePath);
+    const expectedOverride = createOverride();
+
+    const result = await store.removeByServiceIdIfMatches(
+      "api",
+      expectedOverride,
+    );
+
+    expect(result).toEqual({ kind: "removed" });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toEqual(["kind"]);
+    expect(await readPersistedOverrides(filePath)).toEqual([
+      persistedOverride({ serviceId: "web", kind: "suspend_schedule" }),
+    ]);
+  });
+
+  it("persists canonical empty state after conditionally removing the final entry", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    await writeFile(filePath, overrideFile([persistedOverride()]), "utf8");
+    const store = new FileServiceAvailabilityOverrideStore(filePath);
+
+    await expect(
+      store.removeByServiceIdIfMatches("api", createOverride()),
+    ).resolves.toEqual({ kind: "removed" });
+
+    await expect(readFile(filePath, "utf8")).resolves.toBe(
+      '{"version":1,"overrides":[]}\n',
+    );
+  });
+
+  it("returns removed only after the atomic rename settles", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockResolvedValue(
+      encodeOverrideFile([persistedOverride()]),
+    );
+    const pendingRename = deferred<void>();
+    dependencies.rename.mockImplementation(() => pendingRename.promise);
+    const store = new FileServiceAvailabilityOverrideStore(
+      "/trusted/overrides.json",
+      dependencies,
+    );
+
+    const removal = store.removeByServiceIdIfMatches("api", createOverride());
+    let settled = false;
+    void removal.then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => {
+      expect(dependencies.rename).toHaveBeenCalledOnce();
+    });
+
+    expect(settled).toBe(false);
+    pendingRename.resolve();
+    await expect(removal).resolves.toEqual({ kind: "removed" });
+  });
+
+  it("validates persisted state before conditional comparison", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockResolvedValue(
+      new TextEncoder().encode('{"version":1,"overrides":"invalid"}'),
+    );
+    const store = new FileServiceAvailabilityOverrideStore(
+      "/trusted/overrides.json",
+      dependencies,
+    );
+
+    await expect(
+      store.removeByServiceIdIfMatches("api", createOverride()),
+    ).rejects.toMatchObject({ code: "invalid_override_file" });
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+  });
+
+  it("serializes equivalent conditional removals so exactly one removes", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    const dependencies = createNodeDependencies();
+    const store = new FileServiceAvailabilityOverrideStore(
+      filePath,
+      dependencies,
+    );
+    await store.save("api", createOverride());
+    dependencies.rename.mockClear();
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        store.removeByServiceIdIfMatches("api", createOverride()),
+      ),
+    );
+
+    expect(results.filter(({ kind }) => kind === "removed")).toHaveLength(1);
+    expect(results.filter(({ kind }) => kind === "not_removed")).toHaveLength(
+      4,
+    );
+    expect(dependencies.rename).toHaveBeenCalledOnce();
+    await expect(store.findByServiceId("api")).resolves.toBeNull();
+  });
+
+  it("does not let a stale expected value remove a replacement queued first", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    const store = new FileServiceAvailabilityOverrideStore(filePath);
+    const original = createOverride();
+    const replacement = createOverride(
+      "suspend_schedule",
+      "2026-07-26T13:00:00.000Z",
+    );
+    await store.save("api", original);
+
+    const [, removalResult] = await Promise.all([
+      store.save("api", replacement),
+      store.removeByServiceIdIfMatches("api", original),
+    ]);
+
+    expect(removalResult).toEqual({ kind: "not_removed" });
+    await expect(store.findByServiceId("api")).resolves.toEqual(replacement);
+  });
+
+  it("allows a matching removal queued before a later replacement", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    const store = new FileServiceAvailabilityOverrideStore(filePath);
+    const original = createOverride();
+    const replacement = createOverride(
+      "suspend_schedule",
+      "2026-07-26T13:00:00.000Z",
+    );
+    await store.save("api", original);
+
+    const [removalResult] = await Promise.all([
+      store.removeByServiceIdIfMatches("api", original),
+      store.save("api", replacement),
+    ]);
+
+    expect(removalResult).toEqual({ kind: "removed" });
+    await expect(store.findByServiceId("api")).resolves.toEqual(replacement);
+  });
+
+  it("recovers its queue after a matching conditional write failure", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    const dependencies = createNodeDependencies();
+    const store = new FileServiceAvailabilityOverrideStore(
+      filePath,
+      dependencies,
+    );
+    await store.save("api", createOverride());
+    dependencies.rename.mockRejectedValueOnce(new Error("rename failed"));
+
+    await expect(
+      store.removeByServiceIdIfMatches("api", createOverride()),
+    ).rejects.toMatchObject({ code: "override_write_failed" });
+    await expect(store.findByServiceId("api")).resolves.toEqual(
+      createOverride(),
+    );
+    await expect(
+      store.save("web", createOverride("suspend_schedule")),
+    ).resolves.toBeUndefined();
+  });
+
+  it("observes an external replacement before conditional removal", async () => {
+    const { filePath } = await createTemporaryOverridePath();
+    await writeFile(filePath, overrideFile([persistedOverride()]), "utf8");
+    const store = new FileServiceAvailabilityOverrideStore(filePath);
+    const staleExpected = createOverride();
+    await expect(store.findByServiceId("api")).resolves.toEqual(staleExpected);
+    await writeFile(
+      filePath,
+      overrideFile([
+        persistedOverride({
+          kind: "suspend_schedule",
+          expiresAt: "2026-07-26T13:00:00.000Z",
+        }),
+      ]),
+      "utf8",
+    );
+
+    await expect(
+      store.removeByServiceIdIfMatches("api", staleExpected),
+    ).resolves.toEqual({ kind: "not_removed" });
+    await expect(store.findByServiceId("api")).resolves.toEqual(
+      createOverride("suspend_schedule", "2026-07-26T13:00:00.000Z"),
     );
   });
 

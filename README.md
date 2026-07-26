@@ -147,6 +147,17 @@ repaired and do not fall back to memory. Expiration remains owned by existing
 application behavior, so expired entries are not pruned automatically. Paths
 and override contents are not logged.
 
+The override-store port also supports atomic conditional removal by canonical
+override value. It compares only `kind` and `expiresAt`; a matching current
+value returns frozen `removed`, while both absence and mismatch return the same
+frozen `not_removed` result without exposing current state. The file-backed
+adapter performs its authoritative read, comparison, and optional atomic
+replacement inside the existing per-instance operation queue. A stale expected
+value therefore cannot remove a later replacement made through that instance.
+Conditional removal does not evaluate expiration, and expired-override pruning
+is not yet executed automatically. Independent adapter instances still have no
+cross-process compare-and-remove guarantee.
+
 An application query resolves a registered service through the catalog, reads
 its stored override, obtains one instant from the injected clock, and delegates
 effective availability calculation to the existing domain evaluator. It returns

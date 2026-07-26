@@ -21,6 +21,7 @@ function createPlanner(): PlanRegisteredServiceAvailabilityReconciliation {
       findByServiceId: vi.fn(),
       save: vi.fn(),
       removeByServiceId: vi.fn(),
+      removeByServiceIdIfMatches: vi.fn(),
     },
     { read: vi.fn() },
     { now: vi.fn() },

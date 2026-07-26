@@ -1335,10 +1335,14 @@ describe("createServiceManagement", () => {
       storedOverrides.delete(serviceId);
       return Promise.resolve();
     });
+    const removeByServiceIdIfMatches = vi.fn<
+      ServiceAvailabilityOverrideStore["removeByServiceIdIfMatches"]
+    >(() => Promise.resolve(Object.freeze({ kind: "not_removed" })));
     const store: ServiceAvailabilityOverrideStore = {
       findByServiceId,
       save,
       removeByServiceId,
+      removeByServiceIdIfMatches,
     };
     const capabilities = createServiceManagement(createEnvironment([service]), {
       clock,

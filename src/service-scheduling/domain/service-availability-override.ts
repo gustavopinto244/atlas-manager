@@ -18,6 +18,13 @@ export interface ServiceAvailabilityOverride {
   readonly expiresAt: string;
 }
 
+export function isSameServiceAvailabilityOverride(
+  left: ServiceAvailabilityOverride,
+  right: ServiceAvailabilityOverride,
+): boolean {
+  return left.kind === right.kind && left.expiresAt === right.expiresAt;
+}
+
 const OVERRIDE_FIELDS = Object.freeze(["kind", "expiresAt"] as const);
 const overrideKindAllowlist = new Set<unknown>(
   SERVICE_AVAILABILITY_OVERRIDE_KINDS,

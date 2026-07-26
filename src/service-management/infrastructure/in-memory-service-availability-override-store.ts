@@ -1,5 +1,19 @@
-import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
-import type { ServiceAvailabilityOverride } from "../../service-scheduling/domain/service-availability-override.js";
+import type {
+  ServiceAvailabilityOverrideConditionalRemovalResult,
+  ServiceAvailabilityOverrideStore,
+} from "../application/ports/service-availability-override-store.js";
+import {
+  isSameServiceAvailabilityOverride,
+  type ServiceAvailabilityOverride,
+} from "../../service-scheduling/domain/service-availability-override.js";
+
+const REMOVED_RESULT = Object.freeze({
+  kind: "removed",
+} as const satisfies ServiceAvailabilityOverrideConditionalRemovalResult);
+
+const NOT_REMOVED_RESULT = Object.freeze({
+  kind: "not_removed",
+} as const satisfies ServiceAvailabilityOverrideConditionalRemovalResult);
 
 export class InMemoryServiceAvailabilityOverrideStore implements ServiceAvailabilityOverrideStore {
   readonly #overrides = new Map<string, ServiceAvailabilityOverride>();
@@ -27,5 +41,22 @@ export class InMemoryServiceAvailabilityOverrideStore implements ServiceAvailabi
     this.#overrides.delete(serviceId);
 
     return Promise.resolve();
+  }
+
+  public removeByServiceIdIfMatches(
+    serviceId: string,
+    expectedOverride: ServiceAvailabilityOverride,
+  ): Promise<ServiceAvailabilityOverrideConditionalRemovalResult> {
+    const currentOverride = this.#overrides.get(serviceId);
+
+    if (
+      currentOverride === undefined ||
+      !isSameServiceAvailabilityOverride(currentOverride, expectedOverride)
+    ) {
+      return Promise.resolve(NOT_REMOVED_RESULT);
+    }
+
+    this.#overrides.delete(serviceId);
+    return Promise.resolve(REMOVED_RESULT);
   }
 }

@@ -185,6 +185,85 @@ describe("InMemoryServiceAvailabilityOverrideStore", () => {
     );
   });
 
+  it("returns frozen not_removed for an absent conditional removal", async () => {
+    const store = createStore();
+    const expectedOverride = createOverride("keep_available");
+
+    const result = await store.removeByServiceIdIfMatches(
+      "example-service",
+      expectedOverride,
+    );
+
+    expect(result).toEqual({ kind: "not_removed" });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toEqual(["kind"]);
+    await expect(store.findByServiceId("example-service")).resolves.toBeNull();
+  });
+
+  it("conditionally removes a separately constructed value-equal override", async () => {
+    const store = createStore();
+    const storedOverride = createOverride("keep_available");
+    const expectedOverride = createOverride("keep_available");
+    await store.save("example-service", storedOverride);
+
+    const result = await store.removeByServiceIdIfMatches(
+      "example-service",
+      expectedOverride,
+    );
+
+    expect(storedOverride).not.toBe(expectedOverride);
+    expect(result).toEqual({ kind: "removed" });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toEqual(["kind"]);
+    await expect(store.findByServiceId("example-service")).resolves.toBeNull();
+  });
+
+  it.each([
+    ["kind", createOverride("suspend_schedule")],
+    [
+      "expiration",
+      createOverride("keep_available", "2026-08-01T13:00:00.000Z"),
+    ],
+  ])(
+    "does not conditionally remove an override with a different %s",
+    async (_difference, expectedOverride) => {
+      const store = createStore();
+      const storedOverride = createOverride("keep_available");
+      await store.save("example-service", storedOverride);
+
+      const result = await store.removeByServiceIdIfMatches(
+        "example-service",
+        expectedOverride,
+      );
+
+      expect(result).toEqual({ kind: "not_removed" });
+      expect(Object.isFrozen(result)).toBe(true);
+      await expect(store.findByServiceId("example-service")).resolves.toBe(
+        storedOverride,
+      );
+    },
+  );
+
+  it("conditionally removes only the matching service association", async () => {
+    const store = createStore();
+    const firstOverride = createOverride("keep_available");
+    const secondOverride = createOverride("suspend_schedule");
+    await store.save("service-a", firstOverride);
+    await store.save("service-b", secondOverride);
+
+    await expect(
+      store.removeByServiceIdIfMatches(
+        "service-a",
+        createOverride("keep_available"),
+      ),
+    ).resolves.toEqual({ kind: "removed" });
+
+    await expect(store.findByServiceId("service-a")).resolves.toBeNull();
+    await expect(store.findByServiceId("service-b")).resolves.toBe(
+      secondOverride,
+    );
+  });
+
   it("keeps separate store instances isolated", async () => {
     const firstStore = createStore();
     const secondStore = createStore();
@@ -223,7 +302,13 @@ describe("InMemoryServiceAvailabilityOverrideStore", () => {
 
     expect(Object.keys(store)).toEqual([]);
     expect(prototypeMethods).toEqual(
-      ["constructor", "findByServiceId", "removeByServiceId", "save"].sort(),
+      [
+        "constructor",
+        "findByServiceId",
+        "removeByServiceId",
+        "removeByServiceIdIfMatches",
+        "save",
+      ].sort(),
     );
     expect(store).not.toHaveProperty("overrides");
     expect(store).not.toHaveProperty("map");
@@ -242,6 +327,7 @@ describe("InMemoryServiceAvailabilityOverrideStore", () => {
   it("performs no time or process side effects during operations", async () => {
     const store = createStore();
     const override = createOverride("keep_available");
+    const expectedOverride = createOverride("keep_available");
     const dateSpy = vi.spyOn(globalThis, "Date");
     const dateNowSpy = vi.spyOn(Date, "now");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
@@ -251,6 +337,10 @@ describe("InMemoryServiceAvailabilityOverrideStore", () => {
       await store.save("example-service", override);
       await store.findByServiceId("example-service");
       await store.removeByServiceId("example-service");
+      await store.removeByServiceIdIfMatches(
+        "example-service",
+        expectedOverride,
+      );
 
       expect(dateSpy).not.toHaveBeenCalled();
       expect(dateNowSpy).not.toHaveBeenCalled();
