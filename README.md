@@ -529,6 +529,17 @@ preserves the current claim, and advances to `T2`. This confirms that effects
 and claims may commit before maintenance fails and does not claim an atomic or
 globally exactly-once transaction.
 
+Post-advance override-pruning failure recovery is also covered through a
+file-backed reconstruction scenario. After a first interval advances the
+cursor to `T1`, the next interval creates a claim and completes its controlled
+effect before an expired override removal reports a failure. The scheduler
+returns an incomplete result with claim pruning skipped, preserving `T1`, the
+expired override, and both generations of claims. A reconstructed retry uses
+the duplicate second occurrence, removes the override, prunes the first claim
+through authoritative `T1`, preserves the current claim, and advances to `T2`.
+This confirms that maintenance failure is not transactional rollback or global
+exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
