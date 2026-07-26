@@ -274,8 +274,15 @@ one-minute delay. `incomplete`, `conflict`, unexpected cycle failures, and timer
 failures terminate the lifecycle without retry. Explicit `stop` cancels a
 pending timer or waits for in-flight work, and exposes one immutable terminal
 completion. The Node.js timer adapter uses cancellable one-shot timeouts. This
-loop is not yet connected to service-management composition, application
-startup, graceful shutdown, logging, metrics, HTTP, or persistence.
+loop is exposed through service-management composition as one stable,
+non-restartable lifecycle capability. It reuses the exact composed scheduler
+cycle and one private timer selected per composition. Callers may inject the
+timer port; otherwise composition uses a private Node.js one-shot timer adapter.
+Direct and loop-driven cycles share scheduler cursor state, occurrence claims,
+and availability overrides through the existing dependency graph, while
+default composition instances remain isolated. Composition does not start the
+loop or schedule a timer. Application startup, graceful shutdown, logging,
+metrics, HTTP, persistence, and retry behavior remain unconnected.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
