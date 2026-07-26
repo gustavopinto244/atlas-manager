@@ -5,6 +5,7 @@ import { ControlRegisteredService } from "../../../src/service-management/applic
 import { GetRegisteredServiceEffectiveAvailability } from "../../../src/service-management/application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../../../src/service-management/application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
+import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../../../src/service-management/application/ports/service-availability-override-store.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/set-registered-service-availability-override.js";
@@ -99,7 +100,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the six frozen application capabilities", () => {
+  it("returns exactly the seven frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -120,6 +121,9 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.getRegisteredServiceEffectiveAvailability,
     ).toBeInstanceOf(GetRegisteredServiceEffectiveAvailability);
+    expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation,
+    ).toBeInstanceOf(PlanRegisteredServiceAvailabilityReconciliation);
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -127,6 +131,7 @@ describe("createServiceManagement", () => {
       "setRegisteredServiceAvailabilityOverride",
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
+      "planRegisteredServiceAvailabilityReconciliation",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -153,11 +158,19 @@ describe("createServiceManagement", () => {
     expect(capabilities.getRegisteredServiceEffectiveAvailability).toBe(
       capabilities.getRegisteredServiceEffectiveAvailability,
     );
+    expect(capabilities.planRegisteredServiceAvailabilityReconciliation).toBe(
+      capabilities.planRegisteredServiceAvailabilityReconciliation,
+    );
   });
 
-  it("shares one injected store between set, cancel, and query without using dependencies during composition", async () => {
+  it("shares one injected store with planning without using dependencies during composition", async () => {
     const service = createConfiguredService("mock");
-    const clock = createClock(firstTimestamp, firstTimestamp, firstTimestamp);
+    const clock = createClock(
+      firstTimestamp,
+      firstTimestamp,
+      firstTimestamp,
+      firstTimestamp,
+    );
     const storedOverrides = new Map<string, ServiceAvailabilityOverride>();
     const findByServiceId = vi.fn<
       ServiceAvailabilityOverrideStore["findByServiceId"]
@@ -182,6 +195,9 @@ describe("createServiceManagement", () => {
     const capabilities = createServiceManagement(createEnvironment([service]), {
       clock,
       serviceAvailabilityOverrideStore: store,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
     });
 
     expect(clock.now).not.toHaveBeenCalled();
@@ -207,6 +223,13 @@ describe("createServiceManagement", () => {
     ).resolves.toBe("available");
     expect(findByServiceId).toHaveBeenCalledExactlyOnceWith(service.id);
     expect(clock.now).toHaveBeenCalledTimes(2);
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "execute", operation: "start" });
+    expect(findByServiceId).toHaveBeenCalledTimes(2);
+    expect(clock.now).toHaveBeenCalledTimes(3);
 
     await expect(
       capabilities.cancelRegisteredServiceAvailabilityOverride.execute(
@@ -220,8 +243,143 @@ describe("createServiceManagement", () => {
         service.id,
       ),
     ).resolves.toBe("manual");
-    expect(findByServiceId).toHaveBeenCalledTimes(2);
-    expect(clock.now).toHaveBeenCalledTimes(3);
+    expect(findByServiceId).toHaveBeenCalledTimes(3);
+    expect(clock.now).toHaveBeenCalledTimes(4);
+  });
+
+  it("shares status, override state, and clock across planning transitions", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "manual" },
+      supportedOperations: ["readStatus"],
+    });
+    const clock = createClock(
+      firstTimestamp,
+      firstTimestamp,
+      firstTimestamp,
+      firstTimestamp,
+      firstTimestamp,
+    );
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+
+    expect(clock.now).not.toHaveBeenCalled();
+
+    await expect(
+      capabilities.getRegisteredServiceStatus.execute(service.id),
+    ).resolves.toEqual({
+      serviceId: service.id,
+      state: "stopped",
+      observedAt: firstTimestamp,
+    });
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "none" });
+
+    await capabilities.setRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+      {
+        kind: "keep_available",
+        expiresAt: "2026-07-25T12:00:00.001Z",
+      },
+    );
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "execute", operation: "start" });
+
+    await capabilities.cancelRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+    );
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "none" });
+    expect(clock.now).toHaveBeenCalledTimes(5);
+  });
+
+  it("makes override replacement immediately visible to planning", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "manual" },
+    });
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock: createClock(
+        firstTimestamp,
+        firstTimestamp,
+        firstTimestamp,
+        firstTimestamp,
+      ),
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+
+    await capabilities.setRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+      {
+        kind: "keep_available",
+        expiresAt: "2026-07-25T12:00:00.001Z",
+      },
+    );
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "execute", operation: "start" });
+
+    await capabilities.setRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+      {
+        kind: "suspend_schedule",
+        expiresAt: "2026-07-25T12:00:00.002Z",
+      },
+    );
+    await expect(
+      capabilities.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "none" });
+  });
+
+  it("keeps default planning state isolated between composition instances", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "manual" },
+    });
+    const compositionOverrides = {
+      clock: createClock(firstTimestamp, firstTimestamp),
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    };
+    const first = createServiceManagement(
+      createEnvironment([service]),
+      compositionOverrides,
+    );
+    const second = createServiceManagement(createEnvironment([service]), {
+      ...compositionOverrides,
+      clock: createClock(firstTimestamp),
+    });
+
+    await first.setRegisteredServiceAvailabilityOverride.execute(service.id, {
+      kind: "keep_available",
+      expiresAt: "2026-07-25T12:00:00.001Z",
+    });
+
+    await expect(
+      first.planRegisteredServiceAvailabilityReconciliation.execute(service.id),
+    ).resolves.toEqual({ kind: "execute", operation: "start" });
+    await expect(
+      second.planRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      ),
+    ).resolves.toEqual({ kind: "none" });
   });
 
   it("shares the default store between set, cancel, and query", async () => {

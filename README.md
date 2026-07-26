@@ -144,8 +144,15 @@ then obtains one instant from the application clock and delegates effective
 availability and reconciliation rules to the existing domain functions. The
 result is `execute start`, `execute stop`, or `none`. Planning does not inspect
 supported operations, mutate override state, execute service control, or prevent
-duplicate execution. It is not connected to production composition, a scheduler,
-or HTTP delivery.
+duplicate execution. It is not connected to a scheduler or HTTP delivery.
+
+Service-management composition exposes reconciliation planning as an on-demand
+internal capability. It shares the catalog, private override store, dispatching
+status reader, and application clock with the existing capabilities, so set,
+replacement, cancellation, status, effective availability, and planning observe
+consistent dependencies. Planning still only returns `execute start`, `execute
+stop`, or `none`; it does not inspect supported operations or execute control.
+No scheduler, duplicate-execution protection, or HTTP endpoint exists yet.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, reconciliation, default policies, scheduler
