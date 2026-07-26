@@ -10,6 +10,8 @@ import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/
 import type { Clock } from "../application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
+import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
+import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
@@ -17,6 +19,7 @@ import { DispatchingServiceStatusReader } from "../infrastructure/dispatching-se
 import { createRegisteredServiceCatalogFromEnvironment } from "../infrastructure/environment-registered-service-catalog.js";
 import { InMemoryServiceAvailabilityOverrideStore } from "../infrastructure/in-memory-service-availability-override-store.js";
 import { InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore } from "../infrastructure/in-memory-service-availability-reconciliation-occurrence-claim-store.js";
+import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
 import { MockServiceController } from "../infrastructure/mock-service-controller.js";
 import {
   MockServiceStatusReader,
@@ -45,12 +48,14 @@ export interface ServiceManagementCapabilities {
   readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
   readonly generateRegisteredServiceAvailabilityReconciliationOccurrences: GenerateRegisteredServiceAvailabilityReconciliationOccurrences;
   readonly runServiceAvailabilityReconciliationTick: RunServiceAvailabilityReconciliationTick;
+  readonly runServiceAvailabilityReconciliationSchedulerCycle: RunServiceAvailabilityReconciliationSchedulerCycle;
 }
 
 export interface ServiceManagementCompositionOverrides {
   readonly clock?: Clock;
   readonly serviceAvailabilityOverrideStore?: ServiceAvailabilityOverrideStore;
   readonly serviceAvailabilityReconciliationOccurrenceClaimStore?: ServiceAvailabilityReconciliationOccurrenceClaimStore;
+  readonly serviceAvailabilityReconciliationSchedulerCursorStore?: ServiceAvailabilityReconciliationSchedulerCursorStore;
   readonly mockStatusConfiguration?: readonly MockServiceStatusConfiguration[];
   readonly pm2ProcessListExecutor?: Pm2ProcessListExecutor;
   readonly pm2ControlExecutor?: Pm2ServiceControlExecutor;
@@ -68,6 +73,9 @@ export function createServiceManagement(
   const occurrenceClaimStore =
     overrides?.serviceAvailabilityReconciliationOccurrenceClaimStore ??
     new InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore();
+  const schedulerCursorStore =
+    overrides?.serviceAvailabilityReconciliationSchedulerCursorStore ??
+    new InMemoryServiceAvailabilityReconciliationSchedulerCursorStore();
   const mockStatusConfiguration = overrides?.mockStatusConfiguration ?? [];
   const processListExecutor =
     overrides?.pm2ProcessListExecutor ?? new NodePm2ProcessListExecutor();
@@ -123,6 +131,12 @@ export function createServiceManagement(
       generateRegisteredServiceAvailabilityReconciliationOccurrences,
       executeRegisteredServiceAvailabilityReconciliationOccurrence,
     );
+  const runServiceAvailabilityReconciliationSchedulerCycle =
+    new RunServiceAvailabilityReconciliationSchedulerCycle(
+      clock,
+      schedulerCursorStore,
+      runServiceAvailabilityReconciliationTick,
+    );
 
   return Object.freeze({
     listRegisteredServices,
@@ -151,6 +165,7 @@ export function createServiceManagement(
     executeRegisteredServiceAvailabilityReconciliationOccurrence,
     generateRegisteredServiceAvailabilityReconciliationOccurrences,
     runServiceAvailabilityReconciliationTick,
+    runServiceAvailabilityReconciliationSchedulerCycle,
   });
 }
 

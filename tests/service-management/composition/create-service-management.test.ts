@@ -12,6 +12,8 @@ import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/se
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../../../src/service-management/application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
+import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
+import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../../../src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/set-registered-service-availability-override.js";
 import {
@@ -25,6 +27,7 @@ import {
 } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
+import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
 
 const firstTimestamp = "2026-07-25T12:00:00.000Z";
@@ -121,7 +124,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the eleven frozen application capabilities", () => {
+  it("returns exactly the twelve frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -161,6 +164,9 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.runServiceAvailabilityReconciliationTick,
     ).toBeInstanceOf(RunServiceAvailabilityReconciliationTick);
+    expect(
+      capabilities.runServiceAvailabilityReconciliationSchedulerCycle,
+    ).toBeInstanceOf(RunServiceAvailabilityReconciliationSchedulerCycle);
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -173,6 +179,7 @@ describe("createServiceManagement", () => {
       "executeRegisteredServiceAvailabilityReconciliationOccurrence",
       "generateRegisteredServiceAvailabilityReconciliationOccurrences",
       "runServiceAvailabilityReconciliationTick",
+      "runServiceAvailabilityReconciliationSchedulerCycle",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -193,6 +200,10 @@ describe("createServiceManagement", () => {
     expect(capabilities).not.toHaveProperty("registeredServiceCatalog");
     expect(capabilities).not.toHaveProperty("schedulerClock");
     expect(capabilities).not.toHaveProperty("cursor");
+    expect(capabilities).not.toHaveProperty(
+      "serviceAvailabilityReconciliationSchedulerCursorStore",
+    );
+    expect(capabilities).not.toHaveProperty("schedulerCursorStore");
   });
 
   it("keeps application capability references stable per composition", () => {
@@ -245,6 +256,211 @@ describe("createServiceManagement", () => {
     expect(capabilities.runServiceAvailabilityReconciliationTick).not.toBe(
       otherCapabilities.runServiceAvailabilityReconciliationTick,
     );
+    expect(
+      capabilities.runServiceAvailabilityReconciliationSchedulerCycle,
+    ).toBe(capabilities.runServiceAvailabilityReconciliationSchedulerCycle);
+    expect(
+      capabilities.runServiceAvailabilityReconciliationSchedulerCycle,
+    ).not.toBe(
+      otherCapabilities.runServiceAvailabilityReconciliationSchedulerCycle,
+    );
+  });
+
+  it("reuses the exact shared clock and tick in the scheduler cycle", async () => {
+    const clock = createClock("2026-07-26T12:30:47.123Z");
+    const capabilities = createServiceManagement({}, { clock });
+    const tick = vi
+      .spyOn(capabilities.runServiceAvailabilityReconciliationTick, "execute")
+      .mockResolvedValue(Object.freeze([]));
+
+    expect(clock.now).not.toHaveBeenCalled();
+    expect(tick).not.toHaveBeenCalled();
+
+    const result =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(clock.now).toHaveBeenCalledTimes(1);
+    expect(tick).toHaveBeenCalledTimes(1);
+    expect(tick.mock.calls[0]?.[0].toISOString()).toBe(
+      "2026-07-26T12:29:00.000Z",
+    );
+    expect(tick.mock.calls[0]?.[1].toISOString()).toBe(
+      "2026-07-26T12:30:00.000Z",
+    );
+    expect(result.kind).toBe("advanced");
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("preserves default cursor continuity across repeated cycle calls", async () => {
+    const clock = createClock(
+      "2026-07-26T12:30:47.123Z",
+      "2026-07-26T12:30:59.999Z",
+      "2026-07-26T12:31:12.000Z",
+    );
+    const capabilities = createServiceManagement({}, { clock });
+
+    const first =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+    const second =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+    const third =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(first.kind).toBe("advanced");
+    expect(second.kind).toBe("idle");
+    expect(third.kind).toBe("advanced");
+    expect(
+      first.kind === "advanced" &&
+        second.kind === "idle" &&
+        second.cursor.completedThrough === first.cursor.completedThrough,
+    ).toBe(true);
+    expect(
+      third.kind === "advanced" &&
+        third.cursor.completedThrough === "2026-07-26T12:31:00.000Z",
+    ).toBe(true);
+  });
+
+  it("uses the exact cursor-store override without construction side effects", async () => {
+    const read = vi
+      .fn<ServiceAvailabilityReconciliationSchedulerCursorStore["read"]>()
+      .mockResolvedValue(null);
+    const advance = vi
+      .fn<ServiceAvailabilityReconciliationSchedulerCursorStore["advance"]>()
+      .mockImplementation((_expected, next) =>
+        Promise.resolve(Object.freeze({ kind: "advanced", cursor: next })),
+      );
+    const cursorStore = { read, advance };
+    const clock = createClock("2026-07-26T12:30:00.000Z");
+    const capabilities = createServiceManagement(
+      {},
+      {
+        clock,
+        serviceAvailabilityReconciliationSchedulerCursorStore: cursorStore,
+      },
+    );
+
+    expect(read).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
+    expect(clock.now).not.toHaveBeenCalled();
+
+    const result =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(advance).toHaveBeenCalledTimes(1);
+    expect(advance.mock.calls[0]?.[0]).toBeNull();
+    const candidateCursor = advance.mock.calls[0]?.[1];
+    expect(result.kind === "advanced" && result.cursor).toBe(candidateCursor);
+  });
+
+  it("keeps default scheduler cursor state isolated between compositions", async () => {
+    const first = createServiceManagement(
+      {},
+      { clock: createClock("2026-07-26T12:30:00.000Z") },
+    );
+    const second = createServiceManagement(
+      {},
+      { clock: createClock("2026-07-26T12:30:00.000Z") },
+    );
+
+    const firstResult =
+      await first.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+    const secondResult =
+      await second.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(firstResult.kind).toBe("advanced");
+    expect(secondResult.kind).toBe("advanced");
+  });
+
+  it("allows caller-owned cursor state sharing through an exact store override", async () => {
+    const cursorStore =
+      new InMemoryServiceAvailabilityReconciliationSchedulerCursorStore();
+    const first = createServiceManagement(
+      {},
+      {
+        clock: createClock("2026-07-26T12:30:00.000Z"),
+        serviceAvailabilityReconciliationSchedulerCursorStore: cursorStore,
+      },
+    );
+    const second = createServiceManagement(
+      {},
+      {
+        clock: createClock("2026-07-26T12:30:00.000Z"),
+        serviceAvailabilityReconciliationSchedulerCursorStore: cursorStore,
+      },
+    );
+
+    const firstResult =
+      await first.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+    const secondResult =
+      await second.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(firstResult.kind).toBe("advanced");
+    expect(secondResult.kind).toBe("idle");
+  });
+
+  it("keeps direct tick execution independent from scheduler cursor state", async () => {
+    const clock = createClock("2026-07-26T12:30:00.000Z");
+    const capabilities = createServiceManagement({}, { clock });
+
+    await capabilities.runServiceAvailabilityReconciliationTick.execute(
+      new Date("2026-07-26T12:29:00.000Z"),
+      new Date("2026-07-26T12:30:00.000Z"),
+    );
+    const cycleResult =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(cycleResult.kind).toBe("advanced");
+  });
+
+  it("shares occurrence claims between direct and scheduler-cycle execution", async () => {
+    const service = createConfiguredService("mock", {
+      id: "atlas-api",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const clock = createClock(
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:01.000Z",
+      "2026-07-27T12:00:45.000Z",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+    const occurrence = ServiceAvailabilityReconciliationOccurrence.create({
+      serviceId: service.id,
+      operation: "start",
+      scheduledFor: "2026-07-27T12:00:00.000Z",
+    });
+    const control = vi.spyOn(capabilities.controlRegisteredService, "execute");
+
+    const directResult =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      );
+    const cycleResult =
+      await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(directResult.kind).toBe("executed");
+    expect(cycleResult).toMatchObject({
+      kind: "advanced",
+      report: [
+        {
+          serviceId: service.id,
+          occurrenceResults: [
+            { kind: "completed", result: { kind: "duplicate" } },
+          ],
+        },
+      ],
+    });
+    expect(control).toHaveBeenCalledTimes(1);
   });
 
   it("injects the exact exposed listing, generation, and occurrence execution instances into the tick", async () => {

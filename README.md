@@ -256,7 +256,16 @@ tick. Empty state bootstraps one minute; existing state catches up from the
 cursor with an eight-day maximum per cycle. Incomplete reports do not advance
 progress, while complete reports use atomic compare-and-set advancement and
 return conflicts without retry. The cycle remains manually invoked and has no
-timer, loop, composition integration, HTTP endpoint, logging, or persistence.
+timer, loop, HTTP endpoint, logging, or persistence.
+
+Service-management composition exposes the cursor-aware cycle as an explicit
+internal capability. It reuses the exact shared application clock and
+reconciliation tick, plus one private cursor store per composition; callers may
+inject the existing cursor-store port, while the default is process-local and
+isolated. Repeated calls share cursor progress, and cycle-driven execution shares
+occurrence claims with direct execution. Incomplete reports do not advance the
+cursor, conflicts remain explicit without retry, and no timer, polling loop,
+automatic startup, HTTP endpoint, logging, metrics, or persistence exists.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
