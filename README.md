@@ -203,8 +203,17 @@ UTC timestamps. Calculation follows the existing evaluator minute by minute, so
 the configured policy timezone and runtime timezone database remain
 authoritative, including daylight-saving gaps and repeated local times.
 Adjacent windows do not create synthetic transitions, and each calculation is
-limited to eight days. No reconciliation occurrence is generated, and no
-scheduler loop or automatic execution exists.
+limited to eight days. The scheduling-domain calculator itself does not generate
+reconciliation occurrences or introduce scheduler or execution behavior.
+
+The service-management application can generate ordered, immutable
+reconciliation occurrences for one catalog-owned registered service over the
+same bounded `(fromExclusive, toInclusive]` interval. Actual
+`became_available` transitions map to canonical `start` occurrences and
+`became_unavailable` transitions map to `stop`, preserving each UTC transition
+timestamp exactly. Generation uses only the registered service's base policy:
+it does not inspect runtime status or temporary overrides, claim or execute
+occurrences, iterate the catalog, or run a scheduler loop.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
