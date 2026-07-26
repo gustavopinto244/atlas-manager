@@ -468,6 +468,16 @@ continues from that cursor and prunes only completed claims through its
 boundary. This exercises the existing compare-and-set and persistence
 contracts; it does not globally serialize independent scheduler processes.
 
+Completed claim-pruning failure recovery is covered with an authoritative
+cursor and claims persisted through the file-backed stores. The scenario
+completes a reconciliation effect and expired-override pruning before claim
+pruning rejects, then verifies that the error prevents cursor advancement and
+leaves both completed and current-interval claims intact. After complete
+composition and adapter reconstruction, the same interval is duplicate
+protected, pruning succeeds through the previous cursor, the current claim
+remains protected, and the cursor advances. These operations are coordinated by
+their existing contracts and do not form one atomic transaction.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
