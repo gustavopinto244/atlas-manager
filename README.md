@@ -489,6 +489,15 @@ observes the duplicate current occurrence, removes the override, prunes only
 through the previous cursor, preserves the current claim, and advances the
 cursor without repeating the service effect.
 
+Resolved incomplete reconciliation recovery is covered through the same
+file-backed reconstruction chain. A controlled service-control failure after
+claim acquisition produces a failed occurrence report, while override pruning
+and conservative claim pruning still complete and the cursor remains at its
+previous boundary. On reconstruction, the persisted claim produces the
+existing duplicate result, maintenance remains safe, and the cursor advances.
+This validates the current at-most-once claim behavior and does not promise
+automatic replay or transactional recovery of an external effect.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
