@@ -416,11 +416,14 @@ with an eight-day maximum per cycle. Every non-idle cycle runs reconciliation
 first, expired-override pruning second, and completed occurrence-claim pruning
 third. Its internal result carries the exact reconciliation report, override
 pruning report, and claim-pruning result. Idle cycles run none of these
-operations. Resolved incomplete reconciliation or override-pruning reports
-still allow completed claim pruning through the previously authoritative
-cursor. Rejected reconciliation prevents both maintenance operations; rejected
-override pruning prevents claim pruning; rejected claim pruning prevents cursor
-advancement.
+operations. A resolved incomplete override-pruning report stops maintenance
+immediately: the incomplete cycle preserves both reports, carries a null
+claim-pruning result to represent that it was not executed, and does not
+advance the cursor. A resolved incomplete reconciliation report still allows
+completed claim pruning through the previously authoritative cursor when
+override pruning completes. Rejected reconciliation prevents both maintenance
+operations; rejected override pruning prevents claim pruning; rejected claim
+pruning prevents cursor advancement.
 
 Cursor advancement requires both reports to contain no failures and completed
 claim pruning to resolve. `no_cursor`, `pruned`, and `unchanged` are all

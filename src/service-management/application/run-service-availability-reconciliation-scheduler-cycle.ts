@@ -43,7 +43,7 @@ export type ServiceAvailabilityReconciliationSchedulerCycleResult =
       cursor: ServiceAvailabilityReconciliationSchedulerCursor | null;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
       pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
-      occurrenceClaimPruningResult: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult;
+      occurrenceClaimPruningResult: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult | null;
     }>
   | Readonly<{
       kind: "advanced";
@@ -103,13 +103,21 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
     const toInclusive = new Date(toTimestamp);
     const report = await this.runTick.execute(fromExclusive, toInclusive);
     const pruningReport = await this.pruneExpiredOverrides.execute();
+
+    if (isIncompletePruningReport(pruningReport)) {
+      return Object.freeze({
+        kind: "incomplete",
+        cursor: currentCursor,
+        report,
+        pruningReport,
+        occurrenceClaimPruningResult: null,
+      });
+    }
+
     const occurrenceClaimPruningResult =
       await this.pruneCompletedOccurrenceClaims.execute();
 
-    if (
-      isIncompleteReconciliationReport(report) ||
-      isIncompletePruningReport(pruningReport)
-    ) {
+    if (isIncompleteReconciliationReport(report)) {
       return Object.freeze({
         kind: "incomplete",
         cursor: currentCursor,
