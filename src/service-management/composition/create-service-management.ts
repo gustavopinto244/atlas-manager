@@ -12,6 +12,7 @@ import type { ServiceAvailabilityOverrideStore } from "../application/ports/serv
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../application/ports/service-availability-reconciliation-scheduler-timer.js";
+import { PruneExpiredRegisteredServiceAvailabilityOverrides } from "../application/prune-expired-registered-service-availability-overrides.js";
 import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
 import { ServiceAvailabilityReconciliationSchedulerLoop } from "../application/service-availability-reconciliation-scheduler-loop.js";
@@ -46,6 +47,7 @@ export interface ServiceManagementCapabilities {
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
+  readonly pruneExpiredRegisteredServiceAvailabilityOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
@@ -108,6 +110,12 @@ export function createServiceManagement(
     pm2: pm2Controller,
   });
   const listRegisteredServices = new ListRegisteredServices(catalog);
+  const pruneExpiredRegisteredServiceAvailabilityOverrides =
+    new PruneExpiredRegisteredServiceAvailabilityOverrides(
+      listRegisteredServices,
+      overrideStore,
+      clock,
+    );
   const controlRegisteredService = new ControlRegisteredService(
     catalog,
     controller,
@@ -144,6 +152,7 @@ export function createServiceManagement(
       clock,
       schedulerCursorStore,
       runServiceAvailabilityReconciliationTick,
+      pruneExpiredRegisteredServiceAvailabilityOverrides,
     );
   const serviceAvailabilityReconciliationSchedulerLoop =
     new ServiceAvailabilityReconciliationSchedulerLoop(
@@ -173,6 +182,7 @@ export function createServiceManagement(
         overrideStore,
         clock,
       ),
+    pruneExpiredRegisteredServiceAvailabilityOverrides,
     planRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliationOccurrence,
