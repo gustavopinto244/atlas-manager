@@ -540,6 +540,25 @@ through authoritative `T1`, preserves the current claim, and advances to `T2`.
 This confirms that maintenance failure is not transactional rollback or global
 exactly-once execution.
 
+Post-advance cursor-advancement failure recovery is covered through a
+file-backed reconstruction scenario that establishes the historical claim
+through a real earlier successful interval. After a first interval creates a
+first-interval claim and advances the cursor to `T1`, the next interval creates
+a second-interval claim, completes its controlled effect, removes an expired
+override, and prunes the first-interval claim through authoritative `T1` before
+cursor advancement rejects with a controlled error. The authoritative cursor
+remains `T1`; the committed maintenance mutations are not rolled back. A
+complete reconstruction retries the same `T1` to `T2` interval; the persisted
+second-interval claim produces the existing duplicate occurrence behavior, the
+second controlled effect is not repeated, override pruning observes the absent
+override, completed claim pruning returns `unchanged`, and the cursor advances
+to `T2`. This confirms that service effects, claims, and maintenance may commit
+before cursor advancement fails; successful maintenance is not rolled back; the
+scheduler cycle is not transactional across all stages; retry relies on
+persisted duplicate protection; candidate cursor `T2` does not become
+authoritative after failed advancement; and the scheduler does not provide
+globally exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
