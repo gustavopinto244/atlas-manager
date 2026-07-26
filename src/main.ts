@@ -25,6 +25,7 @@ import {
   createServiceManagement,
   type ServiceManagementCompositionOverrides,
 } from "./service-management/composition/create-service-management.js";
+import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "./service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js";
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "./service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 
 function start(): void {
@@ -53,16 +54,37 @@ function start(): void {
       createNodeServerHealthReaderDependencies(cpuTemperatureReader),
     );
     const getServerHealth = new GetServerHealth(serverHealthReader);
-    const serviceManagementOverrides:
-      ServiceManagementCompositionOverrides | undefined =
+    const schedulerCursorStore =
       config.serviceAvailabilityReconciliationSchedulerCursorFilePath ===
       undefined
         ? undefined
+        : new FileServiceAvailabilityReconciliationSchedulerCursorStore(
+            config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
+          );
+    const occurrenceClaimStore =
+      config.serviceAvailabilityReconciliationOccurrenceClaimFilePath ===
+      undefined
+        ? undefined
+        : new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+            config.serviceAvailabilityReconciliationOccurrenceClaimFilePath,
+          );
+    const serviceManagementOverrides:
+      ServiceManagementCompositionOverrides | undefined =
+      schedulerCursorStore === undefined && occurrenceClaimStore === undefined
+        ? undefined
         : {
-            serviceAvailabilityReconciliationSchedulerCursorStore:
-              new FileServiceAvailabilityReconciliationSchedulerCursorStore(
-                config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
-              ),
+            ...(schedulerCursorStore === undefined
+              ? {}
+              : {
+                  serviceAvailabilityReconciliationSchedulerCursorStore:
+                    schedulerCursorStore,
+                }),
+            ...(occurrenceClaimStore === undefined
+              ? {}
+              : {
+                  serviceAvailabilityReconciliationOccurrenceClaimStore:
+                    occurrenceClaimStore,
+                }),
           };
     const serviceManagement = createServiceManagement(
       process.env,

@@ -213,9 +213,19 @@ claim is persisted but before control completes can therefore suppress a later
 retry. Version-one claims are permanent: there is no release, expiration,
 pruning, compaction, or rotation, so the file may grow over time. The adapter
 does not provide cross-process locking or distributed claim guarantees; two
-adapter instances writing the same file may race. It is not yet selected by
-production composition, and introduces no environment configuration, HTTP
-endpoint, logging, or metrics.
+adapter instances writing the same file may race.
+
+Occurrence-claim persistence is independently opt-in through
+`SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE`. Its value must be
+an absolute path with no surrounding whitespace. When absent, composition keeps
+its isolated process-local in-memory claim store. When present, startup injects
+one file-backed store through the existing application port, so direct and
+scheduler-driven occurrence execution share persisted claims across normal
+process reconstruction. A missing target file represents no claims. The parent
+directory must already exist and be writable; Atlas Manager does not create it.
+Invalid files and filesystem failures terminate reconciliation through existing
+failure handling rather than being repaired or falling back to memory. Claim
+paths and occurrence contents are not logged.
 
 The scheduling domain can calculate actual policy expectation changes over a
 bounded UTC interval with `(fromExclusive, toInclusive]` semantics. Results are
@@ -282,7 +292,7 @@ cursor progress across normal process restarts. Public errors expose neither
 paths nor cursor contents. The adapter provides no cross-process locking or
 distributed compare-and-set guarantee and is not yet selected by default
 composition. No environment configuration, startup migration, HTTP endpoint,
-logging, or persistent occurrence claims are introduced.
+or logging is introduced by the adapter itself.
 
 Cursor persistence is opt-in through the exact environment variable
 `SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE`. When absent,
@@ -296,15 +306,22 @@ automatically. For example:
 
 ```bash
 export SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE="/var/lib/atlas-manager/reconciliation-scheduler-cursor.json"
+export SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE="/var/lib/atlas-manager/reconciliation-occurrence-claims.json"
 npm start
 ```
 
 Persisted progress survives normal process reconstruction. Invalid cursor files
 or filesystem failures terminate scheduling through the existing safe lifecycle
 instead of falling back to memory or repairing state. Cursor paths and contents
-are not logged. Occurrence claims remain process-local, and the file adapter
-provides neither cross-process locking nor distributed scheduling; deployments
-must use one scheduler-owning process.
+are not logged. Cursor and occurrence-claim persistence are independently
+configurable, and their exact paths must differ when both are enabled.
+
+Persistent occurrence claims are permanent and may grow without compaction.
+They are written before service control, so a crash after claim persistence can
+suppress a later retry. This provides at-most-once claiming, not exactly-once
+service execution. There is no pruning, release, repair, cross-process locking,
+or distributed claim guarantee; deployments using persistence must retain one
+scheduler-owning process.
 
 An explicit cursor-aware scheduler cycle now reads one cursor and one clock
 value, floors the clock to a canonical UTC minute, and runs at most one bounded

@@ -18,6 +18,9 @@ describe("parseEnvironment", () => {
     expect(
       config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
     ).toBeUndefined();
+    expect(
+      config.serviceAvailabilityReconciliationOccurrenceClaimFilePath,
+    ).toBeUndefined();
   });
 
   it("accepts a custom host and converts a custom port to a number", () => {
@@ -144,4 +147,105 @@ describe("parseEnvironment", () => {
       expect(message).not.toContain("serviceAvailability");
     },
   );
+
+  it("preserves an exact absolute occurrence claim file path", () => {
+    const filePath =
+      "/var/lib/atlas-manager/reconciliation-occurrence-claims.json";
+
+    const config = parseEnvironment({
+      SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: filePath,
+    });
+
+    expect(
+      config.serviceAvailabilityReconciliationOccurrenceClaimFilePath,
+    ).toBe(filePath);
+    expect(
+      config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["empty", "", "must not be empty"],
+    ["whitespace only", "   ", "must not contain surrounding whitespace"],
+    [
+      "leading whitespace",
+      " /var/lib/atlas-manager/claims.json",
+      "must not contain surrounding whitespace",
+    ],
+    [
+      "trailing whitespace",
+      "/var/lib/atlas-manager/claims.json ",
+      "must not contain surrounding whitespace",
+    ],
+    ["filename", "claims.json", "must be an absolute path"],
+    ["dot-relative path", "./state/claims.json", "must be an absolute path"],
+    ["relative path", "state/claims.json", "must be an absolute path"],
+  ])(
+    "rejects a %s occurrence claim path without exposing its value",
+    (_description, filePath, expectedReason) => {
+      let validationError: unknown;
+
+      try {
+        parseEnvironment({
+          SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: filePath,
+        });
+      } catch (error) {
+        validationError = error;
+      }
+
+      const message = formatEnvironmentValidationError(validationError);
+
+      expect(message).toBe(
+        "Invalid environment configuration:\n" +
+          "- SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: " +
+          expectedReason,
+      );
+      if (filePath.length > 0) {
+        expect(message).not.toContain(filePath);
+      }
+      expect(message).not.toContain(process.cwd());
+      expect(message).not.toContain("stack");
+      expect(message).not.toContain("serviceAvailability");
+    },
+  );
+
+  it("accepts distinct cursor and occurrence claim paths unchanged", () => {
+    const cursorPath = "/var/lib/atlas-manager/cursor.json";
+    const claimPath = "/var/lib/atlas-manager/claims.json";
+
+    const config = parseEnvironment({
+      SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE: cursorPath,
+      SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: claimPath,
+    });
+
+    expect(
+      config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
+    ).toBe(cursorPath);
+    expect(
+      config.serviceAvailabilityReconciliationOccurrenceClaimFilePath,
+    ).toBe(claimPath);
+  });
+
+  it("rejects an exact cursor and occurrence claim path collision safely", () => {
+    const sharedPath = "/var/lib/atlas-manager/reconciliation-state.json";
+    let validationError: unknown;
+
+    try {
+      parseEnvironment({
+        SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE: sharedPath,
+        SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: sharedPath,
+      });
+    } catch (error) {
+      validationError = error;
+    }
+
+    const message = formatEnvironmentValidationError(validationError);
+
+    expect(message).toBe(
+      "Invalid environment configuration:\n" +
+        "- SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE: " +
+        "must differ from the scheduler cursor file path",
+    );
+    expect(message).not.toContain(sharedPath);
+  });
 });
