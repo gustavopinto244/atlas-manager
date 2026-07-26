@@ -118,6 +118,24 @@ seam. Setting uses the existing composition clock; cancellation does not. The
 temporary state is isolated between composition instances and is lost when its
 instance or process is discarded.
 
+A file-backed availability override-store adapter implements the same
+application port using a strictly validated version-one JSON file. A missing
+file represents no overrides. Persisted entries are reconstructed through the
+canonical override factory, contain at most one override per service, and must
+already be ordered by service ID. Reads, replacements, and cancellations are
+serialized within one adapter instance, and every state-changing operation
+writes the complete state through an owner-restricted temporary file in the
+target directory before atomic replacement. Reconstructing an adapter from the
+same file preserves overrides across normal process restarts.
+
+The adapter does not interpret expiration or automatically prune expired
+overrides; effective-availability application logic remains responsible for
+that behavior. Public errors expose neither paths nor override contents. It
+provides no cross-process locking, so independent adapter instances writing the
+same file may race. The adapter is not yet selected by production composition
+and introduces no environment configuration, startup integration, HTTP
+endpoint, logging, or metrics.
+
 An application query resolves a registered service through the catalog, reads
 its stored override, obtains one instant from the injected clock, and delegates
 effective availability calculation to the existing domain evaluator. It returns
