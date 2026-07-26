@@ -263,6 +263,28 @@ distributed compare-and-set guarantee and is not yet selected by default
 composition. No environment configuration, startup migration, HTTP endpoint,
 logging, or persistent occurrence claims are introduced.
 
+Cursor persistence is opt-in through the exact environment variable
+`SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE`. When absent,
+service-management composition retains its isolated process-local in-memory
+cursor. When present, the value must be an absolute path with no surrounding
+whitespace; runtime startup constructs one file-backed store and injects it
+through the existing cursor-store composition port. The target file may be
+missing and then represents empty scheduler state, but its parent directory
+must already exist and be writable because Atlas Manager creates no directories
+automatically. For example:
+
+```bash
+export SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE="/var/lib/atlas-manager/reconciliation-scheduler-cursor.json"
+npm start
+```
+
+Persisted progress survives normal process reconstruction. Invalid cursor files
+or filesystem failures terminate scheduling through the existing safe lifecycle
+instead of falling back to memory or repairing state. Cursor paths and contents
+are not logged. Occurrence claims remain process-local, and the file adapter
+provides neither cross-process locking nor distributed scheduling; deployments
+must use one scheduler-owning process.
+
 An explicit cursor-aware scheduler cycle now reads one cursor and one clock
 value, floors the clock to a canonical UTC minute, and runs at most one bounded
 tick. Empty state bootstraps one minute; existing state catches up from the
