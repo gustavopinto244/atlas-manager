@@ -9,6 +9,10 @@ import type { Clock } from "../../../src/service-management/application/ports/cl
 import type { RegisteredServiceCatalog } from "../../../src/service-management/application/ports/registered-service-catalog.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import {
+  PruneExpiredRegisteredServiceAvailabilityOverrides,
+  type PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult,
+} from "../../../src/service-management/application/prune-expired-registered-service-availability-overrides.js";
+import {
   RunServiceAvailabilityReconciliationSchedulerCycle,
   ServiceAvailabilityReconciliationSchedulerCycleError,
 } from "../../../src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.js";
@@ -86,6 +90,24 @@ function createStore(
   };
 }
 
+function createPruner(): PruneExpiredRegisteredServiceAvailabilityOverrides {
+  const catalog: RegisteredServiceCatalog = {
+    list: vi.fn(),
+    findById: vi.fn(),
+  };
+
+  return new PruneExpiredRegisteredServiceAvailabilityOverrides(
+    new ListRegisteredServices(catalog),
+    {
+      findByServiceId: vi.fn(),
+      save: vi.fn(),
+      removeByServiceId: vi.fn(),
+      removeByServiceIdIfMatches: vi.fn(),
+    },
+    { now: vi.fn() },
+  );
+}
+
 function createCycle(
   clockValue: unknown,
   currentCursor: ServiceAvailabilityReconciliationSchedulerCursor | null = null,
@@ -98,16 +120,22 @@ function createCycle(
   const tickExecute = vi
     .spyOn(tick, "execute")
     .mockResolvedValue(Object.freeze([]));
+  const pruner = createPruner();
+  const pruneExecute = vi
+    .spyOn(pruner, "execute")
+    .mockResolvedValue(Object.freeze([]));
 
   return {
     cycle: new RunServiceAvailabilityReconciliationSchedulerCycle(
       clock,
       store,
       tick,
+      pruner,
     ),
     clock,
     store,
     tickExecute,
+    pruneExecute,
   };
 }
 
@@ -146,17 +174,33 @@ function createCompletedOccurrenceReport(
   ]);
 }
 
+function createPruningReport(
+  kind: Exclude<
+    PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult["kind"],
+    "failed"
+  >,
+): readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[] {
+  return Object.freeze([
+    Object.freeze({
+      kind,
+      serviceId: "atlas-api",
+    }),
+  ]);
+}
+
 describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
   it("bootstraps an empty cursor with exactly one floored UTC minute", async () => {
     const clockDate = new Date("2026-07-26T12:30:47.123Z");
     const originalTimestamp = clockDate.getTime();
-    const { cycle, clock, store, tickExecute } = createCycle(clockDate);
+    const { cycle, clock, store, tickExecute, pruneExecute } =
+      createCycle(clockDate);
 
     const result = await cycle.execute();
 
     expect(store.read).toHaveBeenCalledTimes(1);
     expect(clock.now).toHaveBeenCalledTimes(1);
     expect(tickExecute).toHaveBeenCalledTimes(1);
+    expect(pruneExecute).toHaveBeenCalledTimes(1);
     const [fromExclusive, toInclusive] = tickExecute.mock.calls[0] ?? [];
     expect(fromExclusive?.toISOString()).toBe("2026-07-26T12:29:00.000Z");
     expect(toInclusive?.toISOString()).toBe("2026-07-26T12:30:00.000Z");
@@ -225,7 +269,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
 
   it("returns frozen idle without ticking or advancing", async () => {
     const cursor = createCursor("2026-07-26T12:30:00.000Z");
-    const { cycle, store, tickExecute } = createCycle(
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
       new Date("2026-07-26T12:30:59.999Z"),
       cursor,
     );
@@ -236,12 +280,13 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     expect(result.cursor).toBe(cursor);
     expect(Object.isFrozen(result)).toBe(true);
     expect(tickExecute).not.toHaveBeenCalled();
+    expect(pruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
   it("rejects safely when the clock target is before the cursor", async () => {
     const cursor = createCursor("2026-07-26T12:31:00.000Z");
-    const { cycle, store, tickExecute } = createCycle(
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
       new Date("2026-07-26T12:30:59.999Z"),
       cursor,
     );
@@ -253,13 +298,15 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
         "Service availability reconciliation scheduler cycle failed: clock_before_cursor",
     });
     expect(tickExecute).not.toHaveBeenCalled();
+    expect(pruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
   it.each([new Date("invalid"), "2026-07-26T12:30:00.000Z", null, 0])(
     "rejects the invalid clock output %# after reading the cursor",
     async (clockValue) => {
-      const { cycle, clock, store, tickExecute } = createCycle(clockValue);
+      const { cycle, clock, store, tickExecute, pruneExecute } =
+        createCycle(clockValue);
 
       await expect(cycle.execute()).rejects.toMatchObject({
         name: "ServiceAvailabilityReconciliationSchedulerCycleError",
@@ -268,6 +315,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       expect(store.read).toHaveBeenCalledTimes(1);
       expect(clock.now).toHaveBeenCalledTimes(1);
       expect(tickExecute).not.toHaveBeenCalled();
+      expect(pruneExecute).not.toHaveBeenCalled();
       expect(store.advance).not.toHaveBeenCalled();
     },
   );
@@ -275,17 +323,46 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
   it.each(["none", "duplicate", "executed"] as const)(
     "treats %s occurrence processing as complete",
     async (resultKind) => {
-      const { cycle, store, tickExecute } = createCycle(
+      const { cycle, store, tickExecute, pruneExecute } = createCycle(
         new Date("2026-07-26T12:30:00.000Z"),
       );
       const report = createCompletedOccurrenceReport(resultKind);
+      const pruningReport = Object.freeze([
+        Object.freeze({
+          kind: "not_removed" as const,
+          serviceId: "atlas-api",
+        }),
+      ]);
       tickExecute.mockResolvedValue(report);
+      pruneExecute.mockResolvedValue(pruningReport);
 
       const result = await cycle.execute();
 
       expect(result.kind).toBe("advanced");
       expect(result.kind === "advanced" && result.report).toBe(report);
+      expect(result.kind === "advanced" && result.pruningReport).toBe(
+        pruningReport,
+      );
       expect(store.advance).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["no_override", "active", "removed", "not_removed"] as const)(
+    "treats pruning result %s as complete",
+    async (kind) => {
+      const { cycle, store, pruneExecute } = createCycle(
+        new Date("2026-07-26T12:30:00.000Z"),
+      );
+      const pruningReport = createPruningReport(kind);
+      pruneExecute.mockResolvedValue(pruningReport);
+
+      const result = await cycle.execute();
+
+      expect(result.kind).toBe("advanced");
+      expect(result.kind === "advanced" && result.pruningReport).toBe(
+        pruningReport,
+      );
+      expect(store.advance).toHaveBeenCalledOnce();
     },
   );
 
@@ -322,24 +399,107 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     "returns incomplete without advancing for failed work",
     async ({ report }) => {
       const cursor = createCursor("2026-07-26T12:29:00.000Z");
-      const { cycle, store, tickExecute } = createCycle(
+      const { cycle, store, tickExecute, pruneExecute } = createCycle(
         new Date("2026-07-26T12:30:00.000Z"),
         cursor,
       );
       tickExecute.mockResolvedValue(report);
+      const pruningReport = Object.freeze([]);
+      pruneExecute.mockResolvedValue(pruningReport);
 
       const result = await cycle.execute();
 
-      expect(result).toEqual({ kind: "incomplete", cursor, report });
+      expect(result).toEqual({
+        kind: "incomplete",
+        cursor,
+        report,
+        pruningReport,
+      });
       expect(result.kind === "incomplete" && result.cursor).toBe(cursor);
       expect(result.kind === "incomplete" && result.report).toBe(report);
+      expect(result.kind === "incomplete" && result.pruningReport).toBe(
+        pruningReport,
+      );
       expect(Object.isFrozen(result)).toBe(true);
       expect(store.advance).not.toHaveBeenCalled();
     },
   );
 
+  it("returns incomplete without advancing when pruning reports a service failure", async () => {
+    const cursor = createCursor("2026-07-26T12:29:00.000Z");
+    const failure = new Error("pruning service failure");
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
+      new Date("2026-07-26T12:30:00.000Z"),
+      cursor,
+    );
+    const report = Object.freeze([]);
+    const pruningReport = Object.freeze([
+      Object.freeze({
+        kind: "failed" as const,
+        serviceId: "atlas-api",
+        error: failure,
+      }),
+    ]);
+    tickExecute.mockResolvedValue(report);
+    pruneExecute.mockResolvedValue(pruningReport);
+
+    const result = await cycle.execute();
+
+    expect(result).toEqual({
+      kind: "incomplete",
+      cursor,
+      report,
+      pruningReport,
+    });
+    expect(result.kind === "incomplete" && result.report).toBe(report);
+    expect(result.kind === "incomplete" && result.pruningReport).toBe(
+      pruningReport,
+    );
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(report)).toBe(true);
+    expect(Object.isFrozen(pruningReport)).toBe(true);
+    expect(Object.isFrozen(failure)).toBe(false);
+    expect(store.advance).not.toHaveBeenCalled();
+    expect(pruneExecute).toHaveBeenCalledOnce();
+  });
+
+  it("returns one incomplete result when both reports contain failures", async () => {
+    const reconciliationFailure = new Error("reconciliation failure");
+    const pruningFailure = new Error("pruning failure");
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
+      new Date("2026-07-26T12:30:00.000Z"),
+    );
+    const report = Object.freeze([
+      Object.freeze({
+        kind: "failed" as const,
+        serviceId: "atlas-api",
+        error: reconciliationFailure,
+      }),
+    ]);
+    const pruningReport = Object.freeze([
+      Object.freeze({
+        kind: "failed" as const,
+        serviceId: "atlas-api",
+        error: pruningFailure,
+      }),
+    ]);
+    tickExecute.mockResolvedValue(report);
+    pruneExecute.mockResolvedValue(pruningReport);
+
+    const result = await cycle.execute();
+
+    expect(result).toEqual({
+      kind: "incomplete",
+      cursor: null,
+      report,
+      pruningReport,
+    });
+    expect(store.advance).not.toHaveBeenCalled();
+    expect(pruneExecute).toHaveBeenCalledOnce();
+  });
+
   it("propagates tick rejection without advancing", async () => {
-    const { cycle, store, tickExecute } = createCycle(
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
       new Date("2026-07-26T12:30:00.000Z"),
     );
     const sentinel = new Error("tick sentinel");
@@ -347,16 +507,71 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
 
     await expect(cycle.execute()).rejects.toBe(sentinel);
     expect(tickExecute).toHaveBeenCalledTimes(1);
+    expect(pruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
-  it("preserves advanced cursor and report identity in a frozen result", async () => {
-    const { cycle, store, tickExecute } = createCycle(
+  it("propagates pruning rejection after one completed tick without advancing", async () => {
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
       new Date("2026-07-26T12:30:00.000Z"),
     );
-    const report = Object.freeze([]);
+    const sentinel = new Error("pruning sentinel");
+    pruneExecute.mockRejectedValue(sentinel);
+
+    await expect(cycle.execute()).rejects.toBe(sentinel);
+    expect(tickExecute).toHaveBeenCalledOnce();
+    expect(pruneExecute).toHaveBeenCalledOnce();
+    expect(store.advance).not.toHaveBeenCalled();
+  });
+
+  it("waits for the tick, then pruning, before cursor advancement", async () => {
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
+      new Date("2026-07-26T12:30:00.000Z"),
+    );
+    let resolveTick!: (
+      value: readonly ServiceAvailabilityReconciliationTickServiceResult[],
+    ) => void;
+    let resolvePruning!: (
+      value: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[],
+    ) => void;
+    const tickCompletion = new Promise<
+      readonly ServiceAvailabilityReconciliationTickServiceResult[]
+    >((resolve) => {
+      resolveTick = resolve;
+    });
+    const pruningCompletion = new Promise<
+      readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[]
+    >((resolve) => {
+      resolvePruning = resolve;
+    });
+    tickExecute.mockReturnValue(tickCompletion);
+    pruneExecute.mockReturnValue(pruningCompletion);
+
+    const execution = cycle.execute();
+
+    await vi.waitFor(() => expect(tickExecute).toHaveBeenCalledOnce());
+    expect(pruneExecute).not.toHaveBeenCalled();
+    expect(store.advance).not.toHaveBeenCalled();
+
+    resolveTick(Object.freeze([]));
+    await vi.waitFor(() => expect(pruneExecute).toHaveBeenCalledOnce());
+    expect(store.advance).not.toHaveBeenCalled();
+
+    resolvePruning(Object.freeze([]));
+    await expect(execution).resolves.toMatchObject({ kind: "advanced" });
+    expect(store.advance).toHaveBeenCalledOnce();
+  });
+
+  it("preserves advanced cursor and report identity in a frozen result", async () => {
+    const { cycle, store, tickExecute, pruneExecute } = createCycle(
+      new Date("2026-07-26T12:30:00.000Z"),
+    );
+    const report: ServiceAvailabilityReconciliationTickServiceResult[] = [];
+    const pruningReport: PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[] =
+      [];
     const advancedCursor = createCursor("2026-07-26T12:30:00.000Z");
     tickExecute.mockResolvedValue(report);
+    pruneExecute.mockResolvedValue(pruningReport);
     store.advance.mockResolvedValue(
       Object.freeze({ kind: "advanced", cursor: advancedCursor }),
     );
@@ -367,21 +582,34 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       kind: "advanced",
       cursor: advancedCursor,
       report,
+      pruningReport,
     });
     expect(result.kind === "advanced" && result.cursor).toBe(advancedCursor);
     expect(result.kind === "advanced" && result.report).toBe(report);
+    expect(result.kind === "advanced" && result.pruningReport).toBe(
+      pruningReport,
+    );
     expect(Object.isFrozen(result)).toBe(true);
-    expect(Object.keys(result)).toEqual(["kind", "cursor", "report"]);
+    expect(Object.isFrozen(report)).toBe(false);
+    expect(Object.isFrozen(pruningReport)).toBe(false);
+    expect(Object.keys(result)).toEqual([
+      "kind",
+      "cursor",
+      "report",
+      "pruningReport",
+    ]);
   });
 
   it.each([createCursor("2026-07-26T12:31:00.000Z"), null])(
     "returns conflict cursor %# without retrying",
     async (conflictCursor) => {
-      const { cycle, store, tickExecute } = createCycle(
+      const { cycle, store, tickExecute, pruneExecute } = createCycle(
         new Date("2026-07-26T12:30:00.000Z"),
       );
       const report = Object.freeze([]);
+      const pruningReport = Object.freeze([]);
       tickExecute.mockResolvedValue(report);
+      pruneExecute.mockResolvedValue(pruningReport);
       store.advance.mockResolvedValue(
         Object.freeze({ kind: "conflict", cursor: conflictCursor }),
       );
@@ -392,20 +620,25 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
         kind: "conflict",
         cursor: conflictCursor,
         report,
+        pruningReport,
       });
       expect(result.kind === "conflict" && result.cursor).toBe(conflictCursor);
       expect(result.kind === "conflict" && result.report).toBe(report);
+      expect(result.kind === "conflict" && result.pruningReport).toBe(
+        pruningReport,
+      );
       expect(Object.isFrozen(result)).toBe(true);
       expect(store.read).toHaveBeenCalledTimes(1);
       expect(store.advance).toHaveBeenCalledTimes(1);
       expect(tickExecute).toHaveBeenCalledTimes(1);
+      expect(pruneExecute).toHaveBeenCalledTimes(1);
     },
   );
 
   it.each(["read", "advance"] as const)(
     "propagates %s dependency failure unchanged",
     async (dependency) => {
-      const { cycle, store, tickExecute } = createCycle(
+      const { cycle, store, tickExecute, pruneExecute } = createCycle(
         new Date("2026-07-26T12:30:00.000Z"),
       );
       const sentinel = new Error(`${dependency} sentinel`);
@@ -419,8 +652,10 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       await expect(cycle.execute()).rejects.toBe(sentinel);
       if (dependency === "read") {
         expect(tickExecute).not.toHaveBeenCalled();
+        expect(pruneExecute).not.toHaveBeenCalled();
       } else {
         expect(tickExecute).toHaveBeenCalledTimes(1);
+        expect(pruneExecute).toHaveBeenCalledTimes(1);
       }
     },
   );
@@ -438,6 +673,9 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
           clock,
           store,
           Object.assign(createRunTick(), {
+            execute: vi.fn().mockResolvedValue(Object.freeze([])),
+          }),
+          Object.assign(createPruner(), {
             execute: vi.fn().mockResolvedValue(Object.freeze([])),
           }),
         ),

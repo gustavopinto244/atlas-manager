@@ -385,22 +385,33 @@ File-backed overrides likewise provide no cross-process locking or distributed
 coordination guarantee. Deployments using any of these process-local atomic
 adapters must retain one scheduler-owning process.
 
-An explicit cursor-aware scheduler cycle now reads one cursor and one clock
-value, floors the clock to a canonical UTC minute, and runs at most one bounded
-tick. Empty state bootstraps one minute; existing state catches up from the
-cursor with an eight-day maximum per cycle. Incomplete reports do not advance
-progress, while complete reports use atomic compare-and-set advancement and
-return conflicts without retry. The cycle remains manually invoked and has no
-timer, HTTP endpoint, logging, or persistence.
+An explicit cursor-aware scheduler cycle reads one cursor and one clock value,
+floors the clock to a canonical UTC minute, and runs at most one bounded tick.
+Empty state bootstraps one minute; existing state catches up from the cursor
+with an eight-day maximum per cycle. Every non-idle cycle runs reconciliation
+first and expired-override pruning second, then carries both exact reports in
+its internal result. Idle cycles run neither operation. Resolved incomplete
+reconciliation still allows pruning to run, while rejected reconciliation
+prevents it. A rejected pruning execution propagates and prevents cursor
+advancement.
+
+Cursor advancement requires both reports to contain no failures. A per-service
+pruning `failed` result therefore produces `incomplete`, while `not_removed` is
+a complete outcome that safely preserves changed authoritative state. Complete
+reports use atomic compare-and-set advancement and return conflicts without
+retry. Pruning that succeeded before a cursor conflict is not rolled back. The
+cycle introduces no pruning-specific timer, configuration, HTTP endpoint,
+logging, metrics, or retry.
 
 Service-management composition exposes the cursor-aware cycle as an explicit
-internal capability. It reuses the exact shared application clock and
-reconciliation tick, plus one private cursor store per composition; callers may
-inject the existing cursor-store port, while the default is process-local and
-isolated. Repeated calls share cursor progress, and cycle-driven execution shares
-occurrence claims with direct execution. Incomplete reports do not advance the
-cursor, conflicts remain explicit without retry, and no timer, polling loop,
-automatic startup, HTTP endpoint, logging, metrics, or persistence exists.
+internal capability. It constructs and exposes one expired-override pruning use
+case, then injects that exact instance into the cycle alongside the exact shared
+application clock and reconciliation tick. Pruning shares the composed catalog,
+override store, list use case, and clock; the pruning use case independently
+captures its own clock instant after the tick. Callers may inject the existing
+cursor-store port, while the default remains process-local and isolated.
+Repeated calls share cursor progress, and cycle-driven execution shares
+occurrence claims and availability overrides with direct execution.
 
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
@@ -416,7 +427,9 @@ timer port; otherwise composition uses a private Node.js one-shot timer adapter.
 Direct and loop-driven cycles share scheduler cursor state, occurrence claims,
 and availability overrides through the existing dependency graph, while
 default composition instances remain isolated. Composition does not start the
-loop or schedule a timer.
+loop or schedule a timer. Composition construction, startup outside scheduler
+execution, and shutdown do not directly prune; no separate pruning cadence,
+timer, configuration, logging, metrics, or HTTP endpoint exists.
 
 The application runtime now creates service-management composition and starts
 its scheduler loop exactly once after the HTTP server reports that it is
@@ -428,6 +441,11 @@ application shutdown and a non-zero exit code. Lifecycle logs contain only
 structured outcome and error-type metadata. No scheduler retry, automatic
 restart, HTTP scheduler endpoint, enablement flag, persistent state, distributed
 lock, or leader election exists.
+
+File-backed pruning retains the override store's existing process boundary:
+conditional removal is atomic only for operations coordinated through one
+adapter instance. Scheduler integration adds no cross-process locking or
+distributed cleanup guarantee.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler

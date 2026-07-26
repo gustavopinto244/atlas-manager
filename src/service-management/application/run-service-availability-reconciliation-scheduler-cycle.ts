@@ -1,6 +1,10 @@
 import type { Clock } from "./ports/clock.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "./ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type {
+  PruneExpiredRegisteredServiceAvailabilityOverrides,
+  PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult,
+} from "./prune-expired-registered-service-availability-overrides.js";
+import type {
   RunServiceAvailabilityReconciliationTick,
   ServiceAvailabilityReconciliationTickServiceResult,
 } from "./run-service-availability-reconciliation-tick.js";
@@ -34,16 +38,19 @@ export type ServiceAvailabilityReconciliationSchedulerCycleResult =
       kind: "incomplete";
       cursor: ServiceAvailabilityReconciliationSchedulerCursor | null;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
+      pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
     }>
   | Readonly<{
       kind: "advanced";
       cursor: ServiceAvailabilityReconciliationSchedulerCursor;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
+      pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
     }>
   | Readonly<{
       kind: "conflict";
       cursor: ServiceAvailabilityReconciliationSchedulerCursor | null;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
+      pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
     }>;
 
 export class RunServiceAvailabilityReconciliationSchedulerCycle {
@@ -51,6 +58,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
     private readonly clock: Clock,
     private readonly cursorStore: ServiceAvailabilityReconciliationSchedulerCursorStore,
     private readonly runTick: RunServiceAvailabilityReconciliationTick,
+    private readonly pruneExpiredOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides,
   ) {}
 
   public async execute(): Promise<ServiceAvailabilityReconciliationSchedulerCycleResult> {
@@ -86,12 +94,17 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
     const fromExclusive = new Date(fromTimestamp);
     const toInclusive = new Date(toTimestamp);
     const report = await this.runTick.execute(fromExclusive, toInclusive);
+    const pruningReport = await this.pruneExpiredOverrides.execute();
 
-    if (isIncompleteReport(report)) {
+    if (
+      isIncompleteReconciliationReport(report) ||
+      isIncompletePruningReport(pruningReport)
+    ) {
       return Object.freeze({
         kind: "incomplete",
         cursor: currentCursor,
         report,
+        pruningReport,
       });
     }
 
@@ -109,6 +122,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
         kind: "advanced",
         cursor: advanceResult.cursor,
         report,
+        pruningReport,
       });
     }
 
@@ -116,6 +130,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
       kind: "conflict",
       cursor: advanceResult.cursor,
       report,
+      pruningReport,
     });
   }
 }
@@ -133,7 +148,7 @@ function getCanonicalTargetTimestamp(clockTime: unknown): number {
   );
 }
 
-function isIncompleteReport(
+function isIncompleteReconciliationReport(
   report: readonly ServiceAvailabilityReconciliationTickServiceResult[],
 ): boolean {
   return report.some(
@@ -143,4 +158,10 @@ function isIncompleteReport(
         (occurrenceResult) => occurrenceResult.kind === "failed",
       ),
   );
+}
+
+function isIncompletePruningReport(
+  report: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[],
+): boolean {
+  return report.some((serviceResult) => serviceResult.kind === "failed");
 }
