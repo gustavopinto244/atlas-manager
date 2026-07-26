@@ -23,6 +23,10 @@ Before proposing architectural or product changes, consult:
 The documentation in `docs/` is the authoritative source for product scope and
 architectural decisions.
 
+For continuity between agents, review `docs/agent-handoff.md` when it exists.
+It records active uncommitted work, validation status, and safe next steps;
+the current working tree remains authoritative if it differs.
+
 ## Team roles
 
 - Gustavo is the project owner and student developer.
