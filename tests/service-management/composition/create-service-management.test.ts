@@ -4,6 +4,7 @@ import { CancelRegisteredServiceAvailabilityOverride } from "../../../src/servic
 import { ControlRegisteredService } from "../../../src/service-management/application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.js";
+import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../../../src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../../../src/service-management/application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../../../src/service-management/application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
@@ -119,7 +120,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the nine frozen application capabilities", () => {
+  it("returns exactly the ten frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -151,6 +152,11 @@ describe("createServiceManagement", () => {
     ).toBeInstanceOf(
       ExecuteRegisteredServiceAvailabilityReconciliationOccurrence,
     );
+    expect(
+      capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    ).toBeInstanceOf(
+      GenerateRegisteredServiceAvailabilityReconciliationOccurrences,
+    );
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -161,6 +167,7 @@ describe("createServiceManagement", () => {
       "planRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliationOccurrence",
+      "generateRegisteredServiceAvailabilityReconciliationOccurrences",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -178,6 +185,7 @@ describe("createServiceManagement", () => {
     expect(capabilities).not.toHaveProperty("processListExecutor");
     expect(capabilities).not.toHaveProperty("overrides");
     expect(capabilities).not.toHaveProperty("environment");
+    expect(capabilities).not.toHaveProperty("registeredServiceCatalog");
   });
 
   it("keeps application capability references stable per composition", () => {
@@ -214,6 +222,133 @@ describe("createServiceManagement", () => {
     ).not.toBe(
       otherCapabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
     );
+    expect(
+      capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    ).toBe(
+      capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    );
+    expect(
+      capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    ).not.toBe(
+      otherCapabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    );
+  });
+
+  it("generates ordered occurrences from the same catalog-owned service policy", async () => {
+    const service = createConfiguredService("mock", {
+      id: "atlas-api",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const capabilities = createServiceManagement(createEnvironment([service]));
+
+    const listedServices = await capabilities.listRegisteredServices.execute();
+    const occurrences =
+      await capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences.execute(
+        listedServices[0]?.id ?? "",
+        new Date("2026-07-27T11:00:00.000Z"),
+        new Date("2026-07-27T20:00:00.000Z"),
+      );
+
+    expect(occurrences).toEqual([
+      {
+        serviceId: "atlas-api",
+        operation: "start",
+        scheduledFor: "2026-07-27T12:00:00.000Z",
+      },
+      {
+        serviceId: "atlas-api",
+        operation: "stop",
+        scheduledFor: "2026-07-27T20:00:00.000Z",
+      },
+    ]);
+    expect(Object.isFrozen(occurrences)).toBe(true);
+    expect(occurrences.every(Object.isFrozen)).toBe(true);
+  });
+
+  it("repeats generation without status, control, claim, or clock behavior", async () => {
+    const service = createConfiguredService("pm2", {
+      id: "atlas-api",
+      externalResourceId: "atlas-api-process",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const clock = createClock();
+    const processListExecutor = createProcessListExecutor(
+      JSON.stringify([createPm2Process("atlas-api-process")]),
+    );
+    const controlExecutor = createControlExecutor();
+    const claim = vi
+      .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
+      .mockResolvedValue(Object.freeze({ kind: "claimed" }));
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      pm2ProcessListExecutor: processListExecutor,
+      pm2ControlExecutor: controlExecutor,
+      serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+    });
+    const interval = [
+      new Date("2026-07-27T11:00:00.000Z"),
+      new Date("2026-07-27T12:00:00.000Z"),
+    ] as const;
+
+    const first =
+      await capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences.execute(
+        service.id,
+        ...interval,
+      );
+    const second =
+      await capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences.execute(
+        service.id,
+        ...interval,
+      );
+
+    expect(second).toEqual(first);
+    expect(clock.now).not.toHaveBeenCalled();
+    expect(processListExecutor.execute).not.toHaveBeenCalled();
+    expect(controlExecutor.execute).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it("keeps generation based on the base policy after an override is set", async () => {
+    const service = createConfiguredService("mock", {
+      id: "atlas-api",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const clock = createClock("2026-07-27T10:00:00.000Z");
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+    });
+
+    await capabilities.setRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+      {
+        kind: "suspend_schedule",
+        expiresAt: "2026-07-27T21:00:00.000Z",
+      },
+    );
+    const occurrences =
+      await capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences.execute(
+        service.id,
+        new Date("2026-07-27T11:00:00.000Z"),
+        new Date("2026-07-27T20:00:00.000Z"),
+      );
+
+    expect(occurrences.map((occurrence) => occurrence.operation)).toEqual([
+      "start",
+      "stop",
+    ]);
+    expect(clock.now).toHaveBeenCalledTimes(1);
   });
 
   it("injects the exact exposed planning and control instances into occurrence execution", async () => {

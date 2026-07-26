@@ -215,6 +215,14 @@ timestamp exactly. Generation uses only the registered service's base policy:
 it does not inspect runtime status or temporary overrides, claim or execute
 occurrences, iterate the catalog, or run a scheduler loop.
 
+Service-management composition exposes this generator as an explicitly invoked
+per-service capability. Each composition creates one stable generator using its
+existing private registered-service catalog, so environment-owned base policies
+remain the source of truth and results stay ordered and immutable. Generation
+does not evaluate temporary overrides or runtime status, claim or execute
+occurrences, or introduce catalog-wide iteration, timers, HTTP delivery, or
+persistence.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
