@@ -519,6 +519,16 @@ one controlled effect per occurrence and final cursor/claim continuity. Claim
 pruning and cursor advancement remain separate persistence operations and do
 not provide a global exactly-once transaction.
 
+Post-advance claim-pruning failure recovery is covered by a subsequent
+file-backed reconstruction scenario. It creates a first-interval claim,
+advances to `T1`, then creates a second-interval claim and fails completed
+claim pruning through a test-local wrapper. The failure leaves `T1` and both
+claims authoritative; a reconstructed retry observes the second claim as a
+duplicate, does not repeat its effect, prunes the first claim through `T1`,
+preserves the current claim, and advances to `T2`. This confirms that effects
+and claims may commit before maintenance fails and does not claim an atomic or
+globally exactly-once transaction.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
