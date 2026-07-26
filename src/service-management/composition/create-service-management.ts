@@ -2,6 +2,7 @@ import { CancelRegisteredServiceAvailabilityOverride } from "../application/canc
 import { ControlRegisteredService } from "../application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../application/execute-registered-service-availability-reconciliation.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../application/execute-registered-service-availability-reconciliation-occurrence.js";
+import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
@@ -41,6 +42,7 @@ export interface ServiceManagementCapabilities {
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
+  readonly generateRegisteredServiceAvailabilityReconciliationOccurrences: GenerateRegisteredServiceAvailabilityReconciliationOccurrences;
 }
 
 export interface ServiceManagementCompositionOverrides {
@@ -110,6 +112,8 @@ export function createServiceManagement(
       occurrenceClaimStore,
       controlRegisteredService,
     );
+  const generateRegisteredServiceAvailabilityReconciliationOccurrences =
+    new GenerateRegisteredServiceAvailabilityReconciliationOccurrences(catalog);
 
   return Object.freeze({
     listRegisteredServices: new ListRegisteredServices(catalog),
@@ -136,6 +140,7 @@ export function createServiceManagement(
     planRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    generateRegisteredServiceAvailabilityReconciliationOccurrences,
   });
 }
 
