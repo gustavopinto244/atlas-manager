@@ -183,17 +183,18 @@ one store instance, process-local, and have no release or expiration. The store
 executes no service operation, and duplicate-execution protection is not yet
 connected to reconciliation execution. No scheduler loop exists.
 
-A claim-aware occurrence execution use case accepts one canonical occurrence,
-plans before claiming, and proceeds only when the planned operation exactly
-matches the occurrence operation. Non-applicable occurrences return `none`
-without consuming a claim; duplicates return `duplicate` without control.
-Successful claims delegate the exact occurrence service and operation through
-existing registered-service control and preserve its canonical result. Control
-failures leave claims consumed, with no retry or release, providing process-local
-at-most-once execution-attempt semantics. This does not guarantee successful
-execution, survive process restarts, or provide distributed exactly-once
-behavior. The use case is not in production composition, and no scheduler loop
-or HTTP endpoint exists.
+Service-management composition exposes claim-aware occurrence execution as an
+explicit internal capability. It reuses the exact composed planning and control
+instances and one private claim store per composition instance; callers may
+inject the existing claim-store port, while the default is process-local and in
+memory. Non-applicable occurrences return `none` without a claim, equivalent
+occurrences are suppressed within that composition, and successful claims
+delegate through existing control. Claims remain consumed after control
+failures, without retry or release. Separate compositions remain isolated, and
+the service-ID-only explicit reconciliation capability remains unchanged. The
+default store does not survive restarts, coordinate multiple processes,
+guarantee successful execution, or provide distributed exactly-once behavior.
+No scheduler, occurrence generation, HTTP endpoint, or persistence exists.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler

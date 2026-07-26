@@ -3,24 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 import { CancelRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../../../src/service-management/application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation.js";
+import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../../../src/service-management/application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../../../src/service-management/application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../../../src/service-management/application/ports/service-availability-override-store.js";
+import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/set-registered-service-availability-override.js";
 import {
   createServiceManagement,
   type ServiceManagementCompositionOverrides,
 } from "../../../src/service-management/composition/create-service-management.js";
 import type { MockServiceStatusConfiguration } from "../../../src/service-management/infrastructure/mock-service-status-reader.js";
+import {
+  ServiceAvailabilityReconciliationOccurrence,
+  type CreateServiceAvailabilityReconciliationOccurrenceInput,
+} from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import type { ServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
 
 const firstTimestamp = "2026-07-25T12:00:00.000Z";
 const secondTimestamp = "2026-07-25T12:01:00.000Z";
+const occurrenceTimestamp = "2026-07-25T12:00:00.000Z";
 
 interface ConfiguredService {
   readonly id: string;
@@ -52,6 +59,17 @@ function createEnvironment(
   return {
     REGISTERED_SERVICES_JSON: JSON.stringify(services),
   };
+}
+
+function createOccurrence(
+  input: Partial<CreateServiceAvailabilityReconciliationOccurrenceInput> = {},
+): ServiceAvailabilityReconciliationOccurrence {
+  return ServiceAvailabilityReconciliationOccurrence.create({
+    serviceId: "mock-service",
+    operation: "start",
+    scheduledFor: occurrenceTimestamp,
+    ...input,
+  });
 }
 
 function createClock(...timestamps: readonly string[]): Clock & {
@@ -101,7 +119,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the eight frozen application capabilities", () => {
+  it("returns exactly the nine frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -128,6 +146,11 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.executeRegisteredServiceAvailabilityReconciliation,
     ).toBeInstanceOf(ExecuteRegisteredServiceAvailabilityReconciliation);
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    ).toBeInstanceOf(
+      ExecuteRegisteredServiceAvailabilityReconciliationOccurrence,
+    );
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -137,6 +160,7 @@ describe("createServiceManagement", () => {
       "getRegisteredServiceEffectiveAvailability",
       "planRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliation",
+      "executeRegisteredServiceAvailabilityReconciliationOccurrence",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -147,6 +171,10 @@ describe("createServiceManagement", () => {
     expect(capabilities).not.toHaveProperty("clock");
     expect(capabilities).not.toHaveProperty("scheduler");
     expect(capabilities).not.toHaveProperty("executionStore");
+    expect(capabilities).not.toHaveProperty(
+      "serviceAvailabilityReconciliationOccurrenceClaimStore",
+    );
+    expect(capabilities).not.toHaveProperty("occurrenceClaimStore");
     expect(capabilities).not.toHaveProperty("processListExecutor");
     expect(capabilities).not.toHaveProperty("overrides");
     expect(capabilities).not.toHaveProperty("environment");
@@ -176,6 +204,267 @@ describe("createServiceManagement", () => {
     ).not.toBe(
       otherCapabilities.executeRegisteredServiceAvailabilityReconciliation,
     );
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    ).toBe(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    );
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    ).not.toBe(
+      otherCapabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    );
+  });
+
+  it("injects the exact exposed planning and control instances into occurrence execution", async () => {
+    const claim = vi
+      .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
+      .mockResolvedValue({ kind: "claimed" });
+    const claimStore = { claim };
+    const capabilities = createServiceManagement(
+      {},
+      {
+        serviceAvailabilityReconciliationOccurrenceClaimStore: claimStore,
+      },
+    );
+    const occurrence = createOccurrence();
+    const controlResult = {
+      serviceId: occurrence.serviceId,
+      operation: occurrence.operation,
+      completedAt: firstTimestamp,
+    } as const;
+    const planningExecute = vi
+      .spyOn(
+        capabilities.planRegisteredServiceAvailabilityReconciliation,
+        "execute",
+      )
+      .mockResolvedValue({
+        kind: "execute",
+        operation: occurrence.operation,
+      });
+    const controlExecute = vi
+      .spyOn(capabilities.controlRegisteredService, "execute")
+      .mockResolvedValue(controlResult);
+
+    expect(claim).not.toHaveBeenCalled();
+
+    const result =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      );
+
+    expect(planningExecute).toHaveBeenCalledExactlyOnceWith(
+      occurrence.serviceId,
+    );
+    expect(claim).toHaveBeenCalledExactlyOnceWith(occurrence);
+    expect(controlExecute).toHaveBeenCalledExactlyOnceWith(
+      occurrence.serviceId,
+      occurrence.operation,
+    );
+    expect(result).toEqual({ kind: "executed", controlResult });
+    if (result.kind === "executed") {
+      expect(result.controlResult).toBe(controlResult);
+    }
+  });
+
+  it("uses one private default claim store for repeated occurrence execution", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "always" },
+    });
+    const clock = createClock(firstTimestamp, secondTimestamp, firstTimestamp);
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+    const firstOccurrence = createOccurrence();
+    const equivalentOccurrence = createOccurrence();
+
+    expect(clock.now).not.toHaveBeenCalled();
+
+    const first =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        firstOccurrence,
+      );
+    const duplicate =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        equivalentOccurrence,
+      );
+
+    expect(first).toEqual({
+      kind: "executed",
+      controlResult: {
+        serviceId: service.id,
+        operation: "start",
+        completedAt: secondTimestamp,
+      },
+    });
+    expect(duplicate).toEqual({ kind: "duplicate" });
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(duplicate)).toBe(true);
+    expect(clock.now).toHaveBeenCalledTimes(3);
+  });
+
+  it("atomically suppresses concurrent equivalent occurrences in one composition", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "always" },
+    });
+    const occurrences = Array.from({ length: 10 }, () => createOccurrence());
+    const clock = createClock(
+      ...Array.from({ length: occurrences.length + 1 }, () => firstTimestamp),
+    );
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+
+    const results = await Promise.all(
+      occurrences.map((occurrence) =>
+        capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+          occurrence,
+        ),
+      ),
+    );
+
+    expect(results.filter(({ kind }) => kind === "executed")).toHaveLength(1);
+    expect(results.filter(({ kind }) => kind === "duplicate")).toHaveLength(
+      occurrences.length - 1,
+    );
+    expect(clock.now).toHaveBeenCalledTimes(occurrences.length + 1);
+  });
+
+  it.each([
+    [{ kind: "none" }, "start"],
+    [{ kind: "execute", operation: "stop" }, "start"],
+    [{ kind: "execute", operation: "start" }, "stop"],
+  ] as const)(
+    "does not claim or control a non-applicable composed occurrence",
+    async (decision, occurrenceOperation) => {
+      const claim = vi
+        .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
+        .mockResolvedValue({ kind: "claimed" });
+      const capabilities = createServiceManagement(
+        {},
+        {
+          serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+        },
+      );
+      vi.spyOn(
+        capabilities.planRegisteredServiceAvailabilityReconciliation,
+        "execute",
+      ).mockResolvedValue(decision);
+      const controlExecute = vi.spyOn(
+        capabilities.controlRegisteredService,
+        "execute",
+      );
+
+      const result =
+        await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+          createOccurrence({ operation: occurrenceOperation }),
+        );
+
+      expect(result).toEqual({ kind: "none" });
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(claim).not.toHaveBeenCalled();
+      expect(controlExecute).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps default occurrence claims isolated between composition instances", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "always" },
+    });
+    const environment = createEnvironment([service]);
+    const statusConfiguration = [
+      { externalResourceId: service.externalResourceId, state: "stopped" },
+    ] as const;
+    const first = createServiceManagement(environment, {
+      clock: createClock(firstTimestamp, secondTimestamp),
+      mockStatusConfiguration: statusConfiguration,
+    });
+    const second = createServiceManagement(environment, {
+      clock: createClock(firstTimestamp, secondTimestamp),
+      mockStatusConfiguration: statusConfiguration,
+    });
+    const occurrence = createOccurrence();
+
+    await expect(
+      first.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ kind: "executed" }));
+    await expect(
+      second.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ kind: "executed" }));
+  });
+
+  it("preserves an occurrence claim after composed control rejects it", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "always" },
+      supportedOperations: ["readStatus"],
+    });
+    const clock = createClock(firstTimestamp, firstTimestamp);
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+    const occurrence = createOccurrence();
+
+    await expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      ),
+    ).rejects.toEqual(
+      expect.objectContaining({ code: "service_operation_not_supported" }),
+    );
+    await expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      ),
+    ).resolves.toEqual({ kind: "duplicate" });
+    expect(clock.now).toHaveBeenCalledTimes(2);
+  });
+
+  it("propagates injected claim-store failures without fallback or control", async () => {
+    const failure = new Error("claim store unavailable");
+    const claim = vi
+      .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
+      .mockRejectedValue(failure);
+    const capabilities = createServiceManagement(
+      {},
+      {
+        serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+      },
+    );
+    const occurrence = createOccurrence();
+    vi.spyOn(
+      capabilities.planRegisteredServiceAvailabilityReconciliation,
+      "execute",
+    ).mockResolvedValue({
+      kind: "execute",
+      operation: occurrence.operation,
+    });
+    const controlExecute = vi.spyOn(
+      capabilities.controlRegisteredService,
+      "execute",
+    );
+
+    expect(claim).not.toHaveBeenCalled();
+
+    await expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      ),
+    ).rejects.toBe(failure);
+    expect(claim).toHaveBeenCalledExactlyOnceWith(occurrence);
+    expect(controlExecute).not.toHaveBeenCalled();
   });
 
   it("injects the exact exposed planning and control instances into execution", async () => {
@@ -644,6 +933,20 @@ describe("createServiceManagement", () => {
     expect(() => {
       (
         capabilities as {
+          executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
+        }
+      ).executeRegisteredServiceAvailabilityReconciliationOccurrence =
+        new ExecuteRegisteredServiceAvailabilityReconciliationOccurrence(
+          capabilities.planRegisteredServiceAvailabilityReconciliation,
+          {
+            claim: vi.fn().mockResolvedValue({ kind: "claimed" }),
+          },
+          capabilities.controlRegisteredService,
+        );
+    }).toThrow(TypeError);
+    expect(() => {
+      (
+        capabilities as {
           executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
         }
       ).executeRegisteredServiceAvailabilityReconciliation =
@@ -656,6 +959,12 @@ describe("createServiceManagement", () => {
       Reflect.deleteProperty(
         capabilities,
         "executeRegisteredServiceAvailabilityReconciliation",
+      ),
+    ).toBe(false);
+    expect(
+      Reflect.deleteProperty(
+        capabilities,
+        "executeRegisteredServiceAvailabilityReconciliationOccurrence",
       ),
     ).toBe(false);
   });

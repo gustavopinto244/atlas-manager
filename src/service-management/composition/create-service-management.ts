@@ -1,17 +1,20 @@
 import { CancelRegisteredServiceAvailabilityOverride } from "../application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../application/execute-registered-service-availability-reconciliation.js";
+import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
+import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
 import { DispatchingServiceStatusReader } from "../infrastructure/dispatching-service-status-reader.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../infrastructure/environment-registered-service-catalog.js";
 import { InMemoryServiceAvailabilityOverrideStore } from "../infrastructure/in-memory-service-availability-override-store.js";
+import { InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore } from "../infrastructure/in-memory-service-availability-reconciliation-occurrence-claim-store.js";
 import { MockServiceController } from "../infrastructure/mock-service-controller.js";
 import {
   MockServiceStatusReader,
@@ -37,11 +40,13 @@ export interface ServiceManagementCapabilities {
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
+  readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
 }
 
 export interface ServiceManagementCompositionOverrides {
   readonly clock?: Clock;
   readonly serviceAvailabilityOverrideStore?: ServiceAvailabilityOverrideStore;
+  readonly serviceAvailabilityReconciliationOccurrenceClaimStore?: ServiceAvailabilityReconciliationOccurrenceClaimStore;
   readonly mockStatusConfiguration?: readonly MockServiceStatusConfiguration[];
   readonly pm2ProcessListExecutor?: Pm2ProcessListExecutor;
   readonly pm2ControlExecutor?: Pm2ServiceControlExecutor;
@@ -56,6 +61,9 @@ export function createServiceManagement(
   const overrideStore =
     overrides?.serviceAvailabilityOverrideStore ??
     new InMemoryServiceAvailabilityOverrideStore();
+  const occurrenceClaimStore =
+    overrides?.serviceAvailabilityReconciliationOccurrenceClaimStore ??
+    new InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore();
   const mockStatusConfiguration = overrides?.mockStatusConfiguration ?? [];
   const processListExecutor =
     overrides?.pm2ProcessListExecutor ?? new NodePm2ProcessListExecutor();
@@ -96,6 +104,12 @@ export function createServiceManagement(
       planRegisteredServiceAvailabilityReconciliation,
       controlRegisteredService,
     );
+  const executeRegisteredServiceAvailabilityReconciliationOccurrence =
+    new ExecuteRegisteredServiceAvailabilityReconciliationOccurrence(
+      planRegisteredServiceAvailabilityReconciliation,
+      occurrenceClaimStore,
+      controlRegisteredService,
+    );
 
   return Object.freeze({
     listRegisteredServices: new ListRegisteredServices(catalog),
@@ -121,6 +135,7 @@ export function createServiceManagement(
       ),
     planRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliation,
+    executeRegisteredServiceAvailabilityReconciliationOccurrence,
   });
 }
 
