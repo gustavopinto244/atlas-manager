@@ -1,5 +1,18 @@
 export type ShutdownSignal = "SIGINT" | "SIGTERM";
 
+export type ApplicationShutdownReason =
+  | Readonly<{
+      kind: "signal";
+      signal: ShutdownSignal;
+    }>
+  | Readonly<{
+      kind:
+        | "http_server_error"
+        | "scheduler_incomplete"
+        | "scheduler_conflict"
+        | "scheduler_failed";
+    }>;
+
 export interface ClosableServer {
   close(callback: (error?: Error) => void): unknown;
 }
@@ -14,76 +27,46 @@ export interface SignalSource {
 }
 
 interface GracefulShutdownDependencies {
-  server: ClosableServer;
-  logger: LifecycleLogger;
-  setFailureExitCode: () => void;
+  readonly server: ClosableServer;
+  readonly stopBackgroundWork: () => Promise<void>;
+  readonly logger: LifecycleLogger;
+  readonly setFailureExitCode: () => void;
 }
 
-export type RequestShutdown = (signal: ShutdownSignal) => Promise<void>;
+export type RequestShutdown = (
+  reason: ApplicationShutdownReason,
+) => Promise<void>;
 
 export function createGracefulShutdown({
   server,
+  stopBackgroundWork,
   logger,
   setFailureExitCode,
 }: GracefulShutdownDependencies): RequestShutdown {
   let shutdownPromise: Promise<void> | undefined;
 
-  return (signal) => {
+  return (reason) => {
     if (shutdownPromise !== undefined) {
       return shutdownPromise;
     }
 
-    let resolveShutdown: () => void;
-    shutdownPromise = new Promise((resolve) => {
-      resolveShutdown = resolve;
-    });
+    const reasonContext = createReasonContext(reason);
 
     logger.info(
       {
         event: "application_shutdown_started",
-        signal,
+        ...reasonContext,
       },
       "Application shutdown started",
     );
 
-    let isComplete = false;
-
-    const completeShutdown = (error?: unknown): void => {
-      if (isComplete) {
-        return;
-      }
-
-      isComplete = true;
-
-      if (error !== undefined) {
-        logger.error(
-          {
-            event: "application_shutdown_failed",
-            signal,
-            errorType: error instanceof Error ? error.name : "UnknownError",
-          },
-          "Application shutdown failed",
-        );
-        setFailureExitCode();
-        resolveShutdown();
-        return;
-      }
-
-      logger.info(
-        {
-          event: "application_shutdown_completed",
-          signal,
-        },
-        "Application shutdown completed",
-      );
-      resolveShutdown();
-    };
-
-    try {
-      server.close(completeShutdown);
-    } catch (error) {
-      completeShutdown(error);
-    }
+    shutdownPromise = coordinateShutdown(
+      server,
+      stopBackgroundWork,
+      logger,
+      setFailureExitCode,
+      reasonContext,
+    );
 
     return shutdownPromise;
   };
@@ -95,7 +78,96 @@ export function registerShutdownSignals(
 ): void {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     signalSource.on(signal, () => {
-      void requestShutdown(signal);
+      void requestShutdown(Object.freeze({ kind: "signal", signal }));
     });
   }
+}
+
+async function coordinateShutdown(
+  server: ClosableServer,
+  stopBackgroundWork: () => Promise<void>,
+  logger: LifecycleLogger,
+  setFailureExitCode: () => void,
+  reasonContext: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  const backgroundStop = stopBackgroundWorkSafely(stopBackgroundWork);
+  const serverClose = closeServer(server);
+  const [backgroundResult, serverResult] = await Promise.all([
+    backgroundStop,
+    serverClose,
+  ]);
+  const backgroundStopFailed = backgroundResult.failed;
+  const serverCloseFailed = serverResult.failed;
+
+  if (backgroundStopFailed || serverCloseFailed) {
+    logger.error(
+      {
+        event: "application_shutdown_failed",
+        ...reasonContext,
+        serverCloseFailed,
+        backgroundStopFailed,
+        ...(serverResult.failed
+          ? { serverErrorType: getErrorType(serverResult.error) }
+          : {}),
+        ...(backgroundResult.failed
+          ? { backgroundErrorType: getErrorType(backgroundResult.error) }
+          : {}),
+      },
+      "Application shutdown failed",
+    );
+    setFailureExitCode();
+    return;
+  }
+
+  logger.info(
+    {
+      event: "application_shutdown_completed",
+      ...reasonContext,
+    },
+    "Application shutdown completed",
+  );
+}
+
+type ShutdownOperationResult =
+  Readonly<{ failed: false }> | Readonly<{ failed: true; error: unknown }>;
+
+function stopBackgroundWorkSafely(
+  stopBackgroundWork: () => Promise<void>,
+): Promise<ShutdownOperationResult> {
+  try {
+    return stopBackgroundWork().then(
+      () => ({ failed: false }),
+      (error: unknown) => ({ failed: true, error }),
+    );
+  } catch (error: unknown) {
+    return Promise.resolve({ failed: true, error });
+  }
+}
+
+function closeServer(server: ClosableServer): Promise<ShutdownOperationResult> {
+  return new Promise((resolve) => {
+    try {
+      server.close((error) => {
+        if (error === undefined) {
+          resolve({ failed: false });
+        } else {
+          resolve({ failed: true, error });
+        }
+      });
+    } catch (error: unknown) {
+      resolve({ failed: true, error });
+    }
+  });
+}
+
+function createReasonContext(
+  reason: ApplicationShutdownReason,
+): Readonly<Record<string, unknown>> {
+  return reason.kind === "signal"
+    ? { reasonKind: reason.kind, signal: reason.signal }
+    : { reasonKind: reason.kind };
+}
+
+function getErrorType(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
 }

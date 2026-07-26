@@ -7,7 +7,9 @@ import { createApp } from "./http/create-app.js";
 import {
   createGracefulShutdown,
   registerShutdownSignals,
+  type RequestShutdown,
 } from "./lifecycle/graceful-shutdown.js";
+import { ServiceAvailabilityReconciliationSchedulerRuntime } from "./lifecycle/service-availability-reconciliation-scheduler-runtime.js";
 import {
   createLogger,
   logHttpServerStarted,
@@ -19,6 +21,7 @@ import {
   createNodeServerHealthReaderDependencies,
   NodeServerHealthReader,
 } from "./server-health/infrastructure/node-server-health-reader.js";
+import { createServiceManagement } from "./service-management/composition/create-service-management.js";
 
 function start(): void {
   let config: EnvironmentConfig;
@@ -46,28 +49,52 @@ function start(): void {
       createNodeServerHealthReaderDependencies(cpuTemperatureReader),
     );
     const getServerHealth = new GetServerHealth(serverHealthReader);
+    const serviceManagement = createServiceManagement(process.env);
     const app = createApp({ logger, getServerHealth });
     const server = app.listen(config.port, config.host);
-    const requestShutdown = createGracefulShutdown({
+    const setFailureExitCode = (): void => {
+      process.exitCode = 1;
+    };
+    const coordinatedShutdown = createGracefulShutdown({
       server,
+      stopBackgroundWork: () =>
+        serviceManagement.serviceAvailabilityReconciliationSchedulerLoop
+          .stop()
+          .then(() => undefined),
       logger,
-      setFailureExitCode: () => {
-        process.exitCode = 1;
-      },
+      setFailureExitCode,
     });
+    let shutdownRequested = false;
+    const requestShutdown: RequestShutdown = (reason) => {
+      shutdownRequested = true;
+      return coordinatedShutdown(reason);
+    };
+    const schedulerRuntime =
+      new ServiceAvailabilityReconciliationSchedulerRuntime(
+        serviceManagement.serviceAvailabilityReconciliationSchedulerLoop,
+        requestShutdown,
+        logger,
+        setFailureExitCode,
+      );
 
     registerShutdownSignals(process, requestShutdown);
 
     server.once("listening", () => {
+      if (shutdownRequested) {
+        return;
+      }
+
       logHttpServerStarted(logger, {
         host: config.host,
         port: config.port,
       });
+      void schedulerRuntime.start();
     });
 
     server.once("error", (error) => {
       logUnexpectedStartupFailure(logger, error);
-      process.exitCode = 1;
+      setFailureExitCode();
+      void requestShutdown(Object.freeze({ kind: "http_server_error" }));
     });
   } catch (error) {
     logUnexpectedStartupFailure(logger, error);
