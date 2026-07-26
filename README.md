@@ -250,6 +250,14 @@ separate stores remain isolated. No tick coordination, current-time clock,
 automatic loop, composition integration, HTTP endpoint, retry, or persistence
 is connected to this cursor boundary yet.
 
+An explicit cursor-aware scheduler cycle now reads one cursor and one clock
+value, floors the clock to a canonical UTC minute, and runs at most one bounded
+tick. Empty state bootstraps one minute; existing state catches up from the
+cursor with an eight-day maximum per cycle. Incomplete reports do not advance
+progress, while complete reports use atomic compare-and-set advancement and
+return conflicts without retry. The cycle remains manually invoked and has no
+timer, loop, composition integration, HTTP endpoint, logging, or persistence.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
