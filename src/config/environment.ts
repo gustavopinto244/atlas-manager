@@ -61,6 +61,7 @@ const environmentSchema = z
       persistenceFilePathSchema.optional(),
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
       persistenceFilePathSchema.optional(),
+    SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
   })
   .superRefine((environment, context) => {
     if (
@@ -78,6 +79,36 @@ const environmentSchema = z
         message: "must differ from the scheduler cursor file path",
       });
     }
+
+    if (
+      environment.SERVICE_AVAILABILITY_OVERRIDE_FILE !== undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_OVERRIDE_FILE ===
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["SERVICE_AVAILABILITY_OVERRIDE_FILE"],
+        message: "must differ from the scheduler cursor file path",
+      });
+    }
+
+    if (
+      environment.SERVICE_AVAILABILITY_OVERRIDE_FILE !== undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_OVERRIDE_FILE ===
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["SERVICE_AVAILABILITY_OVERRIDE_FILE"],
+        message: "must differ from the occurrence claim file path",
+      });
+    }
   });
 
 function isValidPersistenceFilePath(value: string): boolean {
@@ -90,6 +121,7 @@ export interface EnvironmentConfig {
   readonly logLevel: LogLevel;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
+  readonly serviceAvailabilityOverrideFilePath?: string;
 }
 
 export function parseEnvironment(
@@ -114,6 +146,12 @@ export function parseEnvironment(
       : {
           serviceAvailabilityReconciliationOccurrenceClaimFilePath:
             parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
+        }),
+    ...(parsedEnvironment.SERVICE_AVAILABILITY_OVERRIDE_FILE === undefined
+      ? {}
+      : {
+          serviceAvailabilityOverrideFilePath:
+            parsedEnvironment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
         }),
   };
 }

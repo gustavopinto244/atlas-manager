@@ -132,9 +132,20 @@ The adapter does not interpret expiration or automatically prune expired
 overrides; effective-availability application logic remains responsible for
 that behavior. Public errors expose neither paths nor override contents. It
 provides no cross-process locking, so independent adapter instances writing the
-same file may race. The adapter is not yet selected by production composition
-and introduces no environment configuration, startup integration, HTTP
-endpoint, logging, or metrics.
+same file may race.
+
+Override persistence is independently opt-in through
+`SERVICE_AVAILABILITY_OVERRIDE_FILE`. Its value must be an absolute path with no
+surrounding whitespace. When absent, composition keeps its isolated
+process-local in-memory store. When present, startup injects one file-backed
+store through the existing override-store port, so override commands, effective
+availability, reconciliation planning, and scheduler execution share persisted
+state across normal process reconstruction. A missing target file represents no
+overrides. The parent directory must already exist and be writable; Atlas
+Manager does not create it. Invalid files and filesystem failures are not
+repaired and do not fall back to memory. Expiration remains owned by existing
+application behavior, so expired entries are not pruned automatically. Paths
+and override contents are not logged.
 
 An application query resolves a registered service through the catalog, reads
 its stored override, obtains one instant from the injected clock, and delegates
@@ -325,14 +336,16 @@ automatically. For example:
 ```bash
 export SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE="/var/lib/atlas-manager/reconciliation-scheduler-cursor.json"
 export SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE="/var/lib/atlas-manager/reconciliation-occurrence-claims.json"
+export SERVICE_AVAILABILITY_OVERRIDE_FILE="/var/lib/atlas-manager/service-availability-overrides.json"
 npm start
 ```
 
 Persisted progress survives normal process reconstruction. Invalid cursor files
 or filesystem failures terminate scheduling through the existing safe lifecycle
 instead of falling back to memory or repairing state. Cursor paths and contents
-are not logged. Cursor and occurrence-claim persistence are independently
-configurable, and their exact paths must differ when both are enabled.
+are not logged. Cursor, occurrence-claim, and availability-override persistence
+are independently configurable. Every configured path must differ because the
+three files use incompatible versioned schemas.
 
 Persistent occurrence claims are permanent and may grow without compaction.
 They are written before service control, so a crash after claim persistence can
@@ -340,6 +353,10 @@ suppress a later retry. This provides at-most-once claiming, not exactly-once
 service execution. There is no pruning, release, repair, cross-process locking,
 or distributed claim guarantee; deployments using persistence must retain one
 scheduler-owning process.
+
+File-backed overrides likewise provide no cross-process locking or distributed
+coordination guarantee. Deployments using any of these process-local atomic
+adapters must retain one scheduler-owning process.
 
 An explicit cursor-aware scheduler cycle now reads one cursor and one clock
 value, floors the clock to a canonical UTC minute, and runs at most one bounded

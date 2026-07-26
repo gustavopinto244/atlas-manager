@@ -25,6 +25,7 @@ import {
   createServiceManagement,
   type ServiceManagementCompositionOverrides,
 } from "./service-management/composition/create-service-management.js";
+import { FileServiceAvailabilityOverrideStore } from "./service-management/infrastructure/file-service-availability-override-store.js";
 import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "./service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js";
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "./service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 
@@ -68,9 +69,17 @@ function start(): void {
         : new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
             config.serviceAvailabilityReconciliationOccurrenceClaimFilePath,
           );
+    const availabilityOverrideStore =
+      config.serviceAvailabilityOverrideFilePath === undefined
+        ? undefined
+        : new FileServiceAvailabilityOverrideStore(
+            config.serviceAvailabilityOverrideFilePath,
+          );
     const serviceManagementOverrides:
       ServiceManagementCompositionOverrides | undefined =
-      schedulerCursorStore === undefined && occurrenceClaimStore === undefined
+      schedulerCursorStore === undefined &&
+      occurrenceClaimStore === undefined &&
+      availabilityOverrideStore === undefined
         ? undefined
         : {
             ...(schedulerCursorStore === undefined
@@ -84,6 +93,11 @@ function start(): void {
               : {
                   serviceAvailabilityReconciliationOccurrenceClaimStore:
                     occurrenceClaimStore,
+                }),
+            ...(availabilityOverrideStore === undefined
+              ? {}
+              : {
+                  serviceAvailabilityOverrideStore: availabilityOverrideStore,
                 }),
           };
     const serviceManagement = createServiceManagement(
