@@ -13,8 +13,10 @@ import type { Clock } from "../../../src/service-management/application/ports/cl
 import type { ServiceAvailabilityOverrideStore } from "../../../src/service-management/application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
+import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-timer.js";
 import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../../../src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
+import { ServiceAvailabilityReconciliationSchedulerLoop } from "../../../src/service-management/application/service-availability-reconciliation-scheduler-loop.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/set-registered-service-availability-override.js";
 import {
   createServiceManagement,
@@ -109,6 +111,25 @@ function createControlExecutor(): Pm2ServiceControlExecutor & {
   };
 }
 
+function createSchedulerTimer(): ServiceAvailabilityReconciliationSchedulerTimer & {
+  readonly schedule: ReturnType<
+    typeof vi.fn<ServiceAvailabilityReconciliationSchedulerTimer["schedule"]>
+  >;
+  readonly cancel: ReturnType<typeof vi.fn>;
+  readonly callbacks: (() => void)[];
+} {
+  const callbacks: (() => void)[] = [];
+  const cancel = vi.fn();
+  const schedule = vi.fn<
+    ServiceAvailabilityReconciliationSchedulerTimer["schedule"]
+  >((_delayMilliseconds, callback) => {
+    callbacks.push(callback);
+    return Object.freeze({ cancel });
+  });
+
+  return { schedule, cancel, callbacks };
+}
+
 function createPm2Process(
   name = "pm2-target",
   processId = 42,
@@ -124,7 +145,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the twelve frozen application capabilities", () => {
+  it("returns exactly the thirteen frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -167,6 +188,9 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.runServiceAvailabilityReconciliationSchedulerCycle,
     ).toBeInstanceOf(RunServiceAvailabilityReconciliationSchedulerCycle);
+    expect(
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop,
+    ).toBeInstanceOf(ServiceAvailabilityReconciliationSchedulerLoop);
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -180,6 +204,7 @@ describe("createServiceManagement", () => {
       "generateRegisteredServiceAvailabilityReconciliationOccurrences",
       "runServiceAvailabilityReconciliationTick",
       "runServiceAvailabilityReconciliationSchedulerCycle",
+      "serviceAvailabilityReconciliationSchedulerLoop",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -204,6 +229,10 @@ describe("createServiceManagement", () => {
       "serviceAvailabilityReconciliationSchedulerCursorStore",
     );
     expect(capabilities).not.toHaveProperty("schedulerCursorStore");
+    expect(capabilities).not.toHaveProperty(
+      "serviceAvailabilityReconciliationSchedulerTimer",
+    );
+    expect(capabilities).not.toHaveProperty("schedulerTimer");
   });
 
   it("keeps application capability references stable per composition", () => {
@@ -264,6 +293,141 @@ describe("createServiceManagement", () => {
     ).not.toBe(
       otherCapabilities.runServiceAvailabilityReconciliationSchedulerCycle,
     );
+    expect(capabilities.serviceAvailabilityReconciliationSchedulerLoop).toBe(
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop,
+    );
+    expect(
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop,
+    ).not.toBe(
+      otherCapabilities.serviceAvailabilityReconciliationSchedulerLoop,
+    );
+  });
+
+  it("reuses the exact scheduler cycle and timer override without construction work", async () => {
+    const timer = createSchedulerTimer();
+    const clock = createClock("2026-07-26T12:30:00.000Z");
+    const capabilities = createServiceManagement(
+      {},
+      {
+        clock,
+        serviceAvailabilityReconciliationSchedulerTimer: timer,
+      },
+    );
+    const cycleResult = Object.freeze({
+      kind: "advanced" as const,
+      cursor: Object.freeze({
+        completedThrough: "2026-07-26T12:30:00.000Z",
+      }),
+      report: Object.freeze([]),
+    });
+    const cycle = vi
+      .spyOn(
+        capabilities.runServiceAvailabilityReconciliationSchedulerCycle,
+        "execute",
+      )
+      .mockResolvedValue(cycleResult);
+
+    expect(timer.schedule).not.toHaveBeenCalled();
+    expect(timer.cancel).not.toHaveBeenCalled();
+    expect(cycle).not.toHaveBeenCalled();
+    expect(clock.now).not.toHaveBeenCalled();
+
+    const firstCompletion =
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop.start();
+    const secondCompletion =
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop.start();
+
+    expect(secondCompletion).toBe(firstCompletion);
+    expect(cycle).toHaveBeenCalledTimes(1);
+    expect(timer.schedule).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(timer.schedule).toHaveBeenCalledExactlyOnceWith(
+        60_000,
+        expect.any(Function),
+      );
+    });
+
+    const stopCompletion =
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop.stop();
+
+    expect(stopCompletion).toBe(firstCompletion);
+    await expect(stopCompletion).resolves.toEqual({ kind: "stopped" });
+    expect(timer.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps shared timer overrides from merging loop lifecycle state", async () => {
+    const timer = createSchedulerTimer();
+    const first = createServiceManagement(
+      {},
+      {
+        clock: createClock("2026-07-26T12:30:00.000Z"),
+        serviceAvailabilityReconciliationSchedulerTimer: timer,
+      },
+    );
+    const second = createServiceManagement(
+      {},
+      {
+        clock: createClock("2026-07-26T12:30:00.000Z"),
+        serviceAvailabilityReconciliationSchedulerTimer: timer,
+      },
+    );
+    const firstCycle = vi
+      .spyOn(
+        first.runServiceAvailabilityReconciliationSchedulerCycle,
+        "execute",
+      )
+      .mockResolvedValue(
+        Object.freeze({
+          kind: "conflict",
+          cursor: null,
+          report: Object.freeze([]),
+        }),
+      );
+    const secondCycle = vi.spyOn(
+      second.runServiceAvailabilityReconciliationSchedulerCycle,
+      "execute",
+    );
+
+    const completion =
+      first.serviceAvailabilityReconciliationSchedulerLoop.start();
+
+    await expect(completion).resolves.toMatchObject({ kind: "conflict" });
+    expect(firstCycle).toHaveBeenCalledOnce();
+    expect(secondCycle).not.toHaveBeenCalled();
+    expect(timer.schedule).not.toHaveBeenCalled();
+
+    const secondCompletion =
+      second.serviceAvailabilityReconciliationSchedulerLoop.stop();
+    await expect(secondCompletion).resolves.toEqual({ kind: "stopped" });
+    expect(first.serviceAvailabilityReconciliationSchedulerLoop).not.toBe(
+      second.serviceAvailabilityReconciliationSchedulerLoop,
+    );
+  });
+
+  it("keeps direct cycle and tick calls independent from the scheduler loop", async () => {
+    const timer = createSchedulerTimer();
+    const capabilities = createServiceManagement(
+      {},
+      {
+        clock: createClock("2026-07-26T12:30:00.000Z"),
+        serviceAvailabilityReconciliationSchedulerTimer: timer,
+      },
+    );
+
+    await capabilities.runServiceAvailabilityReconciliationTick.execute(
+      new Date("2026-07-26T12:29:00.000Z"),
+      new Date("2026-07-26T12:30:00.000Z"),
+    );
+    await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
+
+    expect(timer.schedule).not.toHaveBeenCalled();
+    expect(timer.cancel).not.toHaveBeenCalled();
+
+    const completion =
+      capabilities.serviceAvailabilityReconciliationSchedulerLoop.stop();
+    await expect(completion).resolves.toEqual({ kind: "stopped" });
+    expect(timer.schedule).not.toHaveBeenCalled();
   });
 
   it("reuses the exact shared clock and tick in the scheduler cycle", async () => {
