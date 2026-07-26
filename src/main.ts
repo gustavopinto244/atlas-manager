@@ -21,7 +21,11 @@ import {
   createNodeServerHealthReaderDependencies,
   NodeServerHealthReader,
 } from "./server-health/infrastructure/node-server-health-reader.js";
-import { createServiceManagement } from "./service-management/composition/create-service-management.js";
+import {
+  createServiceManagement,
+  type ServiceManagementCompositionOverrides,
+} from "./service-management/composition/create-service-management.js";
+import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "./service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 
 function start(): void {
   let config: EnvironmentConfig;
@@ -49,7 +53,21 @@ function start(): void {
       createNodeServerHealthReaderDependencies(cpuTemperatureReader),
     );
     const getServerHealth = new GetServerHealth(serverHealthReader);
-    const serviceManagement = createServiceManagement(process.env);
+    const serviceManagementOverrides:
+      ServiceManagementCompositionOverrides | undefined =
+      config.serviceAvailabilityReconciliationSchedulerCursorFilePath ===
+      undefined
+        ? undefined
+        : {
+            serviceAvailabilityReconciliationSchedulerCursorStore:
+              new FileServiceAvailabilityReconciliationSchedulerCursorStore(
+                config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
+              ),
+          };
+    const serviceManagement = createServiceManagement(
+      process.env,
+      serviceManagementOverrides,
+    );
     const app = createApp({ logger, getServerHealth });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

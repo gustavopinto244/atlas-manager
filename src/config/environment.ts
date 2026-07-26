@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 import { z } from "zod";
 
 export const LOG_LEVELS = [
@@ -11,6 +13,33 @@ export const LOG_LEVELS = [
 ] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
+
+const schedulerCursorFilePathSchema = z
+  .string()
+  .superRefine((value, context) => {
+    if (value.length === 0) {
+      context.addIssue({
+        code: "custom",
+        message: "must not be empty",
+      });
+      return;
+    }
+
+    if (value.trim() !== value) {
+      context.addIssue({
+        code: "custom",
+        message: "must not contain surrounding whitespace",
+      });
+      return;
+    }
+
+    if (!isAbsolute(value)) {
+      context.addIssue({
+        code: "custom",
+        message: "must be an absolute path",
+      });
+    }
+  });
 
 const environmentSchema = z.object({
   HOST: z
@@ -29,12 +58,15 @@ const environmentSchema = z.object({
       error: `must be one of: ${LOG_LEVELS.join(", ")}`,
     })
     .default("info"),
+  SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
+    schedulerCursorFilePathSchema.optional(),
 });
 
 export interface EnvironmentConfig {
-  host: string;
-  port: number;
-  logLevel: LogLevel;
+  readonly host: string;
+  readonly port: number;
+  readonly logLevel: LogLevel;
+  readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
 }
 
 export function parseEnvironment(
@@ -46,6 +78,13 @@ export function parseEnvironment(
     host: parsedEnvironment.HOST,
     port: parsedEnvironment.PORT,
     logLevel: parsedEnvironment.LOG_LEVEL,
+    ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE ===
+    undefined
+      ? {}
+      : {
+          serviceAvailabilityReconciliationSchedulerCursorFilePath:
+            parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
+        }),
   };
 }
 
