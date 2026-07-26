@@ -481,6 +481,14 @@ protected, pruning succeeds through the previous cursor, the current claim
 remains protected, and the cursor advances. These operations are coordinated by
 their existing contracts and do not form one atomic transaction.
 
+Expired override-pruning failure recovery is also covered through reconstructed
+file-backed stores and compositions. A resolved failed override-pruning entry
+returns an incomplete cycle with claim pruning represented as null, preserving
+the expired override, historical claim, current claim, and cursor. A retry then
+observes the duplicate current occurrence, removes the override, prunes only
+through the previous cursor, preserves the current claim, and advances the
+cursor without repeating the service effect.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
