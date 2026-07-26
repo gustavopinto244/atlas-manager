@@ -166,6 +166,15 @@ retries. Repeated explicit calls are not deduplicated. Execution must not be
 scheduled automatically until duplicate-execution protection exists; no
 scheduler or HTTP endpoint exists yet.
 
+A canonical immutable reconciliation occurrence identifies scheduled intent by
+the exact tuple of registered-service ID, `start` or `stop`, and canonical UTC
+`scheduledFor` instant. Equality compares all three fields exactly, so scheduled
+time remains distinct from processing or control-completion time. The model
+does not generate transitions, execute operations, or provide occurrence
+storage, claims, locks, or leases. Duplicate-execution prevention is therefore
+not complete, no scheduler loop exists, and reconciliation execution remains
+explicitly invoked.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
