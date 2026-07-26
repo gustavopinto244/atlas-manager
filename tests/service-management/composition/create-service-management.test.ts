@@ -920,7 +920,10 @@ describe("createServiceManagement", () => {
       clock,
       pm2ProcessListExecutor: processListExecutor,
       pm2ControlExecutor: controlExecutor,
-      serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+      serviceAvailabilityReconciliationOccurrenceClaimStore: {
+        claim,
+        pruneCompletedThrough: vi.fn(),
+      },
     });
     const interval = [
       new Date("2026-07-27T11:00:00.000Z"),
@@ -984,7 +987,7 @@ describe("createServiceManagement", () => {
     const claim = vi
       .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
       .mockResolvedValue({ kind: "claimed" });
-    const claimStore = { claim };
+    const claimStore = { claim, pruneCompletedThrough: vi.fn() };
     const capabilities = createServiceManagement(
       {},
       {
@@ -1113,7 +1116,10 @@ describe("createServiceManagement", () => {
       const capabilities = createServiceManagement(
         {},
         {
-          serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+          serviceAvailabilityReconciliationOccurrenceClaimStore: {
+            claim,
+            pruneCompletedThrough: vi.fn(),
+          },
         },
       );
       vi.spyOn(
@@ -1204,7 +1210,10 @@ describe("createServiceManagement", () => {
     const capabilities = createServiceManagement(
       {},
       {
-        serviceAvailabilityReconciliationOccurrenceClaimStore: { claim },
+        serviceAvailabilityReconciliationOccurrenceClaimStore: {
+          claim,
+          pruneCompletedThrough: vi.fn(),
+        },
       },
     );
     const occurrence = createOccurrence();
@@ -1719,6 +1728,7 @@ describe("createServiceManagement", () => {
           capabilities.planRegisteredServiceAvailabilityReconciliation,
           {
             claim: vi.fn().mockResolvedValue({ kind: "claimed" }),
+            pruneCompletedThrough: vi.fn(),
           },
           capabilities.controlRegisteredService,
         );

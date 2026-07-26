@@ -3,6 +3,7 @@ import { open as openFile, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type {
+  ServiceAvailabilityReconciliationOccurrenceClaimPruningResult,
   ServiceAvailabilityReconciliationOccurrenceClaimResult,
   ServiceAvailabilityReconciliationOccurrenceClaimStore,
 } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
@@ -10,6 +11,7 @@ import {
   isSameServiceAvailabilityReconciliationOccurrence,
   ServiceAvailabilityReconciliationOccurrence,
 } from "../domain/service-availability-reconciliation-occurrence.js";
+import type { ServiceAvailabilityReconciliationSchedulerCursor } from "../domain/service-availability-reconciliation-scheduler-cursor.js";
 
 const CLAIM_FILE_VERSION = 1;
 const TEMPORARY_FILE_MODE = 0o600;
@@ -21,6 +23,14 @@ const CLAIMED_RESULT = Object.freeze({
 const DUPLICATE_RESULT = Object.freeze({
   kind: "duplicate",
 } as const satisfies ServiceAvailabilityReconciliationOccurrenceClaimResult);
+
+const PRUNED_RESULT = Object.freeze({
+  kind: "pruned",
+} as const satisfies ServiceAvailabilityReconciliationOccurrenceClaimPruningResult);
+
+const UNCHANGED_RESULT = Object.freeze({
+  kind: "unchanged",
+} as const satisfies ServiceAvailabilityReconciliationOccurrenceClaimPruningResult);
 
 export type FileServiceAvailabilityReconciliationOccurrenceClaimStoreErrorCode =
   "invalid_claim_file" | "claim_read_failed" | "claim_write_failed";
@@ -110,6 +120,24 @@ export class FileServiceAvailabilityReconciliationOccurrenceClaimStore implement
       );
       await this.#persistClaims(candidateClaims);
       return CLAIMED_RESULT;
+    });
+  }
+
+  public pruneCompletedThrough(
+    cursor: ServiceAvailabilityReconciliationSchedulerCursor,
+  ): Promise<ServiceAvailabilityReconciliationOccurrenceClaimPruningResult> {
+    return this.#enqueue(async () => {
+      const currentClaims = await this.#readPersistedClaims();
+      const retainedClaims = currentClaims.filter(
+        ({ scheduledFor }) => scheduledFor > cursor.completedThrough,
+      );
+
+      if (retainedClaims.length === currentClaims.length) {
+        return UNCHANGED_RESULT;
+      }
+
+      await this.#persistClaims(retainedClaims);
+      return PRUNED_RESULT;
     });
   }
 

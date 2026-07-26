@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
+import { ServiceAvailabilityReconciliationSchedulerCursor } from "../../../src/service-management/domain/service-availability-reconciliation-scheduler-cursor.js";
 import {
   FileServiceAvailabilityReconciliationOccurrenceClaimStore,
   FileServiceAvailabilityReconciliationOccurrenceClaimStoreError,
@@ -32,7 +33,7 @@ afterEach(async () => {
 });
 
 describe("FileServiceAvailabilityReconciliationOccurrenceClaimStore", () => {
-  it("is frozen, exposes only claim, and performs no construction work", () => {
+  it("is frozen, exposes only claim and pruning, and performs no construction work", () => {
     const dependencies = createControlledDependencies();
 
     const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
@@ -44,7 +45,7 @@ describe("FileServiceAvailabilityReconciliationOccurrenceClaimStore", () => {
     expect(Object.keys(store)).toEqual([]);
     expect(
       Object.getOwnPropertyNames(Object.getPrototypeOf(store) as object).sort(),
-    ).toEqual(["claim", "constructor"]);
+    ).toEqual(["claim", "constructor", "pruneCompletedThrough"]);
     expect(dependencies.readFile).not.toHaveBeenCalled();
     expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
     expect(dependencies.open).not.toHaveBeenCalled();
@@ -127,6 +128,194 @@ describe("FileServiceAvailabilityReconciliationOccurrenceClaimStore", () => {
     await expect(store.claim(createOccurrence())).resolves.toEqual({
       kind: "claimed",
     });
+  });
+
+  it("returns frozen unchanged for missing state without writing", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockRejectedValue(missingFileError());
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      "/trusted/claims.json",
+      dependencies,
+    );
+
+    const result = await store.pruneCompletedThrough(createCursor());
+
+    expect(result).toEqual({ kind: "unchanged" });
+    expect(Object.keys(result)).toEqual(["kind"]);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+    expect(dependencies.open).not.toHaveBeenCalled();
+    expect(dependencies.rename).not.toHaveBeenCalled();
+  });
+
+  it("returns unchanged for empty and future-only state without writing", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile
+      .mockResolvedValueOnce(encodeClaimFile([]))
+      .mockResolvedValueOnce(
+        encodeClaimFile([
+          persistedClaim({ scheduledFor: "2026-07-26T12:31:00.000Z" }),
+        ]),
+      );
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      "/trusted/claims.json",
+      dependencies,
+    );
+
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "unchanged",
+    });
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "unchanged",
+    });
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+    expect(dependencies.open).not.toHaveBeenCalled();
+    expect(dependencies.rename).not.toHaveBeenCalled();
+  });
+
+  it("prunes claims before and at the inclusive cursor boundary while preserving future claims", async () => {
+    const { filePath } = await createTemporaryClaimPath();
+    await writeFile(
+      filePath,
+      claimFile([
+        persistedClaim({ scheduledFor: "2026-07-26T12:29:00.000Z" }),
+        persistedClaim(),
+        persistedClaim({
+          serviceId: "web",
+          operation: "stop",
+          scheduledFor: "2026-07-26T12:31:00.000Z",
+        }),
+      ]),
+      "utf8",
+    );
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      filePath,
+    );
+    const cursor = createCursor();
+    const cursorSnapshot = { ...cursor };
+
+    const result = await store.pruneCompletedThrough(cursor);
+
+    expect(result).toEqual({ kind: "pruned" });
+    expect(Object.isFrozen(result)).toBe(true);
+    await expect(readPersistedClaims(filePath)).resolves.toEqual([
+      persistedClaim({
+        serviceId: "web",
+        operation: "stop",
+        scheduledFor: "2026-07-26T12:31:00.000Z",
+      }),
+    ]);
+    expect(cursor).toEqual(cursorSnapshot);
+  });
+
+  it("persists the canonical empty file when every claim is pruned", async () => {
+    const { filePath } = await createTemporaryClaimPath();
+    await writeFile(filePath, claimFile([persistedClaim()]), "utf8");
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      filePath,
+    );
+
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "pruned",
+    });
+    await expect(readFile(filePath, "utf8")).resolves.toBe(
+      '{"version":1,"claims":[]}\n',
+    );
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "unchanged",
+    });
+  });
+
+  it("uses authoritative externally replaced state for pruning", async () => {
+    const { filePath } = await createTemporaryClaimPath();
+    await writeFile(
+      filePath,
+      claimFile([persistedClaim({ scheduledFor: "2026-07-26T12:31:00.000Z" })]),
+      "utf8",
+    );
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      filePath,
+    );
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "unchanged",
+    });
+
+    await writeFile(filePath, claimFile([persistedClaim()]), "utf8");
+
+    await expect(store.pruneCompletedThrough(createCursor())).resolves.toEqual({
+      kind: "pruned",
+    });
+    await expect(readPersistedClaims(filePath)).resolves.toEqual([]);
+  });
+
+  it("preserves invalid-file errors during pruning", async () => {
+    const dependencies = createControlledDependencies();
+    dependencies.readFile.mockResolvedValue(new TextEncoder().encode("{"));
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      "/trusted/claims.json",
+      dependencies,
+    );
+
+    await expect(
+      store.pruneCompletedThrough(createCursor()),
+    ).rejects.toMatchObject({
+      code: "invalid_claim_file",
+    });
+    expect(dependencies.createTemporaryPath).not.toHaveBeenCalled();
+    expect(dependencies.open).not.toHaveBeenCalled();
+  });
+
+  it("serializes claim and pruning in invocation order without a watermark", async () => {
+    const firstPath = await createTemporaryClaimPath();
+    const claimThenPrune =
+      new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+        firstPath.filePath,
+      );
+
+    const claimResult = claimThenPrune.claim(createOccurrence());
+    const pruningResult = claimThenPrune.pruneCompletedThrough(createCursor());
+
+    await expect(claimResult).resolves.toEqual({ kind: "claimed" });
+    await expect(pruningResult).resolves.toEqual({ kind: "pruned" });
+    await expect(readPersistedClaims(firstPath.filePath)).resolves.toEqual([]);
+
+    const secondPath = await createTemporaryClaimPath();
+    const pruneThenClaim =
+      new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+        secondPath.filePath,
+      );
+
+    const unchangedResult =
+      pruneThenClaim.pruneCompletedThrough(createCursor());
+    const laterClaimResult = pruneThenClaim.claim(createOccurrence());
+
+    await expect(unchangedResult).resolves.toEqual({ kind: "unchanged" });
+    await expect(laterClaimResult).resolves.toEqual({ kind: "claimed" });
+    await expect(readPersistedClaims(secondPath.filePath)).resolves.toEqual([
+      persistedClaim(),
+    ]);
+  });
+
+  it("rejects pruning write failure safely and preserves the previous target", async () => {
+    const { directory, filePath } = await createTemporaryClaimPath();
+    const originalContents = claimFile([persistedClaim()]);
+    await writeFile(filePath, originalContents, "utf8");
+    const dependencies = createNodeDependencies();
+    dependencies.rename.mockRejectedValue(new Error("secret rename failure"));
+    const store = new FileServiceAvailabilityReconciliationOccurrenceClaimStore(
+      filePath,
+      dependencies,
+    );
+
+    const error = await captureError(() =>
+      store.pruneCompletedThrough(createCursor()),
+    );
+
+    expect(error).toMatchObject({ code: "claim_write_failed" });
+    expect(String(error)).not.toContain(filePath);
+    expect(String(error)).not.toContain(createCursor().completedThrough);
+    await expect(readFile(filePath, "utf8")).resolves.toBe(originalContents);
+    await expect(readdir(directory)).resolves.toEqual(["claims.json"]);
   });
 
   it("returns a frozen duplicate without writing", async () => {
@@ -501,6 +690,14 @@ function createOccurrence(
     operation: "start",
     scheduledFor: "2026-07-26T12:30:00.000Z",
     ...overrides,
+  });
+}
+
+function createCursor(
+  completedThrough = "2026-07-26T12:30:00.000Z",
+): ServiceAvailabilityReconciliationSchedulerCursor {
+  return ServiceAvailabilityReconciliationSchedulerCursor.create({
+    completedThrough,
   });
 }
 
