@@ -498,6 +498,18 @@ existing duplicate result, maintenance remains safe, and the cursor advances.
 This validates the current at-most-once claim behavior and does not promise
 automatic replay or transactional recovery of an external effect.
 
+Multi-service partial reconciliation recovery is covered through two
+deterministic registered services in one scheduler interval. The integration
+scenario preserves a mixed successful-and-failed report, removes both expired
+overrides, prunes historical claims through the previous authoritative cursor,
+and leaves both current claims protected while the cursor remains unchanged.
+After complete reconstruction, duplicate protection prevents either service
+operation from running again, maintenance remains idempotent, and the cursor
+advances through the existing duplicate result contract. This demonstrates
+the at-most-once limitation after claim acquisition; it does not promise
+automatic replay, cross-service atomicity, or transactional exactly-once
+execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
