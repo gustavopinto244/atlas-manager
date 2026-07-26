@@ -14,6 +14,7 @@ import type { ServiceAvailabilityOverrideStore } from "../../../src/service-mana
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-timer.js";
+import { PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims } from "../../../src/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.js";
 import { PruneExpiredRegisteredServiceAvailabilityOverrides } from "../../../src/service-management/application/prune-expired-registered-service-availability-overrides.js";
 import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../../../src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
@@ -28,6 +29,7 @@ import {
   ServiceAvailabilityReconciliationOccurrence,
   type CreateServiceAvailabilityReconciliationOccurrenceInput,
 } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
+import { ServiceAvailabilityReconciliationSchedulerCursor } from "../../../src/service-management/domain/service-availability-reconciliation-scheduler-cursor.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
@@ -146,7 +148,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the fourteen frozen application capabilities", () => {
+  it("returns exactly the fifteen frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -170,6 +172,11 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.pruneExpiredRegisteredServiceAvailabilityOverrides,
     ).toBeInstanceOf(PruneExpiredRegisteredServiceAvailabilityOverrides);
+    expect(
+      capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+    ).toBeInstanceOf(
+      PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+    );
     expect(
       capabilities.planRegisteredServiceAvailabilityReconciliation,
     ).toBeInstanceOf(PlanRegisteredServiceAvailabilityReconciliation);
@@ -203,6 +210,7 @@ describe("createServiceManagement", () => {
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
       "pruneExpiredRegisteredServiceAvailabilityOverrides",
+      "pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims",
       "planRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliationOccurrence",
@@ -260,6 +268,16 @@ describe("createServiceManagement", () => {
       capabilities.pruneExpiredRegisteredServiceAvailabilityOverrides,
     ).not.toBe(
       otherCapabilities.pruneExpiredRegisteredServiceAvailabilityOverrides,
+    );
+    expect(
+      capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+    ).toBe(
+      capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+    );
+    expect(
+      capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+    ).not.toBe(
+      otherCapabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     );
     expect(capabilities.planRegisteredServiceAvailabilityReconciliation).toBe(
       capabilities.planRegisteredServiceAvailabilityReconciliation,
@@ -333,6 +351,7 @@ describe("createServiceManagement", () => {
       }),
       report: Object.freeze([]),
       pruningReport: Object.freeze([]),
+      occurrenceClaimPruningResult: Object.freeze({ kind: "unchanged" }),
     });
     const cycle = vi
       .spyOn(
@@ -397,6 +416,7 @@ describe("createServiceManagement", () => {
           cursor: null,
           report: Object.freeze([]),
           pruningReport: Object.freeze([]),
+          occurrenceClaimPruningResult: Object.freeze({ kind: "unchanged" }),
         }),
       );
     const secondCycle = vi.spyOn(
@@ -460,10 +480,17 @@ describe("createServiceManagement", () => {
         "execute",
       )
       .mockResolvedValue(Object.freeze([]));
+    const pruneClaims = vi
+      .spyOn(
+        capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+        "execute",
+      )
+      .mockResolvedValue(Object.freeze({ kind: "no_cursor" }));
 
     expect(clock.now).not.toHaveBeenCalled();
     expect(tick).not.toHaveBeenCalled();
     expect(prune).not.toHaveBeenCalled();
+    expect(pruneClaims).not.toHaveBeenCalled();
 
     const result =
       await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
@@ -471,6 +498,7 @@ describe("createServiceManagement", () => {
     expect(clock.now).toHaveBeenCalledTimes(1);
     expect(tick).toHaveBeenCalledTimes(1);
     expect(prune).toHaveBeenCalledTimes(1);
+    expect(pruneClaims).toHaveBeenCalledTimes(1);
     expect(tick.mock.calls[0]?.[0].toISOString()).toBe(
       "2026-07-26T12:29:00.000Z",
     );
@@ -501,6 +529,12 @@ describe("createServiceManagement", () => {
     expect(first.kind).toBe("advanced");
     expect(second.kind).toBe("idle");
     expect(third.kind).toBe("advanced");
+    expect(
+      first.kind === "advanced" && first.occurrenceClaimPruningResult,
+    ).toEqual({ kind: "no_cursor" });
+    expect(
+      third.kind === "advanced" && third.occurrenceClaimPruningResult,
+    ).toEqual({ kind: "unchanged" });
     expect(
       first.kind === "advanced" &&
         second.kind === "idle" &&
@@ -541,11 +575,54 @@ describe("createServiceManagement", () => {
     const result =
       await capabilities.runServiceAvailabilityReconciliationSchedulerCycle.execute();
 
-    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledTimes(2);
     expect(advance).toHaveBeenCalledTimes(1);
     expect(advance.mock.calls[0]?.[0]).toBeNull();
     const candidateCursor = advance.mock.calls[0]?.[1];
     expect(result.kind === "advanced" && result.cursor).toBe(candidateCursor);
+  });
+
+  it("shares exact cursor and occurrence claim stores with completed claim pruning", async () => {
+    const cursor = ServiceAvailabilityReconciliationSchedulerCursor.create({
+      completedThrough: "2026-07-26T12:30:00.000Z",
+    });
+    const read = vi
+      .fn<ServiceAvailabilityReconciliationSchedulerCursorStore["read"]>()
+      .mockResolvedValue(cursor);
+    const advance =
+      vi.fn<ServiceAvailabilityReconciliationSchedulerCursorStore["advance"]>();
+    const claim =
+      vi.fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>();
+    const pruningResult = Object.freeze({ kind: "unchanged" } as const);
+    const pruneCompletedThrough = vi
+      .fn<
+        ServiceAvailabilityReconciliationOccurrenceClaimStore["pruneCompletedThrough"]
+      >()
+      .mockResolvedValue(pruningResult);
+    const cursorStore = { read, advance };
+    const occurrenceClaimStore = { claim, pruneCompletedThrough };
+    const capabilities = createServiceManagement(
+      {},
+      {
+        serviceAvailabilityReconciliationSchedulerCursorStore: cursorStore,
+        serviceAvailabilityReconciliationOccurrenceClaimStore:
+          occurrenceClaimStore,
+      },
+    );
+
+    expect(read).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
+    expect(pruneCompletedThrough).not.toHaveBeenCalled();
+
+    const result =
+      await capabilities.pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims.execute();
+
+    expect(result).toBe(pruningResult);
+    expect(read).toHaveBeenCalledOnce();
+    expect(pruneCompletedThrough).toHaveBeenCalledExactlyOnceWith(cursor);
+    expect(claim).not.toHaveBeenCalled();
+    expect(advance).not.toHaveBeenCalled();
   });
 
   it("keeps default scheduler cursor state isolated between compositions", async () => {

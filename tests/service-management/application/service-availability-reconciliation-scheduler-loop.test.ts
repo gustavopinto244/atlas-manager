@@ -393,6 +393,7 @@ function createCycleResult(
     cursor: null,
     report: Object.freeze([]),
     pruningReport: Object.freeze([]),
+    occurrenceClaimPruningResult: Object.freeze({ kind: "unchanged" }),
   }) as ServiceAvailabilityReconciliationSchedulerCycleResult;
 }
 

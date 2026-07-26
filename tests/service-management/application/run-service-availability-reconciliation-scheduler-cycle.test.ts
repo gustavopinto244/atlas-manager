@@ -7,7 +7,12 @@ import { ListRegisteredServices } from "../../../src/service-management/applicat
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { RegisteredServiceCatalog } from "../../../src/service-management/application/ports/registered-service-catalog.js";
+import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
+import {
+  PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+  type PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult,
+} from "../../../src/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.js";
 import {
   PruneExpiredRegisteredServiceAvailabilityOverrides,
   type PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult,
@@ -24,6 +29,10 @@ import { RegisteredServiceControlResult } from "../../../src/service-management/
 import { ServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
 import { ServiceAvailabilityReconciliationSchedulerCursor } from "../../../src/service-management/domain/service-availability-reconciliation-scheduler-cursor.js";
 import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
+
+const defaultOccurrenceClaimPruningResult = Object.freeze({
+  kind: "no_cursor",
+} as const);
 
 function createCursor(
   completedThrough: string,
@@ -108,6 +117,21 @@ function createPruner(): PruneExpiredRegisteredServiceAvailabilityOverrides {
   );
 }
 
+function createOccurrenceClaimPruner(
+  cursorStore: ServiceAvailabilityReconciliationSchedulerCursorStore,
+): PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims {
+  const occurrenceClaimStore: ServiceAvailabilityReconciliationOccurrenceClaimStore =
+    {
+      claim: vi.fn(),
+      pruneCompletedThrough: vi.fn(),
+    };
+
+  return new PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims(
+    cursorStore,
+    occurrenceClaimStore,
+  );
+}
+
 function createCycle(
   clockValue: unknown,
   currentCursor: ServiceAvailabilityReconciliationSchedulerCursor | null = null,
@@ -124,6 +148,10 @@ function createCycle(
   const pruneExecute = vi
     .spyOn(pruner, "execute")
     .mockResolvedValue(Object.freeze([]));
+  const occurrenceClaimPruner = createOccurrenceClaimPruner(store);
+  const occurrenceClaimPruneExecute = vi
+    .spyOn(occurrenceClaimPruner, "execute")
+    .mockResolvedValue(defaultOccurrenceClaimPruningResult);
 
   return {
     cycle: new RunServiceAvailabilityReconciliationSchedulerCycle(
@@ -131,11 +159,13 @@ function createCycle(
       store,
       tick,
       pruner,
+      occurrenceClaimPruner,
     ),
     clock,
     store,
     tickExecute,
     pruneExecute,
+    occurrenceClaimPruneExecute,
   };
 }
 
@@ -269,10 +299,13 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
 
   it("returns frozen idle without ticking or advancing", async () => {
     const cursor = createCursor("2026-07-26T12:30:00.000Z");
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:59.999Z"),
-      cursor,
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:59.999Z"), cursor);
 
     const result = await cycle.execute();
 
@@ -281,6 +314,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(tickExecute).not.toHaveBeenCalled();
     expect(pruneExecute).not.toHaveBeenCalled();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
@@ -366,6 +400,29 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     },
   );
 
+  it.each(["no_cursor", "pruned", "unchanged"] as const)(
+    "treats completed occurrence claim pruning result %s as complete",
+    async (kind) => {
+      const { cycle, store, occurrenceClaimPruneExecute } = createCycle(
+        new Date("2026-07-26T12:30:00.000Z"),
+      );
+      const occurrenceClaimPruningResult = Object.freeze({ kind });
+      occurrenceClaimPruneExecute.mockResolvedValue(
+        occurrenceClaimPruningResult,
+      );
+
+      const result = await cycle.execute();
+
+      expect(result.kind).toBe("advanced");
+      expect(
+        result.kind === "advanced" && result.occurrenceClaimPruningResult,
+      ).toBe(occurrenceClaimPruningResult);
+      expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
+      expect(occurrenceClaimPruneExecute).toHaveBeenCalledWith();
+      expect(store.advance).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([
     {
       report: Object.freeze([
@@ -414,12 +471,16 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
         cursor,
         report,
         pruningReport,
+        occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
       });
       expect(result.kind === "incomplete" && result.cursor).toBe(cursor);
       expect(result.kind === "incomplete" && result.report).toBe(report);
       expect(result.kind === "incomplete" && result.pruningReport).toBe(
         pruningReport,
       );
+      expect(
+        result.kind === "incomplete" && result.occurrenceClaimPruningResult,
+      ).toBe(defaultOccurrenceClaimPruningResult);
       expect(Object.isFrozen(result)).toBe(true);
       expect(store.advance).not.toHaveBeenCalled();
     },
@@ -428,10 +489,13 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
   it("returns incomplete without advancing when pruning reports a service failure", async () => {
     const cursor = createCursor("2026-07-26T12:29:00.000Z");
     const failure = new Error("pruning service failure");
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:00.000Z"),
-      cursor,
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"), cursor);
     const report = Object.freeze([]);
     const pruningReport = Object.freeze([
       Object.freeze({
@@ -450,6 +514,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       cursor,
       report,
       pruningReport,
+      occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
     });
     expect(result.kind === "incomplete" && result.report).toBe(report);
     expect(result.kind === "incomplete" && result.pruningReport).toBe(
@@ -461,14 +526,19 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     expect(Object.isFrozen(failure)).toBe(false);
     expect(store.advance).not.toHaveBeenCalled();
     expect(pruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
   });
 
   it("returns one incomplete result when both reports contain failures", async () => {
     const reconciliationFailure = new Error("reconciliation failure");
     const pruningFailure = new Error("pruning failure");
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:00.000Z"),
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"));
     const report = Object.freeze([
       Object.freeze({
         kind: "failed" as const,
@@ -493,46 +563,83 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       cursor: null,
       report,
       pruningReport,
+      occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
     });
     expect(store.advance).not.toHaveBeenCalled();
     expect(pruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
   });
 
   it("propagates tick rejection without advancing", async () => {
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:00.000Z"),
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"));
     const sentinel = new Error("tick sentinel");
     tickExecute.mockRejectedValue(sentinel);
 
     await expect(cycle.execute()).rejects.toBe(sentinel);
     expect(tickExecute).toHaveBeenCalledTimes(1);
     expect(pruneExecute).not.toHaveBeenCalled();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
   it("propagates pruning rejection after one completed tick without advancing", async () => {
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:00.000Z"),
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"));
     const sentinel = new Error("pruning sentinel");
     pruneExecute.mockRejectedValue(sentinel);
 
     await expect(cycle.execute()).rejects.toBe(sentinel);
     expect(tickExecute).toHaveBeenCalledOnce();
     expect(pruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
+    expect(store.advance).not.toHaveBeenCalled();
+  });
+
+  it("propagates completed claim pruning rejection without advancing or retrying", async () => {
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"));
+    const sentinel = new Error("completed claim pruning sentinel");
+    occurrenceClaimPruneExecute.mockRejectedValue(sentinel);
+
+    await expect(cycle.execute()).rejects.toBe(sentinel);
+    expect(tickExecute).toHaveBeenCalledOnce();
+    expect(pruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
     expect(store.advance).not.toHaveBeenCalled();
   });
 
   it("waits for the tick, then pruning, before cursor advancement", async () => {
-    const { cycle, store, tickExecute, pruneExecute } = createCycle(
-      new Date("2026-07-26T12:30:00.000Z"),
-    );
+    const {
+      cycle,
+      store,
+      tickExecute,
+      pruneExecute,
+      occurrenceClaimPruneExecute,
+    } = createCycle(new Date("2026-07-26T12:30:00.000Z"));
     let resolveTick!: (
       value: readonly ServiceAvailabilityReconciliationTickServiceResult[],
     ) => void;
     let resolvePruning!: (
       value: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[],
+    ) => void;
+    let resolveOccurrenceClaimPruning!: (
+      value: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult,
     ) => void;
     const tickCompletion = new Promise<
       readonly ServiceAvailabilityReconciliationTickServiceResult[]
@@ -544,20 +651,37 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     >((resolve) => {
       resolvePruning = resolve;
     });
+    const occurrenceClaimPruningCompletion =
+      new Promise<PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult>(
+        (resolve) => {
+          resolveOccurrenceClaimPruning = resolve;
+        },
+      );
     tickExecute.mockReturnValue(tickCompletion);
     pruneExecute.mockReturnValue(pruningCompletion);
+    occurrenceClaimPruneExecute.mockReturnValue(
+      occurrenceClaimPruningCompletion,
+    );
 
     const execution = cycle.execute();
 
     await vi.waitFor(() => expect(tickExecute).toHaveBeenCalledOnce());
     expect(pruneExecute).not.toHaveBeenCalled();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
 
     resolveTick(Object.freeze([]));
     await vi.waitFor(() => expect(pruneExecute).toHaveBeenCalledOnce());
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
     expect(store.advance).not.toHaveBeenCalled();
 
     resolvePruning(Object.freeze([]));
+    await vi.waitFor(() =>
+      expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce(),
+    );
+    expect(store.advance).not.toHaveBeenCalled();
+
+    resolveOccurrenceClaimPruning(defaultOccurrenceClaimPruningResult);
     await expect(execution).resolves.toMatchObject({ kind: "advanced" });
     expect(store.advance).toHaveBeenCalledOnce();
   });
@@ -583,12 +707,16 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       cursor: advancedCursor,
       report,
       pruningReport,
+      occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
     });
     expect(result.kind === "advanced" && result.cursor).toBe(advancedCursor);
     expect(result.kind === "advanced" && result.report).toBe(report);
     expect(result.kind === "advanced" && result.pruningReport).toBe(
       pruningReport,
     );
+    expect(
+      result.kind === "advanced" && result.occurrenceClaimPruningResult,
+    ).toBe(defaultOccurrenceClaimPruningResult);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(report)).toBe(false);
     expect(Object.isFrozen(pruningReport)).toBe(false);
@@ -597,6 +725,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       "cursor",
       "report",
       "pruningReport",
+      "occurrenceClaimPruningResult",
     ]);
   });
 
@@ -621,12 +750,16 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
         cursor: conflictCursor,
         report,
         pruningReport,
+        occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
       });
       expect(result.kind === "conflict" && result.cursor).toBe(conflictCursor);
       expect(result.kind === "conflict" && result.report).toBe(report);
       expect(result.kind === "conflict" && result.pruningReport).toBe(
         pruningReport,
       );
+      expect(
+        result.kind === "conflict" && result.occurrenceClaimPruningResult,
+      ).toBe(defaultOccurrenceClaimPruningResult);
       expect(Object.isFrozen(result)).toBe(true);
       expect(store.read).toHaveBeenCalledTimes(1);
       expect(store.advance).toHaveBeenCalledTimes(1);
@@ -677,6 +810,11 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
           }),
           Object.assign(createPruner(), {
             execute: vi.fn().mockResolvedValue(Object.freeze([])),
+          }),
+          Object.assign(createOccurrenceClaimPruner(store), {
+            execute: vi
+              .fn()
+              .mockResolvedValue(defaultOccurrenceClaimPruningResult),
           }),
         ),
     );
