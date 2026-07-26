@@ -229,8 +229,17 @@ services and their generated occurrences sequentially in catalog and occurrence
 order. Generation failures are isolated per service, while execution failures
 are isolated per occurrence; `none`, `duplicate`, and `executed` remain
 successful processing outcomes. Claim behavior stays inside claim-aware
-occurrence execution. The tick has no clock, cursor, timer, automatic loop,
-composition integration, HTTP endpoint, logging, retry, or persistence.
+occurrence execution. The application tick itself has no clock, cursor, timer,
+automatic loop, HTTP endpoint, logging, retry, or persistence.
+
+Service-management composition exposes that tick as an explicit internal
+capability and constructs it once per composition from the exact exposed
+listing, occurrence-generation, and occurrence-execution instances. Direct and
+tick-driven occurrence execution therefore share the same private claim state.
+Callers still provide the bounded interval explicitly; service and occurrence
+processing stays sequential and failure isolation is unchanged. No clock,
+cursor, timer, automatic loop, HTTP endpoint, logging, retry, or persistence is
+introduced.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
