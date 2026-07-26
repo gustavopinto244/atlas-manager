@@ -6,6 +6,7 @@ interface ControlledEnvironmentConfig {
   logLevel: "info";
   serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
+  serviceAvailabilityOverrideFilePath?: string;
 }
 
 const controlled = vi.hoisted(() => {
@@ -21,6 +22,8 @@ const controlled = vi.hoisted(() => {
     cursorPaths: [] as string[],
     claimStores: [] as object[],
     claimPaths: [] as string[],
+    overrideStores: [] as object[],
+    overridePaths: [] as string[],
     createServiceManagement: vi.fn(),
   };
 });
@@ -46,6 +49,18 @@ vi.mock(
   () => ({
     NodeServerHealthReader: class {},
     createNodeServerHealthReaderDependencies: vi.fn(() => ({})),
+  }),
+);
+
+vi.mock(
+  "../src/service-management/infrastructure/file-service-availability-override-store.js",
+  () => ({
+    FileServiceAvailabilityOverrideStore: class {
+      public constructor(filePath: string) {
+        controlled.overridePaths.push(filePath);
+        controlled.overrideStores.push(this);
+      }
+    },
   }),
 );
 
@@ -118,6 +133,8 @@ describe("application persistence adapter selection", () => {
     controlled.cursorPaths.length = 0;
     controlled.claimStores.length = 0;
     controlled.claimPaths.length = 0;
+    controlled.overrideStores.length = 0;
+    controlled.overridePaths.length = 0;
     controlled.createServiceManagement.mockReset();
     controlled.createServiceManagement.mockReturnValue({
       serviceAvailabilityReconciliationSchedulerLoop: {
@@ -137,6 +154,7 @@ describe("application persistence adapter selection", () => {
 
     expect(controlled.cursorStores).toEqual([]);
     expect(controlled.claimStores).toEqual([]);
+    expect(controlled.overrideStores).toEqual([]);
     expect(controlled.createServiceManagement).toHaveBeenCalledOnce();
     expect(controlled.createServiceManagement).toHaveBeenCalledWith(
       process.env,
@@ -155,6 +173,7 @@ describe("application persistence adapter selection", () => {
 
     expect(controlled.cursorPaths).toEqual([cursorPath]);
     expect(controlled.claimStores).toEqual([]);
+    expect(controlled.overrideStores).toEqual([]);
     expect(controlled.createServiceManagement).toHaveBeenCalledWith(
       process.env,
       {
@@ -175,6 +194,7 @@ describe("application persistence adapter selection", () => {
 
     expect(controlled.cursorStores).toEqual([]);
     expect(controlled.claimPaths).toEqual([claimPath]);
+    expect(controlled.overrideStores).toEqual([]);
     expect(controlled.createServiceManagement).toHaveBeenCalledWith(
       process.env,
       {
@@ -184,19 +204,90 @@ describe("application persistence adapter selection", () => {
     );
   });
 
-  it("combines one exact adapter of each type in one composition override", async () => {
+  it("selects only the exact file-backed availability override store when configured", async () => {
+    const overridePath = "/var/lib/atlas-manager/overrides.json";
+    controlled.config = {
+      ...controlled.config,
+      serviceAvailabilityOverrideFilePath: overridePath,
+    };
+
+    await import("../src/main.js");
+
+    expect(controlled.cursorStores).toEqual([]);
+    expect(controlled.claimStores).toEqual([]);
+    expect(controlled.overridePaths).toEqual([overridePath]);
+    expect(controlled.createServiceManagement).toHaveBeenCalledWith(
+      process.env,
+      {
+        serviceAvailabilityOverrideStore: controlled.overrideStores[0],
+      },
+    );
+  });
+
+  it("combines cursor and availability override stores independently", async () => {
+    const cursorPath = "/var/lib/atlas-manager/cursor.json";
+    const overridePath = "/var/lib/atlas-manager/overrides.json";
+    controlled.config = {
+      ...controlled.config,
+      serviceAvailabilityReconciliationSchedulerCursorFilePath: cursorPath,
+      serviceAvailabilityOverrideFilePath: overridePath,
+    };
+
+    await import("../src/main.js");
+
+    expect(controlled.cursorPaths).toEqual([cursorPath]);
+    expect(controlled.claimStores).toEqual([]);
+    expect(controlled.overridePaths).toEqual([overridePath]);
+    expect(controlled.createServiceManagement).toHaveBeenCalledWith(
+      process.env,
+      {
+        serviceAvailabilityReconciliationSchedulerCursorStore:
+          controlled.cursorStores[0],
+        serviceAvailabilityOverrideStore: controlled.overrideStores[0],
+      },
+    );
+  });
+
+  it("combines occurrence claim and availability override stores independently", async () => {
+    const claimPath = "/var/lib/atlas-manager/claims.json";
+    const overridePath = "/var/lib/atlas-manager/overrides.json";
+    controlled.config = {
+      ...controlled.config,
+      serviceAvailabilityReconciliationOccurrenceClaimFilePath: claimPath,
+      serviceAvailabilityOverrideFilePath: overridePath,
+    };
+
+    await import("../src/main.js");
+
+    expect(controlled.cursorStores).toEqual([]);
+    expect(controlled.claimPaths).toEqual([claimPath]);
+    expect(controlled.overridePaths).toEqual([overridePath]);
+    expect(controlled.createServiceManagement).toHaveBeenCalledWith(
+      process.env,
+      {
+        serviceAvailabilityReconciliationOccurrenceClaimStore:
+          controlled.claimStores[0],
+        serviceAvailabilityOverrideStore: controlled.overrideStores[0],
+      },
+    );
+  });
+
+  it("combines one exact adapter of all three types in one composition override", async () => {
     const cursorPath = "/var/lib/atlas-manager/cursor.json";
     const claimPath = "/var/lib/atlas-manager/claims.json";
+    const overridePath = "/var/lib/atlas-manager/overrides.json";
     controlled.config = {
       ...controlled.config,
       serviceAvailabilityReconciliationSchedulerCursorFilePath: cursorPath,
       serviceAvailabilityReconciliationOccurrenceClaimFilePath: claimPath,
+      serviceAvailabilityOverrideFilePath: overridePath,
     };
 
     await import("../src/main.js");
 
     expect(controlled.cursorPaths).toEqual([cursorPath]);
     expect(controlled.claimPaths).toEqual([claimPath]);
+    expect(controlled.overridePaths).toEqual([overridePath]);
     expect(controlled.createServiceManagement).toHaveBeenCalledOnce();
     expect(controlled.createServiceManagement).toHaveBeenCalledWith(
       process.env,
@@ -205,6 +296,7 @@ describe("application persistence adapter selection", () => {
           controlled.cursorStores[0],
         serviceAvailabilityReconciliationOccurrenceClaimStore:
           controlled.claimStores[0],
+        serviceAvailabilityOverrideStore: controlled.overrideStores[0],
       },
     );
   });
