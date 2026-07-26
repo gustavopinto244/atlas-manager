@@ -70,6 +70,7 @@ function createDependencies(): {
       planner,
       {
         claim: vi.fn(),
+        pruneCompletedThrough: vi.fn(),
       },
       control,
     ),

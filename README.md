@@ -374,12 +374,26 @@ are not logged. Cursor, occurrence-claim, and availability-override persistence
 are independently configurable. Every configured path must differ because the
 three files use incompatible versioned schemas.
 
-Persistent occurrence claims are permanent and may grow without compaction.
-They are written before service control, so a crash after claim persistence can
-suppress a later retry. This provides at-most-once claiming, not exactly-once
-service execution. There is no pruning, release, repair, cross-process locking,
-or distributed claim guarantee; deployments using persistence must retain one
-scheduler-owning process.
+The occurrence claim-store port also supports explicit pruning through a
+canonical reconciliation scheduler cursor. Claims scheduled at or before
+`completedThrough` are eligible through an inclusive canonical UTC boundary;
+future claims are preserved. Missing, empty, and future-only state return frozen
+`unchanged` without writing. Changed file-backed state returns frozen `pruned`
+only after the existing owner-restricted same-directory atomic replacement
+completes. Repeated pruning is idempotent and shares the same per-instance
+operation queue as claiming.
+
+Pruning uses no system clock, configurable retention duration, or persisted
+watermark. A direct caller may claim an older occurrence again after it has
+been pruned. The capability is not integrated into scheduler cycles,
+composition, startup, shutdown, HTTP, logging, or metrics. Claim-and-prune
+ordering is not coordinated across independent file-store instances or
+processes.
+
+Persistent occurrence claims are written before service control, so a crash
+after claim persistence can suppress a later retry. This provides at-most-once
+claiming, not exactly-once service execution. Deployments using persistence
+must retain one scheduler-owning process.
 
 File-backed overrides likewise provide no cross-process locking or distributed
 coordination guarantee. Deployments using any of these process-local atomic

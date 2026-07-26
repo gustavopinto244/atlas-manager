@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
+  ServiceAvailabilityReconciliationOccurrenceClaimPruningResult,
   ServiceAvailabilityReconciliationOccurrenceClaimResult,
   ServiceAvailabilityReconciliationOccurrenceClaimStore,
 } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
@@ -8,6 +9,7 @@ import {
   ServiceAvailabilityReconciliationOccurrence,
   type CreateServiceAvailabilityReconciliationOccurrenceInput,
 } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
+import { ServiceAvailabilityReconciliationSchedulerCursor } from "../../../src/service-management/domain/service-availability-reconciliation-scheduler-cursor.js";
 import { InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/infrastructure/in-memory-service-availability-reconciliation-occurrence-claim-store.js";
 
 const scheduledFor = "2026-07-27T11:00:00.000Z";
@@ -47,6 +49,23 @@ function expectCanonicalResult(
   expect(() => {
     delete (result as { kind?: "claimed" | "duplicate" }).kind;
   }).toThrow(TypeError);
+}
+
+function createCursor(
+  completedThrough = "2026-07-27T11:00:00.000Z",
+): ServiceAvailabilityReconciliationSchedulerCursor {
+  return ServiceAvailabilityReconciliationSchedulerCursor.create({
+    completedThrough,
+  });
+}
+
+function expectCanonicalPruningResult(
+  result: ServiceAvailabilityReconciliationOccurrenceClaimPruningResult,
+  kind: "pruned" | "unchanged",
+): void {
+  expect(result).toEqual({ kind });
+  expect(Object.keys(result)).toEqual(["kind"]);
+  expect(Object.isFrozen(result)).toBe(true);
 }
 
 describe("InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore", () => {
@@ -221,7 +240,89 @@ describe("InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore", () => 
     });
   });
 
-  it("exposes only claim and no collection or lifecycle API", () => {
+  it("returns frozen unchanged when pruning an empty store", async () => {
+    const store = createStore();
+
+    expectCanonicalPruningResult(
+      await store.pruneCompletedThrough(createCursor()),
+      "unchanged",
+    );
+    await expect(store.claim(createOccurrence())).resolves.toEqual({
+      kind: "claimed",
+    });
+  });
+
+  it("prunes claims before and at the inclusive cursor boundary while preserving future claims", async () => {
+    const store = createStore();
+    const before = createOccurrence({
+      scheduledFor: "2026-07-27T10:59:00.000Z",
+    });
+    const exact = createOccurrence();
+    const future = createOccurrence({
+      scheduledFor: "2026-07-27T11:01:00.000Z",
+    });
+    await store.claim(before);
+    await store.claim(exact);
+    await store.claim(future);
+
+    expectCanonicalPruningResult(
+      await store.pruneCompletedThrough(createCursor()),
+      "pruned",
+    );
+    await expect(store.claim(before)).resolves.toEqual({ kind: "claimed" });
+    await expect(store.claim(exact)).resolves.toEqual({ kind: "claimed" });
+    await expect(store.claim(future)).resolves.toEqual({ kind: "duplicate" });
+  });
+
+  it("returns unchanged and preserves duplicates when all claims are after the cursor", async () => {
+    const store = createStore();
+    const future = createOccurrence({
+      scheduledFor: "2026-07-27T11:01:00.000Z",
+    });
+    await store.claim(future);
+
+    expectCanonicalPruningResult(
+      await store.pruneCompletedThrough(createCursor()),
+      "unchanged",
+    );
+    await expect(store.claim(future)).resolves.toEqual({ kind: "duplicate" });
+  });
+
+  it("is idempotent and does not retain a pruning watermark", async () => {
+    const store = createStore();
+    const occurrence = createOccurrence();
+    const cursor = createCursor();
+    await store.claim(occurrence);
+
+    expectCanonicalPruningResult(
+      await store.pruneCompletedThrough(cursor),
+      "pruned",
+    );
+    expectCanonicalPruningResult(
+      await store.pruneCompletedThrough(cursor),
+      "unchanged",
+    );
+    await expect(store.claim(occurrence)).resolves.toEqual({ kind: "claimed" });
+  });
+
+  it("uses no system clock and leaves the supplied cursor unchanged", async () => {
+    const dateNow = vi.spyOn(Date, "now");
+    const cursor = createCursor();
+    const snapshot = { ...cursor };
+    const store = createStore();
+
+    try {
+      await store.pruneCompletedThrough(cursor);
+
+      expect(dateNow).not.toHaveBeenCalled();
+      expect(cursor).toEqual(snapshot);
+      expect(Object.isFrozen(cursor)).toBe(true);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it("exposes only claim and pruning without collection or lifecycle APIs", () => {
     const store =
       new InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore();
     const prototypeMethods = Object.getOwnPropertyNames(
@@ -229,7 +330,11 @@ describe("InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore", () => 
     ).sort();
 
     expect(Object.keys(store)).toEqual([]);
-    expect(prototypeMethods).toEqual(["claim", "constructor"]);
+    expect(prototypeMethods).toEqual([
+      "claim",
+      "constructor",
+      "pruneCompletedThrough",
+    ]);
     expect(store).not.toHaveProperty("claims");
     expect(store).not.toHaveProperty("map");
     expect(store).not.toHaveProperty("set");

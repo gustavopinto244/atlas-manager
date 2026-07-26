@@ -60,7 +60,7 @@ function createRunTick(): RunServiceAvailabilityReconciliationTick {
     new GenerateRegisteredServiceAvailabilityReconciliationOccurrences(catalog),
     new ExecuteRegisteredServiceAvailabilityReconciliationOccurrence(
       planner,
-      { claim: vi.fn() },
+      { claim: vi.fn(), pruneCompletedThrough: vi.fn() },
       control,
     ),
   );

@@ -73,6 +73,7 @@ function createClaimStore(
     claim: vi
       .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
       .mockResolvedValue({ kind: result }),
+    pruneCompletedThrough: vi.fn(),
   };
 }
 
