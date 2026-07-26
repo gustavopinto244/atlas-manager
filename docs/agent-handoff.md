@@ -9,27 +9,31 @@ credentials or machine-specific configuration.
 The active branch is:
 
 ```text
-test/file-backed-multi-service-partial-reconciliation-recovery
+main
 ```
 
-The branch contains the test/documentation work for the multi-service partial
-reconciliation recovery scenario. The implementation is committed in:
+The multi-service partial reconciliation recovery implementation is already
+present in the repository's `origin/main` through:
 
 ```text
-4ead765 test: add file-backed multi-service partial reconciliation recovery coverage
+15b4646 test: add file-backed multi-service partial reconciliation recovery coverage (#179)
 ```
 
-Do not reset or discard that commit when continuing.
+The local equivalent implementation history is based on commit `4ead765` and
+has the same file content as `origin/main`. Do not reset or discard either
+implementation when continuing.
 
-The implementation commit contains:
+The merged implementation contains:
 
 - `tests/service-management/integration/file-backed-multi-service-partial-reconciliation-recovery.test.ts`
 - `README.md`
 
-The current handoff-only uncommitted files are:
+The handoff pointer in `AGENTS.md` was added by local commit `0607436`. The
+current uncommitted handoff file is:
 
-- `AGENTS.md`
 - `docs/agent-handoff.md`
+
+This documentation is not part of the scheduler implementation.
 
 No production source file, dependency, persistence schema, or configuration
 file was changed.
@@ -88,12 +92,14 @@ available as a shell command in the handoff environment, so the explicit Node
 
 ## Next steps
 
-1. Review the implementation commit and the handoff-documentation diff.
-2. Run the required checks again if the files are changed.
-3. Commit the handoff documentation using a Conventional Commit, for example:
+1. Review the local `main` versus `origin/main` history before further work;
+   the implementation content is already synchronized, but the commit graphs
+   are not identical because the remote uses the merged PR commit.
+2. Commit the handoff documentation using a Conventional Commit, for example:
    `docs: add agent handoff context`.
-4. Push the short-lived branch and open the Issue-specific pull request using
-   the repository's normal review workflow.
+3. If needed, reconcile local `main` with `origin/main` using the project's
+   normal Git workflow. Do not reset the implementation without first
+   preserving the handoff documents.
 
 Do not add production replay logic, new reconciliation result kinds, cross-store
 transactions, locking guarantees, or external PM2/network operations as part
