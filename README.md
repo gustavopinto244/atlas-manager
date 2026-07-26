@@ -223,6 +223,15 @@ does not evaluate temporary overrides or runtime status, claim or execute
 occurrences, or introduce catalog-wide iteration, timers, HTTP delivery, or
 persistence.
 
+An explicit application tick can coordinate one caller-supplied bounded interval
+across the registered-service catalog. It lists services once, then processes
+services and their generated occurrences sequentially in catalog and occurrence
+order. Generation failures are isolated per service, while execution failures
+are isolated per occurrence; `none`, `duplicate`, and `executed` remain
+successful processing outcomes. Claim behavior stays inside claim-aware
+occurrence execution. The tick has no clock, cursor, timer, automatic loop,
+composition integration, HTTP endpoint, logging, retry, or persistence.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
