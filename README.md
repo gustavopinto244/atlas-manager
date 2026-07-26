@@ -154,8 +154,17 @@ consistent dependencies. Planning still only returns `execute start`, `execute
 stop`, or `none`; it does not inspect supported operations or execute control.
 No scheduler, duplicate-execution protection, or HTTP endpoint exists yet.
 
+An explicit reconciliation execution use case first delegates to planning. A
+`none` decision performs no service operation, while `execute start` and
+`execute stop` delegate to the existing manual-control boundary, which retains
+supported-operation enforcement and returns the canonical control result.
+Reconciliation never selects `restart`; planner and control failures propagate
+without retries. This use case is not exposed through production composition,
+a scheduler, or HTTP. Repeated direct calls may repeat operations until
+duplicate-execution protection is implemented.
+
 Implicit current-time acquisition, environment or registered-service
-configuration integration, reconciliation, default policies, scheduler
+configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
 yet.
 
