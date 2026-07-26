@@ -281,8 +281,18 @@ timer port; otherwise composition uses a private Node.js one-shot timer adapter.
 Direct and loop-driven cycles share scheduler cursor state, occurrence claims,
 and availability overrides through the existing dependency graph, while
 default composition instances remain isolated. Composition does not start the
-loop or schedule a timer. Application startup, graceful shutdown, logging,
-metrics, HTTP, persistence, and retry behavior remain unconnected.
+loop or schedule a timer.
+
+The application runtime now creates service-management composition and starts
+its scheduler loop exactly once after the HTTP server reports that it is
+listening. The first cycle therefore runs immediately after HTTP readiness.
+Graceful shutdown promptly requests both scheduler stop and HTTP server close,
+then waits for both operations, including any in-flight scheduler cycle.
+Incomplete reports, cursor conflicts, and scheduler failures request safe
+application shutdown and a non-zero exit code. Lifecycle logs contain only
+structured outcome and error-type metadata. No scheduler retry, automatic
+restart, HTTP scheduler endpoint, enablement flag, persistent state, distributed
+lock, or leader election exists.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler

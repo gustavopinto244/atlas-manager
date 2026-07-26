@@ -7,6 +7,11 @@ interface HttpServerStartedContext {
   port: number;
 }
 
+export interface SchedulerRuntimeLogger {
+  info(context: Record<string, unknown>, message: string): void;
+  error(context: Record<string, unknown>, message: string): void;
+}
+
 export function createLogger(
   level: LogLevel,
   destination?: DestinationStream,
@@ -40,5 +45,55 @@ export function logUnexpectedStartupFailure(
       errorType: error instanceof Error ? error.name : "UnknownError",
     },
     "Application startup failed",
+  );
+}
+
+export function logServiceAvailabilityReconciliationSchedulerStarted(
+  logger: SchedulerRuntimeLogger,
+): void {
+  logger.info(
+    {
+      event: "service_availability_reconciliation_scheduler_started",
+    },
+    "Service availability reconciliation scheduler started",
+  );
+}
+
+export function logServiceAvailabilityReconciliationSchedulerStopped(
+  logger: SchedulerRuntimeLogger,
+): void {
+  logger.info(
+    {
+      event: "service_availability_reconciliation_scheduler_stopped",
+    },
+    "Service availability reconciliation scheduler stopped",
+  );
+}
+
+export function logServiceAvailabilityReconciliationSchedulerTerminated(
+  logger: SchedulerRuntimeLogger,
+  context:
+    | Readonly<{ outcome: "incomplete" | "conflict" }>
+    | Readonly<{ outcome: "failed"; errorType: string }>,
+): void {
+  logger.error(
+    {
+      event: "service_availability_reconciliation_scheduler_terminated",
+      ...context,
+    },
+    "Service availability reconciliation scheduler terminated",
+  );
+}
+
+export function logServiceAvailabilityReconciliationSchedulerObserverFailed(
+  logger: SchedulerRuntimeLogger,
+  error: unknown,
+): void {
+  logger.error(
+    {
+      event: "service_availability_reconciliation_scheduler_observer_failed",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    },
+    "Service availability reconciliation scheduler observer failed",
   );
 }
