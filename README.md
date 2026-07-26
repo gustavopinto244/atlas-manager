@@ -250,6 +250,19 @@ separate stores remain isolated. No tick coordination, current-time clock,
 automatic loop, composition integration, HTTP endpoint, retry, or persistence
 is connected to this cursor boundary yet.
 
+A file-backed scheduler cursor-store adapter can persist the same canonical
+cursor in a strictly validated version-one JSON file. A missing file represents
+empty state; malformed, unsupported, or non-canonical files fail safely without
+automatic repair. Successful advancement writes an owner-restricted temporary
+file in the target directory, flushes and closes it, then atomically renames it
+over the target. Reads and compare-and-set advances are serialized within one
+adapter instance, and reconstructing an adapter from the same file preserves
+cursor progress across normal process restarts. Public errors expose neither
+paths nor cursor contents. The adapter provides no cross-process locking or
+distributed compare-and-set guarantee and is not yet selected by default
+composition. No environment configuration, startup migration, HTTP endpoint,
+logging, or persistent occurrence claims are introduced.
+
 An explicit cursor-aware scheduler cycle now reads one cursor and one clock
 value, floors the clock to a canonical UTC minute, and runs at most one bounded
 tick. Empty state bootstraps one minute; existing state catches up from the
