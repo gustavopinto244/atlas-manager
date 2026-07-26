@@ -1,5 +1,6 @@
 import { CancelRegisteredServiceAvailabilityOverride } from "../application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../application/control-registered-service.js";
+import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../application/execute-registered-service-availability-reconciliation.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
@@ -35,6 +36,7 @@ export interface ServiceManagementCapabilities {
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
+  readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
 }
 
 export interface ServiceManagementCompositionOverrides {
@@ -77,6 +79,23 @@ export function createServiceManagement(
     mock: mockController,
     pm2: pm2Controller,
   });
+  const controlRegisteredService = new ControlRegisteredService(
+    catalog,
+    controller,
+    clock,
+  );
+  const planRegisteredServiceAvailabilityReconciliation =
+    new PlanRegisteredServiceAvailabilityReconciliation(
+      catalog,
+      overrideStore,
+      statusReader,
+      clock,
+    );
+  const executeRegisteredServiceAvailabilityReconciliation =
+    new ExecuteRegisteredServiceAvailabilityReconciliation(
+      planRegisteredServiceAvailabilityReconciliation,
+      controlRegisteredService,
+    );
 
   return Object.freeze({
     listRegisteredServices: new ListRegisteredServices(catalog),
@@ -85,11 +104,7 @@ export function createServiceManagement(
       statusReader,
       clock,
     ),
-    controlRegisteredService: new ControlRegisteredService(
-      catalog,
-      controller,
-      clock,
-    ),
+    controlRegisteredService,
     setRegisteredServiceAvailabilityOverride:
       new SetRegisteredServiceAvailabilityOverride(
         catalog,
@@ -104,13 +119,8 @@ export function createServiceManagement(
         overrideStore,
         clock,
       ),
-    planRegisteredServiceAvailabilityReconciliation:
-      new PlanRegisteredServiceAvailabilityReconciliation(
-        catalog,
-        overrideStore,
-        statusReader,
-        clock,
-      ),
+    planRegisteredServiceAvailabilityReconciliation,
+    executeRegisteredServiceAvailabilityReconciliation,
   });
 }
 
