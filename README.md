@@ -439,6 +439,15 @@ shares the exact cursor store used for scheduler progress and the exact
 occurrence claim store used for duplicate protection. Callers may inject the
 existing store ports, while defaults remain process-local and isolated.
 
+The v0.4 scheduling persistence chain has a multi-reconstruction integration
+scenario using the file-backed override, occurrence-claim, and scheduler-cursor
+stores together with newly created composition instances. It verifies persisted
+cursor continuity, duplicate protection, expired-override removal, and completed
+claim pruning across scheduler cycles. Claims from the current cycle remain
+protected until a later cycle can prune through the previously authoritative
+cursor, demonstrating that recovery does not depend on process-local adapter or
+composition state.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
