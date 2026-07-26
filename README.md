@@ -196,6 +196,16 @@ default store does not survive restarts, coordinate multiple processes,
 guarantee successful execution, or provide distributed exactly-once behavior.
 No scheduler, occurrence generation, HTTP endpoint, or persistence exists.
 
+The scheduling domain can calculate actual policy expectation changes over a
+bounded UTC interval with `(fromExclusive, toInclusive]` semantics. Results are
+immutable `became_available` and `became_unavailable` transitions with canonical
+UTC timestamps. Calculation follows the existing evaluator minute by minute, so
+the configured policy timezone and runtime timezone database remain
+authoritative, including daylight-saving gaps and repeated local times.
+Adjacent windows do not create synthetic transitions, and each calculation is
+limited to eight days. No reconciliation occurrence is generated, and no
+scheduler loop or automatic execution exists.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
