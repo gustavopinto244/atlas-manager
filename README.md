@@ -458,6 +458,16 @@ after the pruning boundary. This validates retry coordination through the
 persisted claim and cursor contracts; it does not provide transactional
 exactly-once execution across independent processes.
 
+Cursor-conflict integration coverage uses independent file-backed cursor-store
+instances to advance the same candidate before the original scheduler
+advancement. It verifies that the resulting conflict preserves the competing
+authoritative cursor after reconciliation and maintenance have completed,
+without rerunning effects or rolling back removed overrides and persisted
+claims. A reconstructed cycle at the same target is idle, while a later cycle
+continues from that cursor and prunes only completed claims through its
+boundary. This exercises the existing compare-and-set and persistence
+contracts; it does not globally serialize independent scheduler processes.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
