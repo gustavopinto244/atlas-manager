@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CancelRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/cancel-registered-service-availability-override.js";
 import { ControlRegisteredService } from "../../../src/service-management/application/control-registered-service.js";
+import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../../../src/service-management/application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceStatus } from "../../../src/service-management/application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
@@ -100,7 +101,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the seven frozen application capabilities", () => {
+  it("returns exactly the eight frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -124,6 +125,9 @@ describe("createServiceManagement", () => {
     expect(
       capabilities.planRegisteredServiceAvailabilityReconciliation,
     ).toBeInstanceOf(PlanRegisteredServiceAvailabilityReconciliation);
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliation,
+    ).toBeInstanceOf(ExecuteRegisteredServiceAvailabilityReconciliation);
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -132,6 +136,7 @@ describe("createServiceManagement", () => {
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
       "planRegisteredServiceAvailabilityReconciliation",
+      "executeRegisteredServiceAvailabilityReconciliation",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -141,13 +146,15 @@ describe("createServiceManagement", () => {
     expect(capabilities).not.toHaveProperty("overrideStore");
     expect(capabilities).not.toHaveProperty("clock");
     expect(capabilities).not.toHaveProperty("scheduler");
+    expect(capabilities).not.toHaveProperty("executionStore");
     expect(capabilities).not.toHaveProperty("processListExecutor");
     expect(capabilities).not.toHaveProperty("overrides");
     expect(capabilities).not.toHaveProperty("environment");
   });
 
-  it("keeps override capability references stable", () => {
+  it("keeps application capability references stable per composition", () => {
     const capabilities = createServiceManagement({});
+    const otherCapabilities = createServiceManagement({});
 
     expect(capabilities.setRegisteredServiceAvailabilityOverride).toBe(
       capabilities.setRegisteredServiceAvailabilityOverride,
@@ -161,6 +168,142 @@ describe("createServiceManagement", () => {
     expect(capabilities.planRegisteredServiceAvailabilityReconciliation).toBe(
       capabilities.planRegisteredServiceAvailabilityReconciliation,
     );
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliation,
+    ).toBe(capabilities.executeRegisteredServiceAvailabilityReconciliation);
+    expect(
+      capabilities.executeRegisteredServiceAvailabilityReconciliation,
+    ).not.toBe(
+      otherCapabilities.executeRegisteredServiceAvailabilityReconciliation,
+    );
+  });
+
+  it("injects the exact exposed planning and control instances into execution", async () => {
+    const capabilities = createServiceManagement({});
+    const controlResult = {
+      serviceId: "task-manager",
+      operation: "start",
+      completedAt: firstTimestamp,
+    } as const;
+    const planningExecute = vi
+      .spyOn(
+        capabilities.planRegisteredServiceAvailabilityReconciliation,
+        "execute",
+      )
+      .mockResolvedValue({ kind: "execute", operation: "start" });
+    const controlExecute = vi
+      .spyOn(capabilities.controlRegisteredService, "execute")
+      .mockResolvedValue(controlResult);
+
+    const result =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliation.execute(
+        " Task-Manager ",
+      );
+
+    expect(planningExecute).toHaveBeenCalledExactlyOnceWith(" Task-Manager ");
+    expect(controlExecute).toHaveBeenCalledExactlyOnceWith(
+      " Task-Manager ",
+      "start",
+    );
+    expect(result).toEqual({ kind: "executed", controlResult });
+    if (result.kind === "executed") {
+      expect(result.controlResult).toBe(controlResult);
+    }
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("returns none through composed execution without invoking shared control", async () => {
+    const capabilities = createServiceManagement({});
+    const planningExecute = vi
+      .spyOn(
+        capabilities.planRegisteredServiceAvailabilityReconciliation,
+        "execute",
+      )
+      .mockResolvedValue({ kind: "none" });
+    const controlExecute = vi.spyOn(
+      capabilities.controlRegisteredService,
+      "execute",
+    );
+
+    const result =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliation.execute(
+        "missing-service",
+      );
+
+    expect(planningExecute).toHaveBeenCalledExactlyOnceWith("missing-service");
+    expect(controlExecute).not.toHaveBeenCalled();
+    expect(result).toEqual({ kind: "none" });
+    expect(Object.keys(result)).toEqual(["kind"]);
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("shares override, mock status, controller, and clock with execution", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "manual" },
+    });
+    const clock = createClock(firstTimestamp, firstTimestamp, secondTimestamp);
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+
+    expect(clock.now).not.toHaveBeenCalled();
+
+    await capabilities.setRegisteredServiceAvailabilityOverride.execute(
+      service.id,
+      {
+        kind: "keep_available",
+        expiresAt: "2026-07-25T12:00:00.001Z",
+      },
+    );
+
+    const result =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliation.execute(
+        service.id,
+      );
+
+    expect(result).toEqual({
+      kind: "executed",
+      controlResult: {
+        serviceId: service.id,
+        operation: "start",
+        completedAt: secondTimestamp,
+      },
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    if (result.kind === "executed") {
+      expect(Object.isFrozen(result.controlResult)).toBe(true);
+    }
+    expect(clock.now).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not deduplicate repeated explicit composed execution", async () => {
+    const capabilities = createServiceManagement({});
+    const planningExecute = vi
+      .spyOn(
+        capabilities.planRegisteredServiceAvailabilityReconciliation,
+        "execute",
+      )
+      .mockResolvedValue({ kind: "execute", operation: "stop" });
+    const controlExecute = vi
+      .spyOn(capabilities.controlRegisteredService, "execute")
+      .mockResolvedValue({
+        serviceId: "task-manager",
+        operation: "stop",
+        completedAt: firstTimestamp,
+      });
+
+    await capabilities.executeRegisteredServiceAvailabilityReconciliation.execute(
+      "task-manager",
+    );
+    await capabilities.executeRegisteredServiceAvailabilityReconciliation.execute(
+      "task-manager",
+    );
+
+    expect(planningExecute).toHaveBeenCalledTimes(2);
+    expect(controlExecute).toHaveBeenCalledTimes(2);
   });
 
   it("shares one injected store with planning without using dependencies during composition", async () => {
@@ -498,6 +641,23 @@ describe("createServiceManagement", () => {
         findById: vi.fn().mockResolvedValue(null),
       });
     }).toThrow(TypeError);
+    expect(() => {
+      (
+        capabilities as {
+          executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
+        }
+      ).executeRegisteredServiceAvailabilityReconciliation =
+        new ExecuteRegisteredServiceAvailabilityReconciliation(
+          capabilities.planRegisteredServiceAvailabilityReconciliation,
+          capabilities.controlRegisteredService,
+        );
+    }).toThrow(TypeError);
+    expect(
+      Reflect.deleteProperty(
+        capabilities,
+        "executeRegisteredServiceAvailabilityReconciliation",
+      ),
+    ).toBe(false);
   });
 
   it("uses an empty catalog when registered-service configuration is absent", async () => {

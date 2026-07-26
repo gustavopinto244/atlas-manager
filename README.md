@@ -154,14 +154,17 @@ consistent dependencies. Planning still only returns `execute start`, `execute
 stop`, or `none`; it does not inspect supported operations or execute control.
 No scheduler, duplicate-execution protection, or HTTP endpoint exists yet.
 
-An explicit reconciliation execution use case first delegates to planning. A
-`none` decision performs no service operation, while `execute start` and
-`execute stop` delegate to the existing manual-control boundary, which retains
-supported-operation enforcement and returns the canonical control result.
-Reconciliation never selects `restart`; planner and control failures propagate
-without retries. This use case is not exposed through production composition,
-a scheduler, or HTTP. Repeated direct calls may repeat operations until
-duplicate-execution protection is implemented.
+Service-management composition exposes an explicit reconciliation execution
+use case as an on-demand internal capability. It reuses the exact planning and
+manual-control capabilities exposed by the same composition instance, so
+planning and execution share catalog, override, status, and clock behavior,
+while manual control and reconciliation execution share allowlist and controller
+behavior. A `none` decision performs no service operation; `execute start` and
+`execute stop` delegate through existing control and return its canonical
+result. Reconciliation never selects `restart`, and failures propagate without
+retries. Repeated explicit calls are not deduplicated. Execution must not be
+scheduled automatically until duplicate-execution protection exists; no
+scheduler or HTTP endpoint exists yet.
 
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
