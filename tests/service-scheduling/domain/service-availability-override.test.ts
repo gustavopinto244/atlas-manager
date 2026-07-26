@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createServiceAvailabilityOverride,
+  isSameServiceAvailabilityOverride,
   SERVICE_AVAILABILITY_OVERRIDE_KINDS,
   type ServiceAvailabilityOverride,
 } from "../../../src/service-scheduling/domain/service-availability-override.js";
@@ -68,6 +69,49 @@ describe("ServiceAvailabilityOverride", () => {
     expect(createServiceAvailabilityOverride(input, referenceInstant)).toEqual(
       createServiceAvailabilityOverride(input, referenceInstant),
     );
+  });
+
+  it("compares canonical override values without using identity or time", () => {
+    const first = createServiceAvailabilityOverride(
+      { kind: "keep_available", expiresAt: canonicalExpiration },
+      referenceInstant,
+    );
+    const equal = createServiceAvailabilityOverride(
+      { expiresAt: canonicalExpiration, kind: "keep_available" },
+      referenceInstant,
+    );
+    const differentKind = createServiceAvailabilityOverride(
+      { kind: "suspend_schedule", expiresAt: canonicalExpiration },
+      referenceInstant,
+    );
+    const differentExpiration = createServiceAvailabilityOverride(
+      {
+        kind: "keep_available",
+        expiresAt: "2026-08-01T14:00:00.000Z",
+      },
+      referenceInstant,
+    );
+    const dateNowSpy = vi.spyOn(Date, "now");
+
+    try {
+      expect(isSameServiceAvailabilityOverride(first, first)).toBe(true);
+      expect(first).not.toBe(equal);
+      expect(isSameServiceAvailabilityOverride(first, equal)).toBe(true);
+      expect(isSameServiceAvailabilityOverride(first, differentKind)).toBe(
+        false,
+      );
+      expect(
+        isSameServiceAvailabilityOverride(first, differentExpiration),
+      ).toBe(false);
+      expect(dateNowSpy).not.toHaveBeenCalled();
+      expect(first).toEqual({
+        kind: "keep_available",
+        expiresAt: canonicalExpiration,
+      });
+      expect(equal).toEqual(first);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   it.each([

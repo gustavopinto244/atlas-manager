@@ -48,6 +48,9 @@ function createStore(
   readonly removeByServiceId: ReturnType<
     typeof vi.fn<ServiceAvailabilityOverrideStore["removeByServiceId"]>
   >;
+  readonly removeByServiceIdIfMatches: ReturnType<
+    typeof vi.fn<ServiceAvailabilityOverrideStore["removeByServiceIdIfMatches"]>
+  >;
 } {
   return {
     findByServiceId: vi
@@ -59,6 +62,9 @@ function createStore(
     removeByServiceId: vi
       .fn<ServiceAvailabilityOverrideStore["removeByServiceId"]>()
       .mockRejectedValue(new Error("remove must not be called")),
+    removeByServiceIdIfMatches: vi
+      .fn<ServiceAvailabilityOverrideStore["removeByServiceIdIfMatches"]>()
+      .mockRejectedValue(new Error("conditional remove must not be called")),
   };
 }
 

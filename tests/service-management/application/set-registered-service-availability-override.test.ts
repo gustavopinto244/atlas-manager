@@ -44,6 +44,9 @@ function createStore(): ServiceAvailabilityOverrideStore & {
   readonly removeByServiceId: ReturnType<
     typeof vi.fn<ServiceAvailabilityOverrideStore["removeByServiceId"]>
   >;
+  readonly removeByServiceIdIfMatches: ReturnType<
+    typeof vi.fn<ServiceAvailabilityOverrideStore["removeByServiceIdIfMatches"]>
+  >;
 } {
   return {
     findByServiceId: vi
@@ -53,6 +56,9 @@ function createStore(): ServiceAvailabilityOverrideStore & {
     removeByServiceId: vi
       .fn<ServiceAvailabilityOverrideStore["removeByServiceId"]>()
       .mockResolvedValue(),
+    removeByServiceIdIfMatches: vi
+      .fn<ServiceAvailabilityOverrideStore["removeByServiceIdIfMatches"]>()
+      .mockResolvedValue(Object.freeze({ kind: "not_removed" })),
   };
 }
 
