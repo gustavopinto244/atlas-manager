@@ -14,59 +14,82 @@ export const LOG_LEVELS = [
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
-const schedulerCursorFilePathSchema = z
-  .string()
-  .superRefine((value, context) => {
-    if (value.length === 0) {
-      context.addIssue({
-        code: "custom",
-        message: "must not be empty",
-      });
-      return;
-    }
+const persistenceFilePathSchema = z.string().superRefine((value, context) => {
+  if (value.length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "must not be empty",
+    });
+    return;
+  }
 
-    if (value.trim() !== value) {
-      context.addIssue({
-        code: "custom",
-        message: "must not contain surrounding whitespace",
-      });
-      return;
-    }
+  if (value.trim() !== value) {
+    context.addIssue({
+      code: "custom",
+      message: "must not contain surrounding whitespace",
+    });
+    return;
+  }
 
-    if (!isAbsolute(value)) {
+  if (!isAbsolute(value)) {
+    context.addIssue({
+      code: "custom",
+      message: "must be an absolute path",
+    });
+  }
+});
+
+const environmentSchema = z
+  .object({
+    HOST: z
+      .string()
+      .trim()
+      .min(1, { error: "must not be empty" })
+      .default("127.0.0.1"),
+    PORT: z.coerce
+      .number({ error: "must be a number" })
+      .int({ error: "must be an integer" })
+      .min(1, { error: "must be between 1 and 65535" })
+      .max(65_535, { error: "must be between 1 and 65535" })
+      .default(3000),
+    LOG_LEVEL: z
+      .enum(LOG_LEVELS, {
+        error: `must be one of: ${LOG_LEVELS.join(", ")}`,
+      })
+      .default("info"),
+    SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
+      persistenceFilePathSchema.optional(),
+    SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
+      persistenceFilePathSchema.optional(),
+  })
+  .superRefine((environment, context) => {
+    if (
+      environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE !==
+        undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE ===
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE
+    ) {
       context.addIssue({
         code: "custom",
-        message: "must be an absolute path",
+        path: ["SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE"],
+        message: "must differ from the scheduler cursor file path",
       });
     }
   });
 
-const environmentSchema = z.object({
-  HOST: z
-    .string()
-    .trim()
-    .min(1, { error: "must not be empty" })
-    .default("127.0.0.1"),
-  PORT: z.coerce
-    .number({ error: "must be a number" })
-    .int({ error: "must be an integer" })
-    .min(1, { error: "must be between 1 and 65535" })
-    .max(65_535, { error: "must be between 1 and 65535" })
-    .default(3000),
-  LOG_LEVEL: z
-    .enum(LOG_LEVELS, {
-      error: `must be one of: ${LOG_LEVELS.join(", ")}`,
-    })
-    .default("info"),
-  SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
-    schedulerCursorFilePathSchema.optional(),
-});
+function isValidPersistenceFilePath(value: string): boolean {
+  return value.length > 0 && value.trim() === value && isAbsolute(value);
+}
 
 export interface EnvironmentConfig {
   readonly host: string;
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
+  readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
 }
 
 export function parseEnvironment(
@@ -84,6 +107,13 @@ export function parseEnvironment(
       : {
           serviceAvailabilityReconciliationSchedulerCursorFilePath:
             parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
+        }),
+    ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE ===
+    undefined
+      ? {}
+      : {
+          serviceAvailabilityReconciliationOccurrenceClaimFilePath:
+            parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
         }),
   };
 }
