@@ -196,6 +196,27 @@ default store does not survive restarts, coordinate multiple processes,
 guarantee successful execution, or provide distributed exactly-once behavior.
 No scheduler, occurrence generation, HTTP endpoint, or persistence exists.
 
+A file-backed occurrence claim-store adapter can persist the same claim-only
+semantics in a strictly validated version-one JSON file. A missing file
+represents no claims. Existing entries are reconstructed through the canonical
+occurrence model and must already be unique and ordered by scheduled instant,
+service ID, then operation. New claims rewrite the complete ordered set through
+an owner-restricted temporary file in the target directory followed by atomic
+replacement. Claim operations are serialized within one adapter instance,
+equivalent later occurrences return `duplicate`, and reconstructing an adapter
+from the same file preserves claims across normal process restarts. Public
+errors expose neither paths nor occurrence contents.
+
+Claims are persisted before service control, providing at-most-once claim
+semantics rather than exactly-once service execution. A process exit after a
+claim is persisted but before control completes can therefore suppress a later
+retry. Version-one claims are permanent: there is no release, expiration,
+pruning, compaction, or rotation, so the file may grow over time. The adapter
+does not provide cross-process locking or distributed claim guarantees; two
+adapter instances writing the same file may race. It is not yet selected by
+production composition, and introduces no environment configuration, HTTP
+endpoint, logging, or metrics.
+
 The scheduling domain can calculate actual policy expectation changes over a
 bounded UTC interval with `(fromExclusive, toInclusive]` semantics. Results are
 immutable `became_available` and `became_unavailable` transitions with canonical
