@@ -12,6 +12,7 @@ import type { ServiceAvailabilityOverrideStore } from "../application/ports/serv
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../application/ports/service-availability-reconciliation-scheduler-timer.js";
+import { PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims } from "../application/prune-completed-service-availability-reconciliation-occurrence-claims.js";
 import { PruneExpiredRegisteredServiceAvailabilityOverrides } from "../application/prune-expired-registered-service-availability-overrides.js";
 import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
@@ -48,6 +49,7 @@ export interface ServiceManagementCapabilities {
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly pruneExpiredRegisteredServiceAvailabilityOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides;
+  readonly pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
@@ -116,6 +118,11 @@ export function createServiceManagement(
       overrideStore,
       clock,
     );
+  const pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims =
+    new PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims(
+      schedulerCursorStore,
+      occurrenceClaimStore,
+    );
   const controlRegisteredService = new ControlRegisteredService(
     catalog,
     controller,
@@ -153,6 +160,7 @@ export function createServiceManagement(
       schedulerCursorStore,
       runServiceAvailabilityReconciliationTick,
       pruneExpiredRegisteredServiceAvailabilityOverrides,
+      pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     );
   const serviceAvailabilityReconciliationSchedulerLoop =
     new ServiceAvailabilityReconciliationSchedulerLoop(
@@ -183,6 +191,7 @@ export function createServiceManagement(
         clock,
       ),
     pruneExpiredRegisteredServiceAvailabilityOverrides,
+    pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     planRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliationOccurrence,

@@ -1,6 +1,10 @@
 import type { Clock } from "./ports/clock.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "./ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type {
+  PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
+  PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult,
+} from "./prune-completed-service-availability-reconciliation-occurrence-claims.js";
+import type {
   PruneExpiredRegisteredServiceAvailabilityOverrides,
   PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult,
 } from "./prune-expired-registered-service-availability-overrides.js";
@@ -39,18 +43,21 @@ export type ServiceAvailabilityReconciliationSchedulerCycleResult =
       cursor: ServiceAvailabilityReconciliationSchedulerCursor | null;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
       pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
+      occurrenceClaimPruningResult: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult;
     }>
   | Readonly<{
       kind: "advanced";
       cursor: ServiceAvailabilityReconciliationSchedulerCursor;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
       pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
+      occurrenceClaimPruningResult: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult;
     }>
   | Readonly<{
       kind: "conflict";
       cursor: ServiceAvailabilityReconciliationSchedulerCursor | null;
       report: readonly ServiceAvailabilityReconciliationTickServiceResult[];
       pruningReport: readonly PruneExpiredRegisteredServiceAvailabilityOverridesServiceResult[];
+      occurrenceClaimPruningResult: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaimsResult;
     }>;
 
 export class RunServiceAvailabilityReconciliationSchedulerCycle {
@@ -59,6 +66,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
     private readonly cursorStore: ServiceAvailabilityReconciliationSchedulerCursorStore,
     private readonly runTick: RunServiceAvailabilityReconciliationTick,
     private readonly pruneExpiredOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides,
+    private readonly pruneCompletedOccurrenceClaims: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
   ) {}
 
   public async execute(): Promise<ServiceAvailabilityReconciliationSchedulerCycleResult> {
@@ -95,6 +103,8 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
     const toInclusive = new Date(toTimestamp);
     const report = await this.runTick.execute(fromExclusive, toInclusive);
     const pruningReport = await this.pruneExpiredOverrides.execute();
+    const occurrenceClaimPruningResult =
+      await this.pruneCompletedOccurrenceClaims.execute();
 
     if (
       isIncompleteReconciliationReport(report) ||
@@ -105,6 +115,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
         cursor: currentCursor,
         report,
         pruningReport,
+        occurrenceClaimPruningResult,
       });
     }
 
@@ -123,6 +134,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
         cursor: advanceResult.cursor,
         report,
         pruningReport,
+        occurrenceClaimPruningResult,
       });
     }
 
@@ -131,6 +143,7 @@ export class RunServiceAvailabilityReconciliationSchedulerCycle {
       cursor: advanceResult.cursor,
       report,
       pruningReport,
+      occurrenceClaimPruningResult,
     });
   }
 }

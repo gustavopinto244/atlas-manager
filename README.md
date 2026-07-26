@@ -385,10 +385,8 @@ operation queue as claiming.
 
 Pruning uses no system clock, configurable retention duration, or persisted
 watermark. A direct caller may claim an older occurrence again after it has
-been pruned. The capability is not integrated into scheduler cycles,
-composition, startup, shutdown, HTTP, logging, or metrics. Claim-and-prune
-ordering is not coordinated across independent file-store instances or
-processes.
+been pruned. Claim-and-prune ordering is not coordinated across independent
+file-store instances or processes.
 
 An application use case can coordinate completed occurrence-claim pruning with
 the authoritative scheduler cursor store. Each execution reads the cursor once.
@@ -398,11 +396,9 @@ the claim store, and its exact frozen `pruned` or `unchanged` result is returned
 Cursor-store and claim-store failures propagate unchanged.
 
 The orchestration use case does not create claims, advance the cursor, use a
-system clock or configurable retention duration, or cache cursor state. It is
-not yet constructed through service-management composition or invoked by
-scheduler cycles, loops, startup, shutdown, or HTTP delivery. Cursor reading and
-claim pruning remain separate port operations without a cross-store transaction
-or cross-process guarantee.
+system clock or configurable retention duration, or cache cursor state. Cursor
+reading and claim pruning remain separate port operations without a cross-store
+transaction or cross-process guarantee.
 
 Persistent occurrence claims are written before service control, so a crash
 after claim persistence can suppress a later retry. This provides at-most-once
@@ -417,29 +413,31 @@ An explicit cursor-aware scheduler cycle reads one cursor and one clock value,
 floors the clock to a canonical UTC minute, and runs at most one bounded tick.
 Empty state bootstraps one minute; existing state catches up from the cursor
 with an eight-day maximum per cycle. Every non-idle cycle runs reconciliation
-first and expired-override pruning second, then carries both exact reports in
-its internal result. Idle cycles run neither operation. Resolved incomplete
-reconciliation still allows pruning to run, while rejected reconciliation
-prevents it. A rejected pruning execution propagates and prevents cursor
+first, expired-override pruning second, and completed occurrence-claim pruning
+third. Its internal result carries the exact reconciliation report, override
+pruning report, and claim-pruning result. Idle cycles run none of these
+operations. Resolved incomplete reconciliation or override-pruning reports
+still allow completed claim pruning through the previously authoritative
+cursor. Rejected reconciliation prevents both maintenance operations; rejected
+override pruning prevents claim pruning; rejected claim pruning prevents cursor
 advancement.
 
-Cursor advancement requires both reports to contain no failures. A per-service
-pruning `failed` result therefore produces `incomplete`, while `not_removed` is
-a complete outcome that safely preserves changed authoritative state. Complete
-reports use atomic compare-and-set advancement and return conflicts without
-retry. Pruning that succeeded before a cursor conflict is not rolled back. The
-cycle introduces no pruning-specific timer, configuration, HTTP endpoint,
-logging, metrics, or retry.
+Cursor advancement requires both reports to contain no failures and completed
+claim pruning to resolve. `no_cursor`, `pruned`, and `unchanged` are all
+successful claim-pruning outcomes. A first cycle therefore retains claims from
+its current interval: claim pruning independently reads the still-missing
+authoritative cursor, returns `no_cursor`, and the candidate cursor advances
+only afterward. Newly completed claims become eligible during a later non-idle
+cycle. No candidate cursor or interval timestamp is passed into pruning.
+Successful maintenance is not rolled back after a cursor conflict.
 
 Service-management composition exposes the cursor-aware cycle as an explicit
-internal capability. It constructs and exposes one expired-override pruning use
-case, then injects that exact instance into the cycle alongside the exact shared
-application clock and reconciliation tick. Pruning shares the composed catalog,
-override store, list use case, and clock; the pruning use case independently
-captures its own clock instant after the tick. Callers may inject the existing
-cursor-store port, while the default remains process-local and isolated.
-Repeated calls share cursor progress, and cycle-driven execution shares
-occurrence claims and availability overrides with direct execution.
+internal capability. It constructs and exposes exactly one use case for each
+pruning operation, then injects those exact instances into the cycle alongside
+the shared application clock and reconciliation tick. Completed claim pruning
+shares the exact cursor store used for scheduler progress and the exact
+occurrence claim store used for duplicate protection. Callers may inject the
+existing store ports, while defaults remain process-local and isolated.
 
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
@@ -457,7 +455,8 @@ and availability overrides through the existing dependency graph, while
 default composition instances remain isolated. Composition does not start the
 loop or schedule a timer. Composition construction, startup outside scheduler
 execution, and shutdown do not directly prune; no separate pruning cadence,
-timer, configuration, logging, metrics, or HTTP endpoint exists.
+timer, flag, retention duration, configuration, logging, metrics, or HTTP
+endpoint exists.
 
 The application runtime now creates service-management composition and starts
 its scheduler loop exactly once after the HTTP server reports that it is
