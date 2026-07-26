@@ -175,6 +175,14 @@ storage, claims, locks, or leases. Duplicate-execution prevention is therefore
 not complete, no scheduler loop exists, and reconciliation execution remains
 explicitly invoked.
 
+An occurrence-claim application port defines one atomic `claim` operation, with
+a deterministic in-memory adapter. The first claim for an exact service ID,
+`start` or `stop` operation, and scheduled instant tuple returns `claimed`;
+equivalent later claims return `duplicate`. Claims are atomic and private within
+one store instance, process-local, and have no release or expiration. The store
+executes no service operation, and duplicate-execution protection is not yet
+connected to reconciliation execution. No scheduler loop exists.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
