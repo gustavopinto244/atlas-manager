@@ -12,6 +12,7 @@ import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/se
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../../../src/service-management/application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/application/ports/service-availability-reconciliation-occurrence-claim-store.js";
+import { RunServiceAvailabilityReconciliationTick } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../../../src/service-management/application/set-registered-service-availability-override.js";
 import {
   createServiceManagement,
@@ -120,7 +121,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the ten frozen application capabilities", () => {
+  it("returns exactly the eleven frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -157,6 +158,9 @@ describe("createServiceManagement", () => {
     ).toBeInstanceOf(
       GenerateRegisteredServiceAvailabilityReconciliationOccurrences,
     );
+    expect(
+      capabilities.runServiceAvailabilityReconciliationTick,
+    ).toBeInstanceOf(RunServiceAvailabilityReconciliationTick);
     expect(Object.keys(capabilities)).toEqual([
       "listRegisteredServices",
       "getRegisteredServiceStatus",
@@ -168,6 +172,7 @@ describe("createServiceManagement", () => {
       "executeRegisteredServiceAvailabilityReconciliation",
       "executeRegisteredServiceAvailabilityReconciliationOccurrence",
       "generateRegisteredServiceAvailabilityReconciliationOccurrences",
+      "runServiceAvailabilityReconciliationTick",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
@@ -186,6 +191,8 @@ describe("createServiceManagement", () => {
     expect(capabilities).not.toHaveProperty("overrides");
     expect(capabilities).not.toHaveProperty("environment");
     expect(capabilities).not.toHaveProperty("registeredServiceCatalog");
+    expect(capabilities).not.toHaveProperty("schedulerClock");
+    expect(capabilities).not.toHaveProperty("cursor");
   });
 
   it("keeps application capability references stable per composition", () => {
@@ -232,6 +239,200 @@ describe("createServiceManagement", () => {
     ).not.toBe(
       otherCapabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
     );
+    expect(capabilities.runServiceAvailabilityReconciliationTick).toBe(
+      capabilities.runServiceAvailabilityReconciliationTick,
+    );
+    expect(capabilities.runServiceAvailabilityReconciliationTick).not.toBe(
+      otherCapabilities.runServiceAvailabilityReconciliationTick,
+    );
+  });
+
+  it("injects the exact exposed listing, generation, and occurrence execution instances into the tick", async () => {
+    const service = createConfiguredService("mock", {
+      availabilityPolicy: { mode: "manual" },
+    });
+    const capabilities = createServiceManagement(createEnvironment([service]));
+    const list = vi.spyOn(capabilities.listRegisteredServices, "execute");
+    const generate = vi.spyOn(
+      capabilities.generateRegisteredServiceAvailabilityReconciliationOccurrences,
+      "execute",
+    );
+    const executeOccurrence = vi.spyOn(
+      capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence,
+      "execute",
+    );
+    const fromExclusive = new Date("2026-07-27T11:00:00.000Z");
+    const toInclusive = new Date("2026-07-27T12:00:00.000Z");
+
+    const result =
+      await capabilities.runServiceAvailabilityReconciliationTick.execute(
+        fromExclusive,
+        toInclusive,
+      );
+
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledExactlyOnceWith(
+      service.id,
+      fromExclusive,
+      toInclusive,
+    );
+    expect(executeOccurrence).not.toHaveBeenCalled();
+    expect(result).toEqual([
+      {
+        kind: "completed",
+        serviceId: service.id,
+        occurrenceResults: [],
+      },
+    ]);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result[0])).toBe(true);
+    expect(
+      result[0]?.kind === "completed" &&
+        Object.isFrozen(result[0].occurrenceResults),
+    ).toBe(true);
+  });
+
+  it("shares occurrence claims between direct execution and tick execution", async () => {
+    const service = createConfiguredService("mock", {
+      id: "atlas-api",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const clock = createClock(
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:01.000Z",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const capabilities = createServiceManagement(createEnvironment([service]), {
+      clock,
+      mockStatusConfiguration: [
+        { externalResourceId: service.externalResourceId, state: "stopped" },
+      ],
+    });
+    const occurrence = ServiceAvailabilityReconciliationOccurrence.create({
+      serviceId: service.id,
+      operation: "start",
+      scheduledFor: "2026-07-27T12:00:00.000Z",
+    });
+    const control = vi.spyOn(capabilities.controlRegisteredService, "execute");
+
+    const directResult =
+      await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      );
+    const tickResult =
+      await capabilities.runServiceAvailabilityReconciliationTick.execute(
+        new Date("2026-07-27T11:00:00.000Z"),
+        new Date("2026-07-27T12:00:00.000Z"),
+      );
+
+    expect(directResult.kind).toBe("executed");
+    expect(tickResult).toMatchObject([
+      {
+        kind: "completed",
+        serviceId: service.id,
+        occurrenceResults: [
+          {
+            kind: "completed",
+            result: { kind: "duplicate" },
+          },
+        ],
+      },
+    ]);
+    expect(control).toHaveBeenCalledTimes(1);
+
+    const reverseClock = createClock(
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:01.000Z",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const reverseCapabilities = createServiceManagement(
+      createEnvironment([service]),
+      {
+        clock: reverseClock,
+        mockStatusConfiguration: [
+          { externalResourceId: service.externalResourceId, state: "stopped" },
+        ],
+      },
+    );
+    const reverseControl = vi.spyOn(
+      reverseCapabilities.controlRegisteredService,
+      "execute",
+    );
+
+    const firstTickResult =
+      await reverseCapabilities.runServiceAvailabilityReconciliationTick.execute(
+        new Date("2026-07-27T11:00:00.000Z"),
+        new Date("2026-07-27T12:00:00.000Z"),
+      );
+    const laterDirectResult =
+      await reverseCapabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
+        occurrence,
+      );
+
+    expect(firstTickResult).toMatchObject([
+      {
+        occurrenceResults: [
+          { kind: "completed", result: { kind: "executed" } },
+        ],
+      },
+    ]);
+    expect(laterDirectResult).toEqual({ kind: "duplicate" });
+    expect(reverseControl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps tick claim state isolated between composition instances", async () => {
+    const service = createConfiguredService("mock", {
+      id: "atlas-api",
+      availabilityPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+    });
+    const createComposition = () =>
+      createServiceManagement(createEnvironment([service]), {
+        clock: createClock(
+          "2026-07-27T12:00:00.000Z",
+          "2026-07-27T12:00:01.000Z",
+        ),
+        mockStatusConfiguration: [
+          { externalResourceId: service.externalResourceId, state: "stopped" },
+        ],
+      });
+    const first = createComposition();
+    const second = createComposition();
+    const interval = [
+      new Date("2026-07-27T11:00:00.000Z"),
+      new Date("2026-07-27T12:00:00.000Z"),
+    ] as const;
+
+    const firstResult =
+      await first.runServiceAvailabilityReconciliationTick.execute(...interval);
+    const secondResult =
+      await second.runServiceAvailabilityReconciliationTick.execute(
+        ...interval,
+      );
+
+    expect(firstResult[0]?.kind).toBe("completed");
+    expect(secondResult[0]?.kind).toBe("completed");
+    if (
+      firstResult[0]?.kind !== "completed" ||
+      secondResult[0]?.kind !== "completed"
+    ) {
+      throw new Error("Expected completed tick service results");
+    }
+    expect(firstResult[0].occurrenceResults[0]).toMatchObject({
+      kind: "completed",
+      result: { kind: "executed" },
+    });
+    expect(secondResult[0].occurrenceResults[0]).toMatchObject({
+      kind: "completed",
+      result: { kind: "executed" },
+    });
   });
 
   it("generates ordered occurrences from the same catalog-owned service policy", async () => {

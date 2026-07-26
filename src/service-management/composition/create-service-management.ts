@@ -10,6 +10,7 @@ import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/
 import type { Clock } from "../application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
+import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
 import { DispatchingServiceStatusReader } from "../infrastructure/dispatching-service-status-reader.js";
@@ -43,6 +44,7 @@ export interface ServiceManagementCapabilities {
   readonly executeRegisteredServiceAvailabilityReconciliation: ExecuteRegisteredServiceAvailabilityReconciliation;
   readonly executeRegisteredServiceAvailabilityReconciliationOccurrence: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
   readonly generateRegisteredServiceAvailabilityReconciliationOccurrences: GenerateRegisteredServiceAvailabilityReconciliationOccurrences;
+  readonly runServiceAvailabilityReconciliationTick: RunServiceAvailabilityReconciliationTick;
 }
 
 export interface ServiceManagementCompositionOverrides {
@@ -89,6 +91,7 @@ export function createServiceManagement(
     mock: mockController,
     pm2: pm2Controller,
   });
+  const listRegisteredServices = new ListRegisteredServices(catalog);
   const controlRegisteredService = new ControlRegisteredService(
     catalog,
     controller,
@@ -114,9 +117,15 @@ export function createServiceManagement(
     );
   const generateRegisteredServiceAvailabilityReconciliationOccurrences =
     new GenerateRegisteredServiceAvailabilityReconciliationOccurrences(catalog);
+  const runServiceAvailabilityReconciliationTick =
+    new RunServiceAvailabilityReconciliationTick(
+      listRegisteredServices,
+      generateRegisteredServiceAvailabilityReconciliationOccurrences,
+      executeRegisteredServiceAvailabilityReconciliationOccurrence,
+    );
 
   return Object.freeze({
-    listRegisteredServices: new ListRegisteredServices(catalog),
+    listRegisteredServices,
     getRegisteredServiceStatus: new GetRegisteredServiceStatus(
       catalog,
       statusReader,
@@ -141,6 +150,7 @@ export function createServiceManagement(
     executeRegisteredServiceAvailabilityReconciliation,
     executeRegisteredServiceAvailabilityReconciliationOccurrence,
     generateRegisteredServiceAvailabilityReconciliationOccurrences,
+    runServiceAvailabilityReconciliationTick,
   });
 }
 
