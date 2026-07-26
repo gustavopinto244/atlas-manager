@@ -390,6 +390,20 @@ composition, startup, shutdown, HTTP, logging, or metrics. Claim-and-prune
 ordering is not coordinated across independent file-store instances or
 processes.
 
+An application use case can coordinate completed occurrence-claim pruning with
+the authoritative scheduler cursor store. Each execution reads the cursor once.
+Missing cursor state returns frozen `no_cursor` without accessing the claim
+store. When a cursor exists, the exact canonical object is passed unchanged to
+the claim store, and its exact frozen `pruned` or `unchanged` result is returned.
+Cursor-store and claim-store failures propagate unchanged.
+
+The orchestration use case does not create claims, advance the cursor, use a
+system clock or configurable retention duration, or cache cursor state. It is
+not yet constructed through service-management composition or invoked by
+scheduler cycles, loops, startup, shutdown, or HTTP delivery. Cursor reading and
+claim pruning remain separate port operations without a cross-store transaction
+or cross-process guarantee.
+
 Persistent occurrence claims are written before service control, so a crash
 after claim persistence can suppress a later retry. This provides at-most-once
 claiming, not exactly-once service execution. Deployments using persistence
