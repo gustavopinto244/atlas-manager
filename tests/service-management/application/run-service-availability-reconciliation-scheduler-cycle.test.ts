@@ -514,7 +514,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       cursor,
       report,
       pruningReport,
-      occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
+      occurrenceClaimPruningResult: null,
     });
     expect(result.kind === "incomplete" && result.report).toBe(report);
     expect(result.kind === "incomplete" && result.pruningReport).toBe(
@@ -526,7 +526,7 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
     expect(Object.isFrozen(failure)).toBe(false);
     expect(store.advance).not.toHaveBeenCalled();
     expect(pruneExecute).toHaveBeenCalledOnce();
-    expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
   });
 
   it("returns one incomplete result when both reports contain failures", async () => {
@@ -563,11 +563,11 @@ describe("RunServiceAvailabilityReconciliationSchedulerCycle", () => {
       cursor: null,
       report,
       pruningReport,
-      occurrenceClaimPruningResult: defaultOccurrenceClaimPruningResult,
+      occurrenceClaimPruningResult: null,
     });
     expect(store.advance).not.toHaveBeenCalled();
     expect(pruneExecute).toHaveBeenCalledOnce();
-    expect(occurrenceClaimPruneExecute).toHaveBeenCalledOnce();
+    expect(occurrenceClaimPruneExecute).not.toHaveBeenCalled();
   });
 
   it("propagates tick rejection without advancing", async () => {
