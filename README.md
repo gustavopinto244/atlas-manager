@@ -241,6 +241,15 @@ processing stays sequential and failure isolation is unchanged. No clock,
 cursor, timer, automatic loop, HTTP endpoint, logging, retry, or persistence is
 introduced.
 
+A canonical immutable scheduler cursor records the latest successfully covered
+UTC minute. Its process-local in-memory store starts empty and advances through
+an atomic compare-and-set operation: equivalent expected values may move the
+cursor strictly forward, while stale writers receive frozen `conflict` results.
+Concurrent stale writers cannot all succeed within one store instance, and
+separate stores remain isolated. No tick coordination, current-time clock,
+automatic loop, composition integration, HTTP endpoint, retry, or persistence
+is connected to this cursor boundary yet.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
