@@ -155,8 +155,24 @@ adapter performs its authoritative read, comparison, and optional atomic
 replacement inside the existing per-instance operation queue. A stale expected
 value therefore cannot remove a later replacement made through that instance.
 Conditional removal does not evaluate expiration, and expired-override pruning
-is not yet executed automatically. Independent adapter instances still have no
+is not executed automatically. Independent adapter instances still have no
 cross-process compare-and-remove guarantee.
+
+An application use case can prune expired overrides for the services returned
+by the registered-service catalog. After listing succeeds, one clock instant is
+captured and validated for the complete execution. Services are processed
+sequentially in catalog order using the same inclusive expiration boundary as
+effective-availability evaluation. Missing and active overrides cause no write;
+expired overrides are removed only through atomic conditional removal. A
+concurrent replacement produces `not_removed` and remains preserved. Read and
+removal failures are retained in frozen per-service results without preventing
+later services from being processed, while results expose no override contents.
+Persisted entries for unregistered service IDs are not inspected.
+
+The pruning use case is not yet integrated into scheduler execution, startup,
+HTTP delivery, or any background cleanup. It introduces no logging or metrics.
+For the file-backed store, compare-and-remove remains coordinated only within
+one adapter instance and provides no cross-process guarantee.
 
 An application query resolves a registered service through the catalog, reads
 its stored override, obtains one instant from the injected clock, and delegates

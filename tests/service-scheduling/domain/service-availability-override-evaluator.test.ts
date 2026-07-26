@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ServiceAvailabilityEvaluationError } from "../../../src/service-scheduling/domain/service-availability-evaluation-error.js";
-import { evaluateServiceAvailabilityWithOverride } from "../../../src/service-scheduling/domain/service-availability-override-evaluator.js";
+import {
+  evaluateServiceAvailabilityWithOverride,
+  isServiceAvailabilityOverrideExpiredAt,
+} from "../../../src/service-scheduling/domain/service-availability-override-evaluator.js";
 import {
   createServiceAvailabilityOverride,
   type ServiceAvailabilityOverride,
@@ -51,6 +54,57 @@ function evaluateRuntimeInstant(
 ): void {
   evaluateServiceAvailabilityWithOverride(policy, override, instant as Date);
 }
+
+describe("isServiceAvailabilityOverrideExpiredAt", () => {
+  it.each(["keep_available", "suspend_schedule"] as const)(
+    "uses the inclusive expiration boundary for %s",
+    (kind) => {
+      const override = createOverride(kind, "2026-08-03T12:00:00.000Z");
+
+      expect(
+        isServiceAvailabilityOverrideExpiredAt(
+          override,
+          new Date("2026-08-03T11:59:59.999Z"),
+        ),
+      ).toBe(false);
+      expect(
+        isServiceAvailabilityOverrideExpiredAt(
+          override,
+          new Date("2026-08-03T12:00:00.000Z"),
+        ),
+      ).toBe(true);
+      expect(
+        isServiceAvailabilityOverrideExpiredAt(
+          override,
+          new Date("2026-08-03T12:00:00.001Z"),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    undefined,
+    null,
+    "2026-08-03T12:00:00.000Z",
+    0,
+    {},
+    [],
+    new Date(Number.NaN),
+  ])("preserves safe invalid-instant errors for %#", (instant) => {
+    expect(() =>
+      isServiceAvailabilityOverrideExpiredAt(
+        createOverride("keep_available"),
+        instant as Date,
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        name: "ServiceAvailabilityEvaluationError",
+        code: "invalid_service_availability_instant",
+        message: "Invalid service availability instant",
+      }),
+    );
+  });
+});
 
 describe("evaluateServiceAvailabilityWithOverride", () => {
   it.each([

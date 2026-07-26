@@ -6,11 +6,9 @@ import {
   type ServiceAvailabilityExpectation,
 } from "./service-availability-policy-evaluator.js";
 
-export function evaluateServiceAvailabilityWithOverride(
-  policy: ServiceAvailabilityPolicy,
-  override: ServiceAvailabilityOverride | null,
+export function getServiceAvailabilityEvaluationTimestamp(
   instant: Date,
-): ServiceAvailabilityExpectation {
+): number {
   if (!(instant instanceof Date)) {
     throw new ServiceAvailabilityEvaluationError();
   }
@@ -21,9 +19,33 @@ export function evaluateServiceAvailabilityWithOverride(
     throw new ServiceAvailabilityEvaluationError();
   }
 
+  return evaluationTimestamp;
+}
+
+export function isServiceAvailabilityOverrideExpiredAt(
+  override: ServiceAvailabilityOverride,
+  instant: Date,
+): boolean {
+  return isServiceAvailabilityOverrideExpiredAtTimestamp(
+    override,
+    getServiceAvailabilityEvaluationTimestamp(instant),
+  );
+}
+
+export function evaluateServiceAvailabilityWithOverride(
+  policy: ServiceAvailabilityPolicy,
+  override: ServiceAvailabilityOverride | null,
+  instant: Date,
+): ServiceAvailabilityExpectation {
+  const evaluationTimestamp =
+    getServiceAvailabilityEvaluationTimestamp(instant);
+
   if (
     override === null ||
-    evaluationTimestamp >= Date.parse(override.expiresAt)
+    isServiceAvailabilityOverrideExpiredAtTimestamp(
+      override,
+      evaluationTimestamp,
+    )
   ) {
     return evaluateServiceAvailabilityPolicy(
       policy,
@@ -41,4 +63,11 @@ export function evaluateServiceAvailabilityWithOverride(
     case "suspend_schedule":
       return "manual";
   }
+}
+
+function isServiceAvailabilityOverrideExpiredAtTimestamp(
+  override: ServiceAvailabilityOverride,
+  evaluationTimestamp: number,
+): boolean {
+  return evaluationTimestamp >= Date.parse(override.expiresAt);
 }
