@@ -183,6 +183,18 @@ one store instance, process-local, and have no release or expiration. The store
 executes no service operation, and duplicate-execution protection is not yet
 connected to reconciliation execution. No scheduler loop exists.
 
+A claim-aware occurrence execution use case accepts one canonical occurrence,
+plans before claiming, and proceeds only when the planned operation exactly
+matches the occurrence operation. Non-applicable occurrences return `none`
+without consuming a claim; duplicates return `duplicate` without control.
+Successful claims delegate the exact occurrence service and operation through
+existing registered-service control and preserve its canonical result. Control
+failures leave claims consumed, with no retry or release, providing process-local
+at-most-once execution-attempt semantics. This does not guarantee successful
+execution, survive process restarts, or provide distributed exactly-once
+behavior. The use case is not in production composition, and no scheduler loop
+or HTTP endpoint exists.
+
 Implicit current-time acquisition, environment or registered-service
 configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
