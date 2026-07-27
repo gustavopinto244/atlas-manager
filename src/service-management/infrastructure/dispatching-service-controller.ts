@@ -6,6 +6,7 @@ export interface DispatchingServiceControllerDependencies {
   readonly mock: ServiceController;
   readonly pm2: ServiceController;
   readonly docker: ServiceController;
+  readonly "docker-compose"?: ServiceController;
 }
 
 export class DispatchingServiceControllerError extends Error {
@@ -21,6 +22,7 @@ export class DispatchingServiceController implements ServiceController {
   private readonly mockController: ServiceController;
   private readonly pm2Controller: ServiceController;
   private readonly dockerController: ServiceController;
+  private readonly composeController: ServiceController;
 
   public constructor(dependencies: DispatchingServiceControllerDependencies) {
     if (
@@ -34,6 +36,8 @@ export class DispatchingServiceController implements ServiceController {
     this.mockController = dependencies.mock;
     this.pm2Controller = dependencies.pm2;
     this.dockerController = dependencies.docker;
+    this.composeController =
+      dependencies["docker-compose"] ?? this.dockerController;
     Object.freeze(this);
   }
 
@@ -48,6 +52,8 @@ export class DispatchingServiceController implements ServiceController {
         return this.pm2Controller.execute(service, operation);
       case "docker":
         return this.dockerController.execute(service, operation);
+      case "docker-compose":
+        return this.composeController.execute(service, operation);
       default:
         return Promise.reject(new DispatchingServiceControllerError());
     }

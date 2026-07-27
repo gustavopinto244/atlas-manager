@@ -6,6 +6,7 @@ import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../../../src
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../../../src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../../../src/service-management/application/get-registered-service-effective-availability.js";
+import { GetRegisteredServiceLogs } from "../../../src/service-management/application/get-registered-service-logs.js";
 import { GetRegisteredServiceStatus } from "../../../src/service-management/application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
@@ -148,7 +149,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the fifteen frozen application capabilities", () => {
+  it("returns exactly the sixteen frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -159,6 +160,9 @@ describe("createServiceManagement", () => {
     );
     expect(capabilities.controlRegisteredService).toBeInstanceOf(
       ControlRegisteredService,
+    );
+    expect(capabilities.getRegisteredServiceLogs).toBeInstanceOf(
+      GetRegisteredServiceLogs,
     );
     expect(
       capabilities.setRegisteredServiceAvailabilityOverride,
@@ -206,6 +210,7 @@ describe("createServiceManagement", () => {
       "listRegisteredServices",
       "getRegisteredServiceStatus",
       "controlRegisteredService",
+      "getRegisteredServiceLogs",
       "setRegisteredServiceAvailabilityOverride",
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",

@@ -223,6 +223,7 @@ describe("InMemoryRegisteredServiceCatalog", () => {
         timezone: null,
         schedule: null,
       },
+      managementConfiguration: null,
     };
 
     expectCatalogError([unvalidatedService], "invalid_registered_service");

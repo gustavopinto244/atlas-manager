@@ -447,6 +447,29 @@ All values are finite, non-negative, and validated before model construction.
 Stopped containers do not produce a resource snapshot; instead, the resource
 usage is represented as unavailable with reason `container_not_running`.
 
+### Docker Compose managed service
+
+A registered service whose management adapter is `docker-compose`. A Compose
+managed service represents an entire Compose project as one resource, not
+individual Compose services. It requires adapter-specific management
+configuration with an absolute `composeFile` path inside the configured
+`projectDirectory`.
+
+### Compose project target
+
+The configured external resource identifier for a Docker Compose registered
+service. This is the Compose project name and must be a canonical string with
+no control characters or surrounding whitespace.
+
+### Controlled service logs
+
+An application capability for bounded log retrieval from registered Docker
+resources. Logs are accessed through the `readLogs` supported operation and
+return an immutable batch with separate stdout and stderr lines. Content is
+normalized: ANSI escape sequences and control characters are removed, line
+lengths are capped, and output is bounded by line count and byte limits. Log
+streaming and follow mode are not supported. No HTTP log endpoint exists.
+
 ## Process and operating-system terms
 
 ### PM2 process

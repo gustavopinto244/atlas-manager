@@ -6,11 +6,18 @@ import {
 import { ServiceAvailabilityPolicyValidationError } from "../../service-scheduling/domain/service-availability-policy-validation-error.js";
 import { ServiceScheduleTimezoneValidationError } from "../../service-scheduling/domain/service-schedule-timezone.js";
 import { ServiceScheduleValidationError } from "../../service-scheduling/domain/service-schedule-validation-error.js";
+import {
+  validateDockerComposeManagementConfiguration,
+  type ManagementConfiguration,
+  type DockerComposeManagementConfiguration,
+  ManagementConfigurationValidationError,
+} from "./management-configuration.js";
 
 export const SERVICE_MANAGEMENT_ADAPTERS = Object.freeze([
   "mock",
   "pm2",
   "docker",
+  "docker-compose",
 ] as const);
 
 export type ServiceManagementAdapter =
@@ -18,6 +25,7 @@ export type ServiceManagementAdapter =
 
 export const SUPPORTED_SERVICE_OPERATIONS = Object.freeze([
   "readStatus",
+  "readLogs",
   "start",
   "stop",
   "restart",
@@ -32,7 +40,8 @@ export type RegisteredServiceValidationErrorCode =
   | "invalid_management_adapter"
   | "invalid_external_resource_id"
   | "invalid_supported_operations"
-  | "invalid_availability_policy";
+  | "invalid_availability_policy"
+  | "invalid_management_configuration";
 
 export class RegisteredServiceValidationError extends Error {
   public override readonly name = "RegisteredServiceValidationError";
@@ -51,6 +60,7 @@ export interface CreateRegisteredServiceInput {
   readonly externalResourceId: string;
   readonly supportedOperations: readonly string[];
   readonly availabilityPolicy: unknown;
+  readonly managementConfiguration?: ManagementConfiguration;
 }
 
 export class RegisteredService {
@@ -61,6 +71,7 @@ export class RegisteredService {
     public readonly externalResourceId: string,
     public readonly supportedOperations: readonly SupportedServiceOperation[],
     public readonly availabilityPolicy: ServiceAvailabilityPolicy,
+    public readonly managementConfiguration: DockerComposeManagementConfiguration | null,
   ) {
     Object.freeze(this);
   }
@@ -80,6 +91,10 @@ export class RegisteredService {
     const availabilityPolicy = validateAvailabilityPolicy(
       input.availabilityPolicy,
     );
+    const managementConfiguration = validateAndGetManagementConfiguration(
+      managementAdapter,
+      input.managementConfiguration,
+    );
 
     return new RegisteredService(
       id,
@@ -88,8 +103,41 @@ export class RegisteredService {
       externalResourceId,
       supportedOperations,
       availabilityPolicy,
+      managementConfiguration,
     );
   }
+}
+
+function validateAndGetManagementConfiguration(
+  adapter: ServiceManagementAdapter,
+  config: ManagementConfiguration | undefined,
+): DockerComposeManagementConfiguration | null {
+  if (adapter === "docker-compose") {
+    if (config === undefined) {
+      throw new RegisteredServiceValidationError(
+        "invalid_management_configuration",
+      );
+    }
+
+    try {
+      return validateDockerComposeManagementConfiguration(config);
+    } catch (error) {
+      if (error instanceof ManagementConfigurationValidationError) {
+        throw new RegisteredServiceValidationError(
+          "invalid_management_configuration",
+        );
+      }
+      throw error;
+    }
+  }
+
+  if (config !== undefined) {
+    throw new RegisteredServiceValidationError(
+      "invalid_management_configuration",
+    );
+  }
+
+  return null;
 }
 
 function validateAvailabilityPolicy(input: unknown): ServiceAvailabilityPolicy {

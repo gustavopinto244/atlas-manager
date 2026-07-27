@@ -172,18 +172,24 @@ recovery boundaries.
 
 Manage approved Docker resources through controlled project-level operations.
 
-### Planned scope
+### Delivered scope
 
-- Docker container registration;
-- container status;
-- start, stop, and restart operations;
-- Docker health information;
-- limited approved logs;
-- Docker-backed registered services;
-- Docker service scheduling;
-- dependency relationships involving Docker resources;
-- controlled Docker adapter;
-- safe timeout and error handling.
+- registered Docker containers with health, resource details, and control;
+- registered Docker Compose projects with aggregate status and whole-project control;
+- controlled logs for Docker containers and Compose projects;
+- safe no-shell Docker CLI execution with finite timeouts and bounded output;
+- availability scheduling integration with file-backed scheduler compatibility;
+- adapter-specific management configuration validation;
+- dispatching and composition integration.
+
+### Remaining scope
+
+- dependency graphs involving Docker resources;
+- dependency-aware orchestration;
+- readiness confirmation for dependent services;
+- circular-dependency detection;
+- Compose profiles;
+- v0.5 hardening, acceptance matrix, and milestone readiness.
 
 Atlas Manager is not intended to become a generic unrestricted Docker
 administration platform.
