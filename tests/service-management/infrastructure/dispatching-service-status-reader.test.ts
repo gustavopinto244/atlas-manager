@@ -11,7 +11,7 @@ import {
 } from "../../../src/service-management/infrastructure/dispatching-service-status-reader.js";
 
 function createService(
-  managementAdapter: "mock" | "pm2" | "docker",
+  managementAdapter: "mock" | "pm2" | "docker" | "docker-compose",
 ): RegisteredService {
   return RegisteredService.create({
     id: `${managementAdapter}-service`,
@@ -50,12 +50,14 @@ describe("DispatchingServiceStatusReader", () => {
       const mock = createReader("unknown");
       const pm2 = createReader("unknown");
       const docker = createReader("unknown");
+      const compose = createReader();
       const dispatcher = new DispatchingServiceStatusReader({
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
-      const readers = { mock, pm2, docker };
+      const readers = { mock, pm2, docker, "docker-compose": compose };
       const selectedReader = readers[managementAdapter];
       const nonSelectedReader1 = readers[nonSelectedAdapter1];
       const nonSelectedReader2 = readers[nonSelectedAdapter2];
@@ -75,10 +77,12 @@ describe("DispatchingServiceStatusReader", () => {
       const mock = createReader(state);
       const pm2 = createReader("running");
       const docker = createReader("running");
+      const compose = createReader();
       const dispatcher = new DispatchingServiceStatusReader({
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
 
       await expect(dispatcher.read(createService("mock"))).resolves.toBe(state);
@@ -117,10 +121,12 @@ describe("DispatchingServiceStatusReader", () => {
     const mock = createReader("stopped");
     const pm2 = createReader("failed");
     const docker = createReader("running");
+    const compose = createReader();
     const dispatcher = new DispatchingServiceStatusReader({
       mock,
       pm2,
       docker,
+      "docker-compose": compose,
     });
 
     await expect(dispatcher.read(mockService)).resolves.toBe("stopped");
@@ -138,6 +144,7 @@ describe("DispatchingServiceStatusReader", () => {
       const mock = createReader();
       const pm2 = createReader();
       const docker = createReader();
+      const compose = createReader();
       const selectedReader =
         managementAdapter === "mock"
           ? mock
@@ -161,6 +168,7 @@ describe("DispatchingServiceStatusReader", () => {
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
 
       await expect(
@@ -178,11 +186,13 @@ describe("DispatchingServiceStatusReader", () => {
     const mock = createReader();
     const pm2 = createReader();
     const docker = createReader();
+    const compose = createReader();
     pm2.read.mockRejectedValue(failure);
     const dispatcher = new DispatchingServiceStatusReader({
       mock,
       pm2,
       docker,
+      "docker-compose": compose,
     });
 
     try {
@@ -205,10 +215,18 @@ describe("DispatchingServiceStatusReader", () => {
     const replacementMock = createReader("failed");
     const pm2 = createReader();
     const docker = createReader();
-    const dependencies = { mock: originalMock, pm2, docker };
+    const compose = createReader();
+    const replacementCompose = createReader();
+    const dependencies = {
+      mock: originalMock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    };
     const dispatcher = new DispatchingServiceStatusReader(dependencies);
 
     dependencies.mock = replacementMock;
+    dependencies["docker-compose"] = replacementCompose;
 
     await expect(dispatcher.read(createService("mock"))).resolves.toBe(
       "stopped",
@@ -223,9 +241,30 @@ describe("DispatchingServiceStatusReader", () => {
 
   it.each([
     [undefined],
-    [{ mock: undefined, pm2: createReader(), docker: createReader() }],
-    [{ mock: createReader(), pm2: undefined, docker: createReader() }],
-    [{ mock: createReader(), pm2: createReader(), docker: undefined }],
+    [
+      {
+        mock: undefined,
+        pm2: createReader(),
+        docker: createReader(),
+        "docker-compose": createReader(),
+      },
+    ],
+    [
+      {
+        mock: createReader(),
+        pm2: undefined,
+        docker: createReader(),
+        "docker-compose": createReader(),
+      },
+    ],
+    [
+      {
+        mock: createReader(),
+        pm2: createReader(),
+        docker: undefined,
+        "docker-compose": createReader(),
+      },
+    ],
   ])(
     "rejects missing reader configuration without fallback",
     (dependencies) => {
@@ -236,6 +275,7 @@ describe("DispatchingServiceStatusReader", () => {
               readonly mock: ServiceStatusReader;
               readonly pm2: ServiceStatusReader;
               readonly docker: ServiceStatusReader;
+              readonly "docker-compose": ServiceStatusReader;
             },
           ),
       ).toThrowError(
@@ -252,10 +292,12 @@ describe("DispatchingServiceStatusReader", () => {
     const mock = createReader();
     const pm2 = createReader();
     const docker = createReader();
+    const compose = createReader();
     const dispatcher = new DispatchingServiceStatusReader({
       mock,
       pm2,
       docker,
+      "docker-compose": compose,
     });
     const service = createService("mock");
     const invalidService = {
@@ -289,6 +331,7 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
       const mock = createReader("unknown");
       const pm2 = createReader("unknown");
       const docker = createReader("unknown");
+      const compose = createReader();
       const selectedReader =
         managementAdapter === "mock"
           ? mock
@@ -300,6 +343,7 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
       const observedAt = "2026-07-23T18:00:00.000Z";
       const clock = { now: vi.fn(() => new Date(observedAt)) };
@@ -331,10 +375,12 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
     const mock = createReader();
     const pm2 = createReader();
     const docker = createReader();
+    const compose = createReader();
     const dispatcher = new DispatchingServiceStatusReader({
       mock,
       pm2,
       docker,
+      "docker-compose": compose,
     });
     const clock = { now: vi.fn() };
     const getStatus = new GetRegisteredServiceStatus(

@@ -1,11 +1,13 @@
+import { sep, normalize, isAbsolute } from "node:path";
+
 export interface DockerComposeManagementConfiguration {
   readonly composeFile: string;
   readonly projectDirectory: string;
 }
 
 export type ManagementConfiguration = Readonly<{
-  composeFile?: string;
-  projectDirectory?: string;
+  composeFile?: unknown;
+  projectDirectory?: unknown;
 }>;
 
 export class ManagementConfigurationValidationError extends Error {
@@ -16,7 +18,8 @@ export class ManagementConfigurationValidationError extends Error {
       | "invalid_compose_file"
       | "invalid_project_directory"
       | "path_escape"
-      | "unknown_field",
+      | "unknown_field"
+      | "invalid_input_type",
     message?: string,
   ) {
     super(message ?? `Management configuration validation failed: ${code}`);
@@ -26,9 +29,14 @@ export class ManagementConfigurationValidationError extends Error {
 }
 
 export function validateDockerComposeManagementConfiguration(
-  input: ManagementConfiguration,
+  input: unknown,
 ): DockerComposeManagementConfiguration {
-  const keys = Object.keys(input);
+  if (!isPlainObject(input)) {
+    throw new ManagementConfigurationValidationError("invalid_input_type");
+  }
+
+  const obj = input as Record<string, unknown>;
+  const keys = Object.keys(obj);
 
   for (const key of keys) {
     if (key !== "composeFile" && key !== "projectDirectory") {
@@ -40,74 +48,91 @@ export function validateDockerComposeManagementConfiguration(
     throw new ManagementConfigurationValidationError("missing_for_adapter");
   }
 
-  const { composeFile, projectDirectory } = input;
+  const rawComposeFile = obj.composeFile;
+  const rawProjectDirectory = obj.projectDirectory;
 
-  if (typeof composeFile !== "string" || composeFile.trim() === "") {
+  if (typeof rawComposeFile !== "string") {
     throw new ManagementConfigurationValidationError("invalid_compose_file");
   }
 
-  if (typeof projectDirectory !== "string" || projectDirectory.trim() === "") {
+  if (typeof rawProjectDirectory !== "string") {
     throw new ManagementConfigurationValidationError(
       "invalid_project_directory",
     );
   }
 
-  const trimmedComposeFile = composeFile.trim();
-  const trimmedProjectDirectory = projectDirectory.trim();
+  const composeFile = validateComposePath(rawComposeFile);
+  const projectDirectory = validateProjectPath(rawProjectDirectory);
 
-  if (containsControlCharacter(trimmedComposeFile)) {
+  if (composeFile.length > 4096 || projectDirectory.length > 4096) {
     throw new ManagementConfigurationValidationError("invalid_compose_file");
   }
 
-  if (containsControlCharacter(trimmedProjectDirectory)) {
+  if (!isAbsolute(composeFile)) {
+    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  }
+
+  if (!isAbsolute(projectDirectory)) {
     throw new ManagementConfigurationValidationError(
       "invalid_project_directory",
     );
   }
 
-  if (
-    trimmedComposeFile.length > 4096 ||
-    trimmedProjectDirectory.length > 4096
-  ) {
-    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  if (composeFile === projectDirectory) {
+    throw new ManagementConfigurationValidationError("path_escape");
   }
 
-  if (!isAbsolutePath(trimmedComposeFile)) {
-    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  const normalizedCompose = normalize(composeFile);
+  const normalizedDir = normalize(projectDirectory);
+
+  if (!isAbsolute(normalizedCompose) || !isAbsolute(normalizedDir)) {
+    throw new ManagementConfigurationValidationError("path_escape");
   }
 
-  if (!isAbsolutePath(trimmedProjectDirectory)) {
-    throw new ManagementConfigurationValidationError(
-      "invalid_project_directory",
-    );
+  if (normalizedCompose === "/") {
+    throw new ManagementConfigurationValidationError("path_escape");
   }
 
-  if (escapesDirectory(trimmedComposeFile, trimmedProjectDirectory)) {
+  if (!normalizedCompose.startsWith(normalizedDir + sep)) {
     throw new ManagementConfigurationValidationError("path_escape");
   }
 
   return Object.freeze({
-    composeFile: trimmedComposeFile,
-    projectDirectory: trimmedProjectDirectory,
+    composeFile: normalizedCompose,
+    projectDirectory: normalizedDir,
   });
 }
 
-function isAbsolutePath(path: string): boolean {
-  return path.startsWith("/");
+function validateComposePath(value: string): string {
+  if (value !== value.trim()) {
+    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  }
+  if (containsControlCharacter(value)) {
+    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  }
+  if (value.length === 0) {
+    throw new ManagementConfigurationValidationError("invalid_compose_file");
+  }
+  return value;
 }
 
-function escapesDirectory(filePath: string, directory: string): boolean {
-  const normalizedFile = filePath.replace(/\/+$/, "");
-  const normalizedDir = directory.replace(/\/+$/, "");
-
-  if (!normalizedFile.startsWith(normalizedDir + "/")) {
-    return true;
+function validateProjectPath(value: string): string {
+  if (value !== value.trim()) {
+    throw new ManagementConfigurationValidationError(
+      "invalid_project_directory",
+    );
   }
-
-  const relativePath = normalizedFile.slice(normalizedDir.length + 1);
-  const segments = relativePath.split("/");
-
-  return segments.some((segment) => segment === ".." || segment === ".");
+  if (containsControlCharacter(value)) {
+    throw new ManagementConfigurationValidationError(
+      "invalid_project_directory",
+    );
+  }
+  if (value.length === 0) {
+    throw new ManagementConfigurationValidationError(
+      "invalid_project_directory",
+    );
+  }
+  return value;
 }
 
 function containsControlCharacter(value: string): boolean {
@@ -118,4 +143,13 @@ function containsControlCharacter(value: string): boolean {
       (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
     );
   });
+}
+
+function isPlainObject(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }

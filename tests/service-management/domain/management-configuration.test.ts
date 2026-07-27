@@ -17,14 +17,20 @@ describe("validateDockerComposeManagementConfiguration", () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
-  it("trims whitespace from paths", () => {
-    const result = validateDockerComposeManagementConfiguration({
-      composeFile: "  /srv/atlas/compose.yaml  ",
-      projectDirectory: "  /srv/atlas  ",
-    });
+  it("rejects surrounding whitespace in paths", () => {
+    expect(() =>
+      validateDockerComposeManagementConfiguration({
+        composeFile: " /srv/atlas/compose.yaml",
+        projectDirectory: "/srv/atlas",
+      }),
+    ).toThrowError(ManagementConfigurationValidationError);
 
-    expect(result.composeFile).toBe("/srv/atlas/compose.yaml");
-    expect(result.projectDirectory).toBe("/srv/atlas");
+    expect(() =>
+      validateDockerComposeManagementConfiguration({
+        composeFile: "/srv/atlas/compose.yaml",
+        projectDirectory: "/srv/atlas ",
+      }),
+    ).toThrowError(ManagementConfigurationValidationError);
   });
 
   it("rejects missing composeFile", () => {
@@ -78,7 +84,7 @@ describe("validateDockerComposeManagementConfiguration", () => {
         composeFile: "/srv/atlas/compose.yaml",
         projectDirectory: "/srv/atlas",
         extraField: "value",
-      } as Record<string, unknown>),
+      }),
     ).toThrowError(expect.objectContaining({ code: "unknown_field" }));
   });
 

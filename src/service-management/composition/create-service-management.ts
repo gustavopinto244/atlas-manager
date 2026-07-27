@@ -190,6 +190,7 @@ export function createServiceManagement(
   const getRegisteredServiceLogs = new GetRegisteredServiceLogs(
     catalog,
     logReader,
+    clock,
   );
   const listRegisteredServices = new ListRegisteredServices(catalog);
   const pruneExpiredRegisteredServiceAvailabilityOverrides =

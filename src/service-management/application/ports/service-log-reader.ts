@@ -5,5 +5,6 @@ export interface ServiceLogReader {
   readLogs(
     service: RegisteredService,
     tailLines: number,
+    collectedAt: Date,
   ): Promise<ServiceLogBatch>;
 }

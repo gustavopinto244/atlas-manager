@@ -227,7 +227,7 @@ export class NodeDockerComposeProjectLogExecutor implements DockerComposeProject
           maxBuffer: this.#maxBufferBytes,
           windowsHide: true,
         },
-        (error, out) => {
+        (error, out, err) => {
           if (error) {
             reject(
               new DockerComposeProjectLogExecutorError("log_command_failed"),
@@ -235,7 +235,7 @@ export class NodeDockerComposeProjectLogExecutor implements DockerComposeProject
             return;
           }
 
-          resolve({ stdout: out, stderr: "" });
+          resolve({ stdout: out, stderr: err ?? "" });
         },
       );
     });
@@ -280,13 +280,13 @@ export class NodeDockerContainerLogExecutor implements DockerContainerLogExecuto
           maxBuffer: this.#maxBufferBytes,
           windowsHide: true,
         },
-        (error, out) => {
+        (error, out, err) => {
           if (error) {
             reject(new DockerContainerLogExecutorError("log_command_failed"));
             return;
           }
 
-          resolve({ stdout: out, stderr: "" });
+          resolve({ stdout: out, stderr: err ?? "" });
         },
       );
     });
