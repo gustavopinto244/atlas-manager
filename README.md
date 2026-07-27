@@ -582,6 +582,26 @@ protects against stale cursor writes; the scheduler cycle is not transactional
 across all stages; and the scheduler does not provide globally exactly-once
 execution.
 
+Post-conflict next-interval continuation is covered through a file-backed
+reconstruction scenario that validates future scheduler progress after a cursor
+conflict. After a first interval creates a first-interval claim and advances
+the cursor to `T1`, the next interval creates a second-interval claim,
+completes its controlled effect, removes an expired override, and prunes the
+first-interval claim through authoritative `T1` before a competing real
+file-backed cursor operation advances the cursor to `T2`. The local
+compare-and-set returns the existing conflict result. A complete reconstruction
+at a later canonical target `T3` reads `T2` as authoritative and processes
+only the `T2` to `T3` interval. The third cycle creates a third-interval
+claim, executes its controlled effect, observes the absent override, prunes
+the second-interval claim through authoritative `T2`, preserves the
+third-interval claim, and advances the cursor to `T3`. This confirms that a
+cursor conflict does not prevent future scheduler progress; a reconstructed
+process at a later target continues from the competing cursor; the conflicted
+interval is not replayed; successful maintenance remains committed; claim
+pruning uses only authoritative cursor boundaries; the scheduler cycle is not
+transactional across all stages; and the scheduler does not provide globally
+exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
