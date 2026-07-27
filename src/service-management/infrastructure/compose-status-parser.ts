@@ -1,5 +1,5 @@
-import type { ComposeProjectService } from "../domain/service-log-batch.js";
-import { calculateComposeAggregateRuntimeState } from "../domain/service-log-batch.js";
+import type { ComposeProjectService } from "../domain/compose-project.js";
+import { calculateComposeAggregateRuntimeState } from "../domain/compose-project.js";
 import type { ServiceRuntimeState } from "../domain/registered-service-status.js";
 import { mapDockerStateToRuntimeState } from "../domain/docker-container-runtime-state.js";
 

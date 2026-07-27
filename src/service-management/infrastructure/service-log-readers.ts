@@ -3,6 +3,7 @@ import {
   createServiceLogBatch,
   type ServiceLogBatch,
 } from "../domain/service-log-batch.js";
+import { validateTailLines } from "../domain/service-log-tail-lines.js";
 import type { ServiceLogReader } from "../application/ports/service-log-reader.js";
 import type {
   DockerContainerLogExecutor,
@@ -11,65 +12,74 @@ import type {
 
 const MAX_LINE_LENGTH = 4096;
 const MAX_TOTAL_LINES = 500;
-const MIN_TAIL_LINES = 1;
-const MAX_TAIL_LINES = 500;
 
 /* eslint-disable no-control-regex */
 const CONTROL_CHAR_REGEX = /[\x00-\x08\x0b\x0c\x0e-\x1f]/g;
-
 const ANSI_REGEX =
   /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-nqry=><]/g;
 /* eslint-enable no-control-regex */
 
-export function validateTailLines(tailLines: number): void {
-  if (
-    !Number.isInteger(tailLines) ||
-    tailLines < MIN_TAIL_LINES ||
-    tailLines > MAX_TAIL_LINES
-  ) {
-    throw new Error(
-      `tailLines must be between ${MIN_TAIL_LINES} and ${MAX_TAIL_LINES}`,
-    );
+export class ServiceLogReaderUnavailableError extends Error {
+  public constructor() {
+    super("Service log reader unavailable");
+    this.name = "ServiceLogReaderUnavailableError";
+    Object.freeze(this);
   }
+}
+
+interface NormalizedLines {
+  readonly lines: readonly string[];
+  readonly truncated: boolean;
+}
+
+function normalizeLines(input: string): NormalizedLines {
+  if (!input) {
+    return {
+      lines: Object.freeze([]),
+      truncated: false,
+    };
+  }
+
+  const cleaned = input.replace(ANSI_REGEX, "");
+  const rawLines = cleaned.split(/\r\n|\n|\r/);
+
+  let truncated = rawLines.length > MAX_TOTAL_LINES;
+
+  const lines = rawLines
+    .slice(0, MAX_TOTAL_LINES)
+    .map((line) => {
+      const sanitized = line.replace(CONTROL_CHAR_REGEX, "");
+
+      if (sanitized.length > MAX_LINE_LENGTH) {
+        truncated = true;
+      }
+
+      return sanitized.slice(0, MAX_LINE_LENGTH);
+    })
+    .filter((line) => line.length > 0);
+
+  return {
+    lines: Object.freeze(lines),
+    truncated,
+  };
 }
 
 export function normalizeLogOutput(
   serviceId: string,
+  collectedAt: Date,
   stdout: string,
   stderr: string,
 ): ServiceLogBatch {
-  const collectedAt = new Date().toISOString();
-  const stdoutLines = normalizeLines(stdout);
-  const stderrLines = normalizeLines(stderr);
-  const truncated =
-    stdoutLines.length > MAX_TOTAL_LINES ||
-    stderrLines.length > MAX_TOTAL_LINES;
+  const normalizedStdout = normalizeLines(stdout);
+  const normalizedStderr = normalizeLines(stderr);
 
   return createServiceLogBatch({
     serviceId,
-    collectedAt,
-    stdoutLines: stdoutLines.slice(0, MAX_TOTAL_LINES),
-    stderrLines: stderrLines.slice(0, MAX_TOTAL_LINES),
-    truncated,
+    collectedAt: collectedAt.toISOString(),
+    stdoutLines: normalizedStdout.lines,
+    stderrLines: normalizedStderr.lines,
+    truncated: normalizedStdout.truncated || normalizedStderr.truncated,
   });
-}
-
-function normalizeLines(input: string): readonly string[] {
-  if (!input) return Object.freeze([]);
-
-  const cleaned = input.replace(ANSI_REGEX, "");
-
-  const lines = cleaned
-    .split(/\r?\n/)
-    .map((line) => {
-      const sanitized = line
-        .replace(CONTROL_CHAR_REGEX, "")
-        .slice(0, MAX_LINE_LENGTH);
-      return sanitized;
-    })
-    .filter((line) => line.length > 0);
-
-  return Object.freeze(lines);
 }
 
 export class DockerContainerLogReader implements ServiceLogReader {
@@ -80,6 +90,7 @@ export class DockerContainerLogReader implements ServiceLogReader {
   public async readLogs(
     service: RegisteredService,
     tailLines: number,
+    collectedAt: Date,
   ): Promise<ServiceLogBatch> {
     validateTailLines(tailLines);
 
@@ -88,7 +99,12 @@ export class DockerContainerLogReader implements ServiceLogReader {
       tailLines,
     );
 
-    return normalizeLogOutput(service.id, output.stdout, output.stderr);
+    return normalizeLogOutput(
+      service.id,
+      collectedAt,
+      output.stdout,
+      output.stderr,
+    );
   }
 }
 
@@ -102,6 +118,7 @@ export class ComposeProjectLogReader implements ServiceLogReader {
   public async readLogs(
     service: RegisteredService,
     tailLines: number,
+    collectedAt: Date,
   ): Promise<ServiceLogBatch> {
     validateTailLines(tailLines);
 
@@ -117,12 +134,20 @@ export class ComposeProjectLogReader implements ServiceLogReader {
       tailLines,
     );
 
-    return normalizeLogOutput(service.id, output.stdout, output.stderr);
+    return normalizeLogOutput(
+      service.id,
+      collectedAt,
+      output.stdout,
+      output.stderr,
+    );
   }
 }
 
 export class DispatchingServiceLogReader implements ServiceLogReader {
-  private readonly readers: Readonly<Record<string, ServiceLogReader>>;
+  private readonly readers: Readonly<{
+    docker: ServiceLogReader;
+    "docker-compose": ServiceLogReader;
+  }>;
 
   public constructor(
     dockerLogReader: ServiceLogReader,
@@ -138,13 +163,15 @@ export class DispatchingServiceLogReader implements ServiceLogReader {
   public async readLogs(
     service: RegisteredService,
     tailLines: number,
+    collectedAt: Date,
   ): Promise<ServiceLogBatch> {
-    const reader = this.readers[service.managementAdapter];
+    const reader =
+      this.readers[service.managementAdapter as keyof typeof this.readers];
+
     if (!reader) {
-      throw new Error(
-        `Log reader not available for adapter: ${service.managementAdapter}`,
-      );
+      throw new ServiceLogReaderUnavailableError();
     }
-    return reader.readLogs(service, tailLines);
+
+    return reader.readLogs(service, tailLines, collectedAt);
   }
 }

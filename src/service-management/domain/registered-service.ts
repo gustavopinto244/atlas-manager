@@ -110,7 +110,7 @@ export class RegisteredService {
 
 function validateAndGetManagementConfiguration(
   adapter: ServiceManagementAdapter,
-  config: ManagementConfiguration | undefined,
+  config: unknown,
 ): DockerComposeManagementConfiguration | null {
   if (adapter === "docker-compose") {
     if (config === undefined) {

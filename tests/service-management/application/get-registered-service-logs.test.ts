@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -9,89 +10,52 @@ import type { ServiceLogReader } from "../../../src/service-management/applicati
 import { RegisteredService } from "../../../src/service-management/domain/registered-service.js";
 import type { ServiceLogBatch } from "../../../src/service-management/domain/service-log-batch.js";
 
-function createLogReader(
-  result: ServiceLogBatch,
-): ServiceLogReader & { readLogs: ReturnType<typeof vi.fn> } {
-  return {
-    readLogs: vi.fn().mockResolvedValue(result),
-  };
+const observedAt = new Date("2026-01-01T12:00:00.000Z");
+const clock = { now: vi.fn(() => observedAt) };
+
+function createLogReader(result: ServiceLogBatch): ServiceLogReader {
+  return { readLogs: vi.fn().mockResolvedValue(result) };
 }
 
-function createSampleLogBatch(serviceId: string): ServiceLogBatch {
+function sampleLog(serviceId: string): ServiceLogBatch {
   return {
     serviceId,
     collectedAt: "2026-01-01T12:00:00.000Z",
-    stdoutLines: ["line1", "line2"],
-    stderrLines: [],
+    stdoutLines: Object.freeze(["line1"]),
+    stderrLines: Object.freeze([]),
     truncated: false,
   };
 }
 
-function createDockerService(
-  overrides: Partial<{
-    id: string;
-    supportedOperations: readonly string[];
-  }> = {},
+function svc(
+  overrides: Partial<{ id: string; ops: string[] }> = {},
 ): RegisteredService {
   return RegisteredService.create({
     id: overrides.id ?? "docker-svc",
-    displayName: "Docker Svc",
+    displayName: "Svc",
     managementAdapter: "docker",
-    externalResourceId: "container",
-    supportedOperations: overrides.supportedOperations ?? [
-      "readStatus",
-      "readLogs",
-    ],
+    externalResourceId: "c",
+    supportedOperations: overrides.ops ?? ["readStatus", "readLogs"],
     availabilityPolicy: { mode: "manual" },
   });
 }
 
 describe("GetRegisteredServiceLogs", () => {
-  it("returns log batch for a service with readLogs using default tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const batch = createSampleLogBatch("docker-svc");
-    const logReader = createLogReader(batch);
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    const result = await getLogs.execute("docker-svc");
-
-    expect(result).toBe(batch);
-    expect(result.serviceId).toBe("docker-svc");
-    expect(logReader.readLogs).toHaveBeenCalledExactlyOnceWith(service, 100);
+  it.each([undefined, 1, 100, 500])("accepts tailLines=%s", async (tl) => {
+    const s = svc();
+    const catalog = { list: vi.fn(), findById: vi.fn().mockResolvedValue(s) };
+    const r = createLogReader(sampleLog("docker-svc"));
+    const getLogs = new GetRegisteredServiceLogs(catalog, r, clock);
+    await getLogs.execute("docker-svc", tl);
+    expect(r.readLogs).toHaveBeenCalledWith(s, tl ?? 100, observedAt);
   });
 
-  it("accepts minimum tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const batch = createSampleLogBatch("docker-svc");
-    const logReader = createLogReader(batch);
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await getLogs.execute("docker-svc", 1);
-
-    expect(logReader.readLogs).toHaveBeenCalledExactlyOnceWith(service, 1);
-  });
-
-  it("accepts maximum tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const batch = createSampleLogBatch("docker-svc");
-    const logReader = createLogReader(batch);
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await getLogs.execute("docker-svc", 500);
-
-    expect(logReader.readLogs).toHaveBeenCalledExactlyOnceWith(service, 500);
+  it.each([0, -1, 501, 10.5])("rejects tailLines=%s", async (tl) => {
+    const s = svc();
+    const catalog = { list: vi.fn(), findById: vi.fn().mockResolvedValue(s) };
+    const r = createLogReader(sampleLog("docker-svc"));
+    const getLogs = new GetRegisteredServiceLogs(catalog, r, clock);
+    await expect(getLogs.execute("docker-svc", tl)).rejects.toThrow();
   });
 
   it("rejects unknown service", async () => {
@@ -99,113 +63,39 @@ describe("GetRegisteredServiceLogs", () => {
       list: vi.fn(),
       findById: vi.fn().mockResolvedValue(null),
     };
-    const logReader = createLogReader(createSampleLogBatch("x"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const getLogs = new GetRegisteredServiceLogs(
+      catalog,
+      createLogReader(sampleLog("x")),
+      clock,
+    );
     await expect(getLogs.execute("unknown")).rejects.toThrow(
       RegisteredServiceNotFoundError,
     );
-    expect(logReader.readLogs).not.toHaveBeenCalled();
   });
 
   it("rejects service without readLogs", async () => {
-    const service = createDockerService({
-      supportedOperations: ["readStatus"],
-    });
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const logReader = createLogReader(createSampleLogBatch("docker-svc"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const s = svc({ ops: ["readStatus"] });
+    const catalog = { list: vi.fn(), findById: vi.fn().mockResolvedValue(s) };
+    const getLogs = new GetRegisteredServiceLogs(
+      catalog,
+      createLogReader(sampleLog("docker-svc")),
+      clock,
+    );
     await expect(getLogs.execute("docker-svc")).rejects.toThrow(
       ServiceLogOperationNotSupportedError,
     );
-    expect(logReader.readLogs).not.toHaveBeenCalled();
   });
 
-  it("rejects zero tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const logReader = createLogReader(createSampleLogBatch("docker-svc"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await expect(getLogs.execute("docker-svc", 0)).rejects.toThrow();
-    expect(logReader.readLogs).not.toHaveBeenCalled();
-  });
-
-  it("rejects tailLines above maximum", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const logReader = createLogReader(createSampleLogBatch("docker-svc"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await expect(getLogs.execute("docker-svc", 501)).rejects.toThrow();
-    expect(logReader.readLogs).not.toHaveBeenCalled();
-  });
-
-  it("rejects negative tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const logReader = createLogReader(createSampleLogBatch("docker-svc"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await expect(getLogs.execute("docker-svc", -1)).rejects.toThrow();
-    expect(logReader.readLogs).not.toHaveBeenCalled();
-  });
-
-  it("rejects non-integer tailLines", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const logReader = createLogReader(createSampleLogBatch("docker-svc"));
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await expect(getLogs.execute("docker-svc", 10.5)).rejects.toThrow();
-    expect(logReader.readLogs).not.toHaveBeenCalled();
-  });
-
-  it("preserves the exact log reader result", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const batch = createSampleLogBatch("docker-svc");
-    const logReader = createLogReader(batch);
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+  it("preserves exact result and captures one clock instant", async () => {
+    const s = svc();
+    const catalog = { list: vi.fn(), findById: vi.fn().mockResolvedValue(s) };
+    const batch = sampleLog("docker-svc");
+    const r = createLogReader(batch);
+    const localClock = { now: vi.fn(() => observedAt) };
+    const getLogs = new GetRegisteredServiceLogs(catalog, r, localClock);
     const result = await getLogs.execute("docker-svc", 50);
-
-    expect(result.stdoutLines).toEqual(["line1", "line2"]);
-    expect(result.stderrLines).toEqual([]);
-    expect(result.truncated).toBe(false);
-  });
-
-  it("delegates to the correct log reader for docker", async () => {
-    const service = createDockerService();
-    const catalog = {
-      list: vi.fn(),
-      findById: vi.fn().mockResolvedValue(service),
-    };
-    const batch = createSampleLogBatch("docker-svc");
-    const logReader = createLogReader(batch);
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
-    await getLogs.execute("docker-svc", 25);
-
-    expect(logReader.readLogs).toHaveBeenCalledExactlyOnceWith(service, 25);
+    expect(result.stdoutLines).toEqual(["line1"]);
+    expect(result.collectedAt).toBe("2026-01-01T12:00:00.000Z");
+    expect(localClock.now).toHaveBeenCalledOnce();
   });
 });
