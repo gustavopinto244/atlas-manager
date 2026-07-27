@@ -17,9 +17,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
-import {
-  createServiceAvailabilityOverride,
-} from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
