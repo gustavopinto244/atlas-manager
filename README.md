@@ -699,6 +699,40 @@ already claimed occurrence; completed claim pruning uses authoritative cursor
 not transactional across all stages; and the scheduler does not provide
 globally exactly-once execution.
 
+Post-conflict next-interval cursor-advancement failure recovery is covered
+through a file-backed reconstruction scenario that validates scheduler behavior
+when a future interval encounters a controlled cursor-advancement rejection
+after successful reconciliation and all maintenance. After a first interval
+creates a first-interval claim and advances the cursor to `T1`, the next
+interval creates a second-interval claim, completes its controlled effect,
+removes an expired override, and prunes the first-interval claim through
+authoritative `T1` before a competing real file-backed cursor operation
+advances the cursor to `T2`. The local compare-and-set returns the existing
+conflict result. A new override expired at `T3` is persisted through the
+public store API. A complete reconstruction at canonical target `T3` reads
+`T2` as authoritative and processes only the `T2` to `T3` interval. The third
+cycle acquires a third-interval claim through the real occurrence executor and
+completes the controlled service effect successfully. Expired override pruning
+then removes the `T3`-expired override successfully. Completed occurrence
+claim pruning executes through authoritative `T2` and removes the
+second-interval claim while preserving the third-interval claim. Cursor
+advancement from `T2` to `T3` then rejects with a controlled error. The
+scheduler cycle rejects with the exact sentinel error; no scheduler-cycle
+result is returned; the authoritative cursor remains `T2`; successful override
+removal remains committed; successful completed claim pruning remains
+committed; and the third-interval claim remains persisted. A complete
+reconstruction at the same target retries the `T2` to `T3` interval; the
+persisted third-interval claim produces the existing duplicate occurrence
+behavior, the third controlled effect is not invoked again, override pruning
+observes the already absent override, completed claim pruning through
+authoritative `T2` returns `unchanged`, and the cursor advances to `T3`. This
+confirms that successful `T2` to `T3` effects and maintenance may commit
+before cursor advancement fails; cursor-advancement rejection does not make
+`T3` authoritative; successful maintenance is not rolled back; retry does not
+repeat an already claimed occurrence; completed claim pruning uses
+authoritative cursor `T2`; the scheduler cycle is not transactional across all
+stages; and the scheduler does not provide globally exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
