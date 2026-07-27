@@ -559,6 +559,29 @@ persisted duplicate protection; candidate cursor `T2` does not become
 authoritative after failed advancement; and the scheduler does not provide
 globally exactly-once execution.
 
+Post-advance cursor-conflict recovery is covered through a file-backed
+reconstruction scenario that validates compare-and-set conflict behavior after
+post-advance maintenance has committed. After a first interval creates a
+first-interval claim and advances the cursor to `T1`, the next interval creates
+a second-interval claim, completes its controlled effect, removes an expired
+override, and prunes the first-interval claim through authoritative `T1` before
+a competing real file-backed cursor operation advances the cursor to `T2`. The
+local compare-and-set returns the existing conflict result rather than
+rejecting. The scheduler returns a frozen `conflict` result that preserves the
+existing reconciliation and maintenance results; the authoritative cursor is
+`T2`; and the committed maintenance remains persisted. A complete
+reconstruction reads `T2` as authoritative and returns `idle` because the
+canonical target already equals the cursor. No occurrence is regenerated, no
+controlled service effect is repeated, and no maintenance operation executes
+during the idle cycle. This confirms that another scheduler process may make
+the candidate cursor authoritative first; a cursor conflict is a resolved
+scheduler result rather than a rejected operation; successful local maintenance
+is not rolled back; the reconstructed scheduler must not retry an interval
+already made authoritative by the competitor; compare-and-set advancement
+protects against stale cursor writes; the scheduler cycle is not transactional
+across all stages; and the scheduler does not provide globally exactly-once
+execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
