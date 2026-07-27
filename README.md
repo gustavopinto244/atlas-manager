@@ -602,6 +602,33 @@ pruning uses only authoritative cursor boundaries; the scheduler cycle is not
 transactional across all stages; and the scheduler does not provide globally
 exactly-once execution.
 
+Post-conflict next-interval incomplete reconciliation recovery is covered
+through a file-backed reconstruction scenario that validates scheduler behavior
+when a future interval encounters a controlled service failure after claim
+acquisition. After a first interval creates a first-interval claim and advances
+the cursor to `T1`, the next interval creates a second-interval claim,
+completes its controlled effect, removes an expired override, and prunes the
+first-interval claim through authoritative `T1` before a competing real
+file-backed cursor operation advances the cursor to `T2`. The local
+compare-and-set returns the existing conflict result. A complete reconstruction
+at canonical target `T3` reads `T2` as authoritative and processes only the
+`T2` to `T3` interval. The third cycle acquires a third-interval claim through
+the real occurrence executor, but the controlled service operation fails after
+claim acquisition. The reconciliation tick resolves with the existing failed
+occurrence result. Conservative maintenance still executes: expired override
+pruning observes the absent override, and completed claim pruning through
+authoritative `T2` removes the second-interval claim while preserving the
+third-interval claim. The scheduler returns a frozen `incomplete` result with
+the cursor remaining at `T2`. A complete reconstruction at the same target
+retries the `T2` to `T3` interval; the persisted third-interval claim produces
+the existing duplicate occurrence behavior, the failed controlled operation is
+not invoked again, maintenance remains idempotent, and the cursor advances to
+`T3`. This confirms that occurrence claims are acquired before controlled
+operations complete; retry does not automatically replay an operation after
+claim acquisition; the at-most-once limitation applies; successful maintenance
+remains committed; the scheduler cycle is not transactional across all stages;
+and the scheduler does not provide globally exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
