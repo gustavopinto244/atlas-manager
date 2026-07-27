@@ -209,7 +209,7 @@ describe("RegisteredService", () => {
   });
 
   it("defines exactly the initial adapters and supported operations", () => {
-    expect(SERVICE_MANAGEMENT_ADAPTERS).toEqual(["mock", "pm2"]);
+    expect(SERVICE_MANAGEMENT_ADAPTERS).toEqual(["mock", "pm2", "docker"]);
     expect(SUPPORTED_SERVICE_OPERATIONS).toEqual([
       "readStatus",
       "start",
@@ -294,7 +294,7 @@ describe("RegisteredService", () => {
 
   it("rejects an unsupported management adapter", () => {
     expectValidationError(
-      createValidInput({ managementAdapter: "docker" }),
+      createValidInput({ managementAdapter: "kubernetes" }),
       "invalid_management_adapter",
     );
   });

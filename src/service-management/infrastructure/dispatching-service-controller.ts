@@ -5,6 +5,7 @@ import type { ServiceControlOperation } from "../domain/registered-service-contr
 export interface DispatchingServiceControllerDependencies {
   readonly mock: ServiceController;
   readonly pm2: ServiceController;
+  readonly docker: ServiceController;
 }
 
 export class DispatchingServiceControllerError extends Error {
@@ -19,17 +20,20 @@ export class DispatchingServiceControllerError extends Error {
 export class DispatchingServiceController implements ServiceController {
   private readonly mockController: ServiceController;
   private readonly pm2Controller: ServiceController;
+  private readonly dockerController: ServiceController;
 
   public constructor(dependencies: DispatchingServiceControllerDependencies) {
     if (
       !isServiceController(dependencies?.mock) ||
-      !isServiceController(dependencies?.pm2)
+      !isServiceController(dependencies?.pm2) ||
+      !isServiceController(dependencies?.docker)
     ) {
       throw new DispatchingServiceControllerError();
     }
 
     this.mockController = dependencies.mock;
     this.pm2Controller = dependencies.pm2;
+    this.dockerController = dependencies.docker;
     Object.freeze(this);
   }
 
@@ -42,6 +46,8 @@ export class DispatchingServiceController implements ServiceController {
         return this.mockController.execute(service, operation);
       case "pm2":
         return this.pm2Controller.execute(service, operation);
+      case "docker":
+        return this.dockerController.execute(service, operation);
       default:
         return Promise.reject(new DispatchingServiceControllerError());
     }

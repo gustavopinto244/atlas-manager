@@ -5,6 +5,7 @@ import type { ServiceRuntimeState } from "../domain/registered-service-status.js
 export interface DispatchingServiceStatusReaderDependencies {
   readonly mock: ServiceStatusReader;
   readonly pm2: ServiceStatusReader;
+  readonly docker: ServiceStatusReader;
 }
 
 export class DispatchingServiceStatusReaderError extends Error {
@@ -19,17 +20,20 @@ export class DispatchingServiceStatusReaderError extends Error {
 export class DispatchingServiceStatusReader implements ServiceStatusReader {
   private readonly mockReader: ServiceStatusReader;
   private readonly pm2Reader: ServiceStatusReader;
+  private readonly dockerReader: ServiceStatusReader;
 
   public constructor(dependencies: DispatchingServiceStatusReaderDependencies) {
     if (
       !isServiceStatusReader(dependencies?.mock) ||
-      !isServiceStatusReader(dependencies?.pm2)
+      !isServiceStatusReader(dependencies?.pm2) ||
+      !isServiceStatusReader(dependencies?.docker)
     ) {
       throw new DispatchingServiceStatusReaderError();
     }
 
     this.mockReader = dependencies.mock;
     this.pm2Reader = dependencies.pm2;
+    this.dockerReader = dependencies.docker;
     Object.freeze(this);
   }
 
@@ -39,6 +43,8 @@ export class DispatchingServiceStatusReader implements ServiceStatusReader {
         return this.mockReader.read(service);
       case "pm2":
         return this.pm2Reader.read(service);
+      case "docker":
+        return this.dockerReader.read(service);
       default:
         return Promise.reject(new DispatchingServiceStatusReaderError());
     }

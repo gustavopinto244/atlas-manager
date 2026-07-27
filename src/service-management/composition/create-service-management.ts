@@ -40,6 +40,13 @@ import {
 } from "../infrastructure/pm2-service-control-executor.js";
 import { Pm2ServiceController } from "../infrastructure/pm2-service-controller.js";
 import { Pm2ServiceStatusReader } from "../infrastructure/pm2-service-status-reader.js";
+import { NodeDockerContainerInspectExecutor } from "../infrastructure/node-docker-container-inspect-executor.js";
+import type { DockerContainerInspectExecutor } from "../infrastructure/docker-container-inspect-executor.js";
+import type { DockerContainerStatsExecutor } from "../infrastructure/docker-container-stats-executor.js";
+import { NodeDockerContainerControlExecutor } from "../infrastructure/node-docker-container-control-executor.js";
+import type { DockerContainerControlExecutor } from "../infrastructure/docker-container-control-executor.js";
+import { DockerServiceStatusReader } from "../infrastructure/docker-service-status-reader.js";
+import { DockerServiceController } from "../infrastructure/docker-service-controller.js";
 
 export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
@@ -68,6 +75,9 @@ export interface ServiceManagementCompositionOverrides {
   readonly mockStatusConfiguration?: readonly MockServiceStatusConfiguration[];
   readonly pm2ProcessListExecutor?: Pm2ProcessListExecutor;
   readonly pm2ControlExecutor?: Pm2ServiceControlExecutor;
+  readonly dockerContainerInspectExecutor?: DockerContainerInspectExecutor;
+  readonly dockerContainerStatsExecutor?: DockerContainerStatsExecutor;
+  readonly dockerContainerControlExecutor?: DockerContainerControlExecutor;
 }
 
 export function createServiceManagement(
@@ -103,13 +113,28 @@ export function createServiceManagement(
     processListExecutor,
     controlExecutor,
   );
+  const dockerInspectExecutor =
+    overrides?.dockerContainerInspectExecutor ??
+    new NodeDockerContainerInspectExecutor();
+  const dockerControlExecutor =
+    overrides?.dockerContainerControlExecutor ??
+    new NodeDockerContainerControlExecutor();
+  const dockerStatusReader = new DockerServiceStatusReader(
+    dockerInspectExecutor,
+  );
+  const dockerController = new DockerServiceController(
+    dockerInspectExecutor,
+    dockerControlExecutor,
+  );
   const statusReader = new DispatchingServiceStatusReader({
     mock: mockStatusReader,
     pm2: pm2StatusReader,
+    docker: dockerStatusReader,
   });
   const controller = new DispatchingServiceController({
     mock: mockController,
     pm2: pm2Controller,
+    docker: dockerController,
   });
   const listRegisteredServices = new ListRegisteredServices(catalog);
   const pruneExpiredRegisteredServiceAvailabilityOverrides =

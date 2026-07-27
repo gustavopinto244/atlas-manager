@@ -850,6 +850,213 @@ configuration integration, automatic reconciliation, default policies, scheduler
 execution, override execution, and automatic service control are not implemented
 yet.
 
+### Docker-managed registered containers
+
+Atlas Manager supports Docker containers as registered services through the
+`docker` management adapter. A configured Docker container is manageable through
+the same project-level service-management contracts already used by mock and PM2
+services.
+
+The Docker integration is allowlist-based and restricted to approved container
+targets defined in `REGISTERED_SERVICES_JSON`. Atlas Manager does not become a
+generic Docker administration interface. External callers and application use
+cases operate through the registered-service identifier, while the configured
+Docker container name or identifier remains an infrastructure detail owned by
+the registered-service configuration and Docker adapter.
+
+A registered Docker service configuration uses the following structure:
+
+```json
+{
+  "id": "atlas-api",
+  "displayName": "Atlas API",
+  "managementAdapter": "docker",
+  "externalResourceId": "atlas-api",
+  "supportedOperations": ["readStatus", "start", "stop", "restart"],
+  "availabilityPolicy": {
+    "mode": "always"
+  }
+}
+```
+
+The `externalResourceId` must be a non-empty canonical string containing no
+control characters or surrounding whitespace. It is passed as a single argument
+to Docker CLI commands and never interpolated into shell commands or treated as
+executable syntax.
+
+Docker commands use the approved `docker` executable with `shell: false`,
+`encoding: utf8`, finite timeouts, and bounded output buffers. The implementation
+does not use `exec`, `spawn` with shell enabled, or command concatenation.
+
+#### Docker runtime state mapping
+
+Docker container states are mapped to the existing project runtime states:
+
+- `running` → `running`
+- `created`, `exited` → `stopped`
+- `dead` → `failed`
+- `paused`, `restarting`, `removing`, unknown states → `unknown`
+
+Runtime state and Docker health state remain separate concepts. A running
+container with an unhealthy Docker health check remains `running` with a
+`unhealthy` health state.
+
+#### Docker health states
+
+The Docker health state vocabulary includes:
+
+- `not_configured` — no Docker health configuration
+- `starting` — Docker health starting
+- `healthy` — Docker health healthy
+- `unhealthy` — Docker health unhealthy
+- `unknown` — unsupported health value
+
+An absent health object is not an error. An invalid structural value in a
+present health object fails safely rather than being treated as trusted data.
+
+#### Docker container details
+
+The Docker details capability returns approved fields only:
+
+- `serviceId` — the registered-service identifier
+- `runtimeState` — the mapped runtime state
+- `healthState` — the Docker health state
+- `observedAt` — the observation timestamp
+- `startedAt` — the container start timestamp (null when unavailable)
+- `uptimeSeconds` — calculated uptime using the injected application clock (null when not running)
+- `image` — the approved image reference
+- `resourceUsage` — the resource usage snapshot
+
+The details result does not include container environment variables, labels,
+bind mounts, volume source paths, command or entrypoint values, host
+configuration, network addresses, exposed ports, Docker socket information,
+restart policy internals, registry credentials, raw inspect output, or raw
+stats output.
+
+#### Docker resource usage
+
+Resource usage is retrieved through a narrow stats command with a fixed
+project-owned format. The resource snapshot contains:
+
+- `cpuPercent` — CPU percentage (may exceed 100 on multi-core systems)
+- `memoryUsageBytes` — memory usage in bytes
+- `memoryLimitBytes` — memory limit in bytes
+- `networkReceiveBytes` — network receive in bytes
+- `networkTransmitBytes` — network transmit in bytes
+- `blockReadBytes` — block read in bytes
+- `blockWriteBytes` — block write in bytes
+- `pids` — process count
+
+All values are finite, non-negative, and validated before model construction.
+Docker CLI resource output quantities are parsed through a strict project-owned
+parser supporting SI units (B, kB, MB, GB, TB) and IEC units (KiB, MiB, GiB, TiB).
+
+Stopped containers do not execute the stats command. For a stopped, failed, or
+unknown runtime state, the details result represents resource usage as
+unavailable with reason `container_not_running`.
+
+#### Docker service control
+
+The Docker service controller supports only `start`, `stop`, and `restart`
+operations. All options are fixed by production code. No caller may provide
+arbitrary Docker flags, signal values, stop durations, command names, executable
+paths, or container targets.
+
+The process timeout applied by Node.js is longer than the fixed Docker
+graceful-stop timeout so that expected Docker shutdown behavior is not
+terminated prematurely.
+
+Control operations perform no automatic retry or compensation. The Docker CLI
+result remains authoritative for the requested operation. Hidden operation
+substitution is not implemented.
+
+#### Docker scheduling integration
+
+Docker-managed services support the existing availability policies without
+Docker-specific scheduling rules:
+
+- `always`
+- `scheduled`
+- `manual`
+- `disabled`
+
+The scheduling domain remains infrastructure-independent. Docker-specific
+behavior belongs only behind status and control ports.
+
+The existing planning rules determine:
+
+- `available + stopped` → `start`
+- `unavailable + running` → `stop`
+
+Docker services participate in the existing reconciliation scheduler using the
+same occurrence claims and cursor persistence mechanisms as mock and PM2
+services.
+
+#### Docker daemon availability
+
+The implementation fails safely when:
+
+- the Docker executable is missing
+- the Docker daemon is unavailable
+- access to the Docker daemon is denied
+- the command times out
+- the configured container does not exist
+
+The implementation does not fall back to mock behavior or reinterpret
+infrastructure failure as `stopped`. Infrastructure failure remains an error.
+
+#### Docker security restrictions
+
+The Docker integration preserves the project's restricted-target model:
+
+- callers provide the registered-service identifier
+- the catalog resolves the configured Docker target
+- the adapter executes fixed Docker commands with fixed project-owned options
+  and the configured target as one argument
+
+The implementation does not allow arbitrary Docker commands, subcommands,
+command flags, container names from request input, shell command fragments,
+Compose file paths from request input, host filesystem paths, Docker socket
+selection from request input, environment-variable injection into Docker
+commands, privileged container creation, image pulls, image removal, container
+creation, container deletion, volume operations, network operations, registry
+authentication, or secret inspection.
+
+#### Docker logging restrictions
+
+The implementation does not log raw Docker inspect output, raw Docker stats
+output, container environment variables, labels, mount paths, configured
+external resource identifiers, Docker daemon connection information, stderr, or
+command arguments containing infrastructure targets.
+
+#### Docker intentional limitations
+
+The Docker vertical slice is container-focused and does not claim:
+
+- generic Docker administration
+- Docker Compose project management
+- dependency graph orchestration
+- readiness waiting for dependent services
+- limited Docker logs
+- container creation
+- container deletion
+- image pulls
+- image updates
+- image deletion
+- volume management
+- network management
+- registry management
+- secret management
+- distributed Docker coordination
+- globally exactly-once control
+- transactional Docker operation and scheduler persistence
+- automatic rollback
+- automatic compensation
+
+A Docker control operation may complete before a later scheduler persistence
+stage fails. The existing persisted claim model provides at-most-once-oriented
+duplicate protection, not globally exactly-once Docker execution.
+
 ## Technology context
 
 Currently configured:

@@ -12,7 +12,7 @@ import {
 const completedAt = "2026-07-25T12:00:00.000Z";
 
 function createService(
-  managementAdapter: "mock" | "pm2",
+  managementAdapter: "mock" | "pm2" | "docker",
   overrides: {
     readonly id?: string;
     readonly displayName?: string;
@@ -47,21 +47,36 @@ function createController(): ServiceController & {
 
 describe("DispatchingServiceController", () => {
   it.each([
-    ["mock", "start", "pm2"],
-    ["mock", "stop", "pm2"],
-    ["mock", "restart", "pm2"],
-    ["pm2", "start", "mock"],
-    ["pm2", "stop", "mock"],
-    ["pm2", "restart", "mock"],
+    ["mock", "start", "pm2", "docker"],
+    ["mock", "stop", "pm2", "docker"],
+    ["mock", "restart", "pm2", "docker"],
+    ["pm2", "start", "mock", "docker"],
+    ["pm2", "stop", "mock", "docker"],
+    ["pm2", "restart", "mock", "docker"],
+    ["docker", "start", "mock", "pm2"],
+    ["docker", "stop", "mock", "pm2"],
+    ["docker", "restart", "mock", "pm2"],
   ] as const)(
     "delegates a %s service %s only to its configured controller",
-    async (managementAdapter, operation, nonSelectedAdapter) => {
+    async (
+      managementAdapter,
+      operation,
+      nonSelectedAdapter1,
+      nonSelectedAdapter2,
+    ) => {
       const service = createService(managementAdapter);
       const mock = createController();
       const pm2 = createController();
-      const dispatcher = new DispatchingServiceController({ mock, pm2 });
-      const selectedController = managementAdapter === "mock" ? mock : pm2;
-      const nonSelectedController = nonSelectedAdapter === "mock" ? mock : pm2;
+      const docker = createController();
+      const dispatcher = new DispatchingServiceController({
+        mock,
+        pm2,
+        docker,
+      });
+      const controllers = { mock, pm2, docker };
+      const selectedController = controllers[managementAdapter];
+      const nonSelectedController1 = controllers[nonSelectedAdapter1];
+      const nonSelectedController2 = controllers[nonSelectedAdapter2];
 
       await expect(
         dispatcher.execute(service, operation),
@@ -72,7 +87,8 @@ describe("DispatchingServiceController", () => {
       );
       expect(selectedController.execute.mock.calls[0]?.[0]).toBe(service);
       expect(selectedController.execute.mock.calls[0]?.[1]).toBe(operation);
-      expect(nonSelectedController.execute).not.toHaveBeenCalled();
+      expect(nonSelectedController1.execute).not.toHaveBeenCalled();
+      expect(nonSelectedController2.execute).not.toHaveBeenCalled();
     },
   );
 
@@ -95,13 +111,21 @@ describe("DispatchingServiceController", () => {
       externalResourceId: "mock-external-resource",
       supportedOperations: ["readStatus", "start", "stop"],
     });
+    const dockerService = createService("docker", {
+      id: "docker-named-service",
+      displayName: "Docker Named Service",
+      externalResourceId: "docker-external-resource",
+      supportedOperations: ["readStatus", "start", "stop", "restart"],
+    });
     const mock = createController();
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
 
     await dispatcher.execute(firstMockService, "restart");
     await dispatcher.execute(secondMockService, "start");
     await dispatcher.execute(pm2Service, "stop");
+    await dispatcher.execute(dockerService, "start");
 
     expect(mock.execute).toHaveBeenNthCalledWith(
       1,
@@ -110,6 +134,10 @@ describe("DispatchingServiceController", () => {
     );
     expect(mock.execute).toHaveBeenNthCalledWith(2, secondMockService, "start");
     expect(pm2.execute).toHaveBeenCalledExactlyOnceWith(pm2Service, "stop");
+    expect(docker.execute).toHaveBeenCalledExactlyOnceWith(
+      dockerService,
+      "start",
+    );
   });
 
   it("does not enforce supported operations during delegation", async () => {
@@ -118,13 +146,15 @@ describe("DispatchingServiceController", () => {
     });
     const mock = createController();
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
 
     await expect(
       dispatcher.execute(service, "restart"),
     ).resolves.toBeUndefined();
     expect(mock.execute).toHaveBeenCalledExactlyOnceWith(service, "restart");
     expect(pm2.execute).not.toHaveBeenCalled();
+    expect(docker.execute).not.toHaveBeenCalled();
   });
 
   it("resolves only after the selected controller resolves", async () => {
@@ -135,7 +165,8 @@ describe("DispatchingServiceController", () => {
     const mock = createController();
     mock.execute.mockReturnValue(selectedExecution);
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
     let dispatcherResolved = false;
 
     const execution = dispatcher
@@ -153,7 +184,7 @@ describe("DispatchingServiceController", () => {
     expect(dispatcherResolved).toBe(true);
   });
 
-  it.each(["mock", "pm2"] as const)(
+  it.each(["mock", "pm2", "docker"] as const)(
     "propagates a %s-controller failure unchanged without fallback",
     async (managementAdapter) => {
       const failure = Object.assign(new Error("Selected controller failure"), {
@@ -161,10 +192,31 @@ describe("DispatchingServiceController", () => {
       });
       const mock = createController();
       const pm2 = createController();
-      const selectedController = managementAdapter === "mock" ? mock : pm2;
-      const alternativeController = managementAdapter === "mock" ? pm2 : mock;
+      const docker = createController();
+      const selectedController =
+        managementAdapter === "mock"
+          ? mock
+          : managementAdapter === "pm2"
+            ? pm2
+            : docker;
+      const alternativeController1 =
+        managementAdapter === "mock"
+          ? pm2
+          : managementAdapter === "pm2"
+            ? mock
+            : mock;
+      const alternativeController2 =
+        managementAdapter === "mock"
+          ? docker
+          : managementAdapter === "pm2"
+            ? docker
+            : pm2;
       selectedController.execute.mockRejectedValue(failure);
-      const dispatcher = new DispatchingServiceController({ mock, pm2 });
+      const dispatcher = new DispatchingServiceController({
+        mock,
+        pm2,
+        docker,
+      });
 
       await expect(
         dispatcher.execute(createService(managementAdapter), "restart"),
@@ -173,7 +225,8 @@ describe("DispatchingServiceController", () => {
       expect(failure.message).toBe("Selected controller failure");
       expect(failure).not.toHaveProperty("cause");
       expect(selectedController.execute).toHaveBeenCalledOnce();
-      expect(alternativeController.execute).not.toHaveBeenCalled();
+      expect(alternativeController1.execute).not.toHaveBeenCalled();
+      expect(alternativeController2.execute).not.toHaveBeenCalled();
     },
   );
 
@@ -183,8 +236,9 @@ describe("DispatchingServiceController", () => {
     const failure = new Error("Selected controller failure");
     const mock = createController();
     const pm2 = createController();
+    const docker = createController();
     pm2.execute.mockRejectedValue(failure);
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
 
     try {
       await dispatcher.execute(service, operation);
@@ -207,7 +261,8 @@ describe("DispatchingServiceController", () => {
     const originalMock = createController();
     const replacementMock = createController();
     const pm2 = createController();
-    const dependencies = { mock: originalMock, pm2 };
+    const docker = createController();
+    const dependencies = { mock: originalMock, pm2, docker };
     const dispatcher = new DispatchingServiceController(dependencies);
 
     dependencies.mock = replacementMock;
@@ -224,8 +279,9 @@ describe("DispatchingServiceController", () => {
 
   it.each([
     [undefined],
-    [{ mock: undefined, pm2: createController() }],
-    [{ mock: createController(), pm2: undefined }],
+    [{ mock: undefined, pm2: createController(), docker: createController() }],
+    [{ mock: createController(), pm2: undefined, docker: createController() }],
+    [{ mock: createController(), pm2: createController(), docker: undefined }],
   ])(
     "rejects missing controller configuration without fallback",
     (dependencies) => {
@@ -235,6 +291,7 @@ describe("DispatchingServiceController", () => {
             dependencies as unknown as {
               readonly mock: ServiceController;
               readonly pm2: ServiceController;
+              readonly docker: ServiceController;
             },
           ),
       ).toThrowError(
@@ -250,7 +307,8 @@ describe("DispatchingServiceController", () => {
   it("rejects an invalid runtime adapter without selecting a controller", async () => {
     const mock = createController();
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
     const service = createService("mock");
     const invalidService = {
       ...service,
@@ -262,6 +320,7 @@ describe("DispatchingServiceController", () => {
     ).rejects.toBeInstanceOf(DispatchingServiceControllerError);
     expect(mock.execute).not.toHaveBeenCalled();
     expect(pm2.execute).not.toHaveBeenCalled();
+    expect(docker.execute).not.toHaveBeenCalled();
   });
 });
 
@@ -269,6 +328,7 @@ describe("ControlRegisteredService with controller dispatcher", () => {
   it.each([
     ["mock", "start"],
     ["pm2", "restart"],
+    ["docker", "stop"],
   ] as const)(
     "produces a complete result for a registered %s service",
     async (managementAdapter, operation) => {
@@ -282,9 +342,30 @@ describe("ControlRegisteredService with controller dispatcher", () => {
       };
       const mock = createController();
       const pm2 = createController();
-      const selectedController = managementAdapter === "mock" ? mock : pm2;
-      const alternativeController = managementAdapter === "mock" ? pm2 : mock;
-      const dispatcher = new DispatchingServiceController({ mock, pm2 });
+      const docker = createController();
+      const selectedController =
+        managementAdapter === "mock"
+          ? mock
+          : managementAdapter === "pm2"
+            ? pm2
+            : docker;
+      const alternativeController1 =
+        managementAdapter === "mock"
+          ? pm2
+          : managementAdapter === "pm2"
+            ? mock
+            : mock;
+      const alternativeController2 =
+        managementAdapter === "mock"
+          ? docker
+          : managementAdapter === "pm2"
+            ? docker
+            : pm2;
+      const dispatcher = new DispatchingServiceController({
+        mock,
+        pm2,
+        docker,
+      });
       const clock = { now: vi.fn(() => new Date(completedAt)) };
       const controlService = new ControlRegisteredService(
         catalog,
@@ -305,7 +386,8 @@ describe("ControlRegisteredService with controller dispatcher", () => {
         operation,
       );
       expect(selectedController.execute.mock.calls[0]?.[0]).toBe(service);
-      expect(alternativeController.execute).not.toHaveBeenCalled();
+      expect(alternativeController1.execute).not.toHaveBeenCalled();
+      expect(alternativeController2.execute).not.toHaveBeenCalled();
       expect(findById.mock.invocationCallOrder[0]).toBeLessThan(
         selectedController.execute.mock.invocationCallOrder[0] ?? 0,
       );
@@ -323,7 +405,8 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     };
     const mock = createController();
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,
@@ -338,6 +421,7 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     );
     expect(mock.execute).not.toHaveBeenCalled();
     expect(pm2.execute).not.toHaveBeenCalled();
+    expect(docker.execute).not.toHaveBeenCalled();
     expect(clock.now).not.toHaveBeenCalled();
   });
 
@@ -351,7 +435,8 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     };
     const mock = createController();
     const pm2 = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const docker = createController();
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,
@@ -364,6 +449,7 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     );
     expect(mock.execute).not.toHaveBeenCalled();
     expect(pm2.execute).not.toHaveBeenCalled();
+    expect(docker.execute).not.toHaveBeenCalled();
     expect(clock.now).not.toHaveBeenCalled();
   });
 
@@ -378,8 +464,9 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     const failure = new Error("Selected controller failure");
     const mock = createController();
     const pm2 = createController();
+    const docker = createController();
     pm2.execute.mockRejectedValue(failure);
-    const dispatcher = new DispatchingServiceController({ mock, pm2 });
+    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,

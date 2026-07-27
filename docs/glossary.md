@@ -392,6 +392,61 @@ A group of related Docker resources defined through Docker Compose.
 Support for managing Compose applications must expose only approved
 project-level operations rather than unrestricted Compose commands.
 
+### Docker-managed registered service
+
+A registered service whose management adapter is `docker`.
+
+A Docker-managed registered service is manageable through the same
+project-level service-management contracts used by mock and PM2 services. The
+configured Docker container name or identifier remains an infrastructure detail
+owned by the registered-service configuration and Docker adapter.
+
+### Docker container target
+
+The configured external resource identifier for a Docker-managed registered
+service.
+
+The Docker container target is a non-empty canonical string containing no
+control characters or surrounding whitespace. It is passed as a single argument
+to Docker CLI commands and never interpolated into shell commands or treated as
+executable syntax.
+
+### Docker health state
+
+A project-defined immutable vocabulary describing the health status of a Docker
+container.
+
+The Docker health state vocabulary includes:
+
+- `not_configured` — no Docker health configuration;
+- `starting` — Docker health starting;
+- `healthy` — Docker health healthy;
+- `unhealthy` — Docker health unhealthy;
+- `unknown` — unsupported health value.
+
+Docker health state is distinct from the generic runtime state. A running
+container with an unhealthy Docker health check remains `running` with a
+`unhealthy` health state.
+
+### Docker resource snapshot
+
+A canonical immutable resource usage snapshot for a running Docker container.
+
+The Docker resource snapshot contains approved fields only:
+
+- `cpuPercent` — CPU percentage (may exceed 100 on multi-core systems);
+- `memoryUsageBytes` — memory usage in bytes;
+- `memoryLimitBytes` — memory limit in bytes;
+- `networkReceiveBytes` — network receive in bytes;
+- `networkTransmitBytes` — network transmit in bytes;
+- `blockReadBytes` — block read in bytes;
+- `blockWriteBytes` — block write in bytes;
+- `pids` — process count.
+
+All values are finite, non-negative, and validated before model construction.
+Stopped containers do not produce a resource snapshot; instead, the resource
+usage is represented as unavailable with reason `container_not_running`.
+
 ## Process and operating-system terms
 
 ### PM2 process
