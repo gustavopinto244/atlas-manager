@@ -767,6 +767,49 @@ rolled back; a process reconstructed at the same authoritative target returns
 cycle is not transactional across all stages; and the scheduler does not
 provide globally exactly-once execution.
 
+Post-consecutive-conflict next-interval continuation is covered through a
+file-backed reconstruction scenario that validates scheduler behavior when a
+later interval continues after two consecutive resolved compare-and-set cursor
+conflicts. After a first interval creates a first-interval claim and advances
+the cursor to `T1`, the next interval creates a second-interval claim,
+completes its controlled effect, removes an expired override, and prunes the
+first-interval claim through authoritative `T1` before a first competing real
+file-backed cursor operation advances the cursor to `T2`. The local
+compare-and-set returns the existing conflict result. A second override
+expired at `T3` is persisted through the public store API. A complete
+reconstruction at canonical target `T3` reads `T2` as authoritative and
+processes only the `T2` to `T3` interval. The third cycle acquires a
+third-interval claim through the real occurrence executor and completes the
+controlled service effect successfully. Expired override pruning then removes
+the `T3`-expired override successfully. Completed occurrence claim pruning
+executes through authoritative `T2` and removes the second-interval claim
+while preserving the third-interval claim. A second competing real file-backed
+cursor operation then advances the cursor from `T2` to `T3`. The local
+compare-and-set returns the existing conflict result. The third scheduler
+cycle returns a frozen `conflict` result; the authoritative cursor is `T3`;
+successful override removal remains committed; successful completed claim
+pruning remains committed; and the third-interval claim remains persisted. A
+third override expired at `T4` is persisted through the public store API. A
+complete reconstruction at canonical target `T4` reads `T3` as authoritative
+and processes only the `T3` to `T4` interval. The fourth cycle acquires a
+fourth-interval claim through the real occurrence executor and completes the
+controlled service effect successfully. Expired override pruning then removes
+the `T4`-expired override successfully. Completed occurrence claim pruning
+executes through authoritative `T3` and removes the third-interval claim while
+preserving the fourth-interval claim. Cursor advancement from `T3` to `T4`
+succeeds. The fourth scheduler cycle returns a frozen `advanced` result; the
+authoritative cursor is `T4`; all three expired overrides are absent; the
+first, second, and third claims are absent; and the fourth-interval claim
+remains persisted. This confirms that repeated resolved cursor conflicts do
+not block future progress; each reconstructed process begins from the latest
+authoritative cursor; intervals already made authoritative by competing
+processes are not replayed; the claim retained by the latest conflicted
+interval is removed only after a later cycle begins from that authoritative
+cursor; completed claim pruning uses the authoritative cursor rather than the
+candidate cursor; successful maintenance is not rolled back by cursor
+conflicts; the scheduler cycle is not transactional across all stages; and the
+scheduler does not provide globally exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
