@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { RegisteredService } from "../../../src/service-management/domain/registered-service.js";
 import {
   normalizeLogOutput,
-  validateTailLines,
   DockerContainerLogReader,
   ComposeProjectLogReader,
   DispatchingServiceLogReader,
@@ -18,6 +17,9 @@ import {
   ServiceLogOperationNotSupportedError,
 } from "../../../src/service-management/application/get-registered-service-logs.js";
 import { RegisteredServiceNotFoundError } from "../../../src/service-management/application/registered-service-not-found-error.js";
+import { validateTailLines } from "../../../src/service-management/domain/service-log-tail-lines.js";
+
+const collectedAt = new Date("2026-07-27T07:35:05.000Z");
 
 function createDockerService(): RegisteredService {
   return RegisteredService.create({
@@ -46,33 +48,24 @@ function createComposeService(): RegisteredService {
 }
 
 describe("validateTailLines", () => {
-  it("accepts valid tail lines", () => {
-    expect(() => validateTailLines(1)).not.toThrow();
-    expect(() => validateTailLines(100)).not.toThrow();
-    expect(() => validateTailLines(500)).not.toThrow();
+  it.each([1, 100, 500])("accepts %i", (n) => {
+    expect(() => validateTailLines(n)).not.toThrow();
   });
-
-  it("rejects zero", () => {
-    expect(() => validateTailLines(0)).toThrow();
-  });
-
-  it("rejects negative", () => {
-    expect(() => validateTailLines(-1)).toThrow();
-  });
-
-  it("rejects above maximum", () => {
-    expect(() => validateTailLines(501)).toThrow();
-  });
-
-  it("rejects non-integer", () => {
-    expect(() => validateTailLines(10.5)).toThrow();
+  it.each([0, -1, 501, 10.5])("rejects %s", (n) => {
+    expect(() => validateTailLines(n)).toThrow();
   });
 });
 
 describe("normalizeLogOutput", () => {
   it("separates stdout and stderr lines", () => {
-    const result = normalizeLogOutput("svc1", "line1\nline2", "err1\nerr2");
-
+    const result = normalizeLogOutput(
+      "svc1",
+      collectedAt,
+      "line1\nline2",
+      "err1\nerr2",
+    );
+    expect(result.serviceId).toBe("svc1");
+    expect(result.collectedAt).toBe("2026-07-27T07:35:05.000Z");
     expect(result.stdoutLines).toEqual(["line1", "line2"]);
     expect(result.stderrLines).toEqual(["err1", "err2"]);
     expect(result.truncated).toBe(false);
@@ -80,29 +73,37 @@ describe("normalizeLogOutput", () => {
   });
 
   it("removes ANSI escape sequences", () => {
-    const result = normalizeLogOutput("svc1", "\x1b[31mred text\x1b[0m", "");
-
+    const result = normalizeLogOutput(
+      "svc1",
+      collectedAt,
+      "\x1b[31mred text\x1b[0m",
+      "",
+    );
     expect(result.stdoutLines).toEqual(["red text"]);
   });
 
   it("normalizes control characters", () => {
-    const result = normalizeLogOutput("svc1", "text\x01with\x08control", "");
-
+    const result = normalizeLogOutput(
+      "svc1",
+      collectedAt,
+      "text\x01with\x08control",
+      "",
+    );
     expect(result.stdoutLines).toEqual(["textwithcontrol"]);
   });
 
-  it("truncates long lines", () => {
+  it("truncates long lines and sets truncated", () => {
     const long = "a".repeat(5000);
-    const result = normalizeLogOutput("svc1", long, "");
-
+    const result = normalizeLogOutput("svc1", collectedAt, long, "");
     expect(result.stdoutLines[0]?.length).toBeLessThanOrEqual(4096);
+    expect(result.truncated).toBe(true);
   });
 
   it("handles empty output", () => {
-    const result = normalizeLogOutput("svc1", "", "");
-
+    const result = normalizeLogOutput("svc1", collectedAt, "", "");
     expect(result.stdoutLines).toEqual([]);
     expect(result.stderrLines).toEqual([]);
+    expect(result.truncated).toBe(false);
   });
 });
 
@@ -113,21 +114,12 @@ describe("DockerContainerLogReader", () => {
     };
     const reader = new DockerContainerLogReader(executor);
     const service = createDockerService();
-
-    const result = await reader.readLogs(service, 50);
-
+    const result = await reader.readLogs(service, 50, collectedAt);
     expect(executor.execute).toHaveBeenCalledExactlyOnceWith(
       "my-container",
       50,
     );
     expect(result.stdoutLines).toEqual(["log1"]);
-  });
-
-  it("rejects invalid tail lines", async () => {
-    const executor: DockerContainerLogExecutor = { execute: vi.fn() };
-    const reader = new DockerContainerLogReader(executor);
-
-    await expect(reader.readLogs(createDockerService(), 0)).rejects.toThrow();
   });
 });
 
@@ -138,9 +130,7 @@ describe("ComposeProjectLogReader", () => {
     };
     const reader = new ComposeProjectLogReader(executor);
     const service = createComposeService();
-
-    const result = await reader.readLogs(service, 100);
-
+    const result = await reader.readLogs(service, 100, collectedAt);
     expect(executor.execute).toHaveBeenCalledExactlyOnceWith(
       "my-project",
       "/srv",
@@ -161,9 +151,11 @@ describe("DispatchingServiceLogReader", () => {
       dockerReader,
       composeReader,
     );
-
-    const result = await dispatcher.readLogs(createDockerService(), 10);
-
+    const result = await dispatcher.readLogs(
+      createDockerService(),
+      10,
+      collectedAt,
+    );
     expect(result.stdoutLines).toEqual(["docker-log"]);
   });
 
@@ -176,14 +168,18 @@ describe("DispatchingServiceLogReader", () => {
       dockerReader,
       composeReader,
     );
-
-    const result = await dispatcher.readLogs(createComposeService(), 10);
-
+    const result = await dispatcher.readLogs(
+      createComposeService(),
+      10,
+      collectedAt,
+    );
     expect(result.stdoutLines).toEqual(["compose-log"]);
   });
 });
 
 describe("GetRegisteredServiceLogs", () => {
+  const clock = { now: vi.fn(() => collectedAt) };
+
   it("returns logs for a service with readLogs", async () => {
     const service = createDockerService();
     const catalog = {
@@ -193,11 +189,10 @@ describe("GetRegisteredServiceLogs", () => {
     const logReader = new DockerContainerLogReader({
       execute: vi.fn().mockResolvedValue({ stdout: "log", stderr: "" }),
     });
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const getLogs = new GetRegisteredServiceLogs(catalog, logReader, clock);
     const result = await getLogs.execute("docker-svc", 10);
-
     expect(result.stdoutLines).toEqual(["log"]);
+    expect(clock.now).toHaveBeenCalledOnce();
   });
 
   it("rejects unknown service", async () => {
@@ -206,8 +201,7 @@ describe("GetRegisteredServiceLogs", () => {
       findById: vi.fn().mockResolvedValue(null),
     };
     const logReader = new DockerContainerLogReader({ execute: vi.fn() });
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const getLogs = new GetRegisteredServiceLogs(catalog, logReader, clock);
     await expect(getLogs.execute("unknown", 10)).rejects.toThrow(
       RegisteredServiceNotFoundError,
     );
@@ -227,8 +221,7 @@ describe("GetRegisteredServiceLogs", () => {
       findById: vi.fn().mockResolvedValue(service),
     };
     const logReader = new DockerContainerLogReader({ execute: vi.fn() });
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const getLogs = new GetRegisteredServiceLogs(catalog, logReader, clock);
     await expect(getLogs.execute("no-logs", 10)).rejects.toThrow(
       ServiceLogOperationNotSupportedError,
     );
@@ -241,8 +234,7 @@ describe("GetRegisteredServiceLogs", () => {
       findById: vi.fn().mockResolvedValue(service),
     };
     const logReader = new DockerContainerLogReader({ execute: vi.fn() });
-    const getLogs = new GetRegisteredServiceLogs(catalog, logReader);
-
+    const getLogs = new GetRegisteredServiceLogs(catalog, logReader, clock);
     await expect(getLogs.execute("docker-svc", 0)).rejects.toThrow();
   });
 });

@@ -68,12 +68,14 @@ describe("DispatchingServiceController", () => {
       const mock = createController();
       const pm2 = createController();
       const docker = createController();
+      const compose = createController();
       const dispatcher = new DispatchingServiceController({
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
-      const controllers = { mock, pm2, docker };
+      const controllers = { mock, pm2, docker, "docker-compose": compose };
       const selectedController = controllers[managementAdapter];
       const nonSelectedController1 = controllers[nonSelectedAdapter1];
       const nonSelectedController2 = controllers[nonSelectedAdapter2];
@@ -120,7 +122,13 @@ describe("DispatchingServiceController", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
 
     await dispatcher.execute(firstMockService, "restart");
     await dispatcher.execute(secondMockService, "start");
@@ -147,7 +155,13 @@ describe("DispatchingServiceController", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
 
     await expect(
       dispatcher.execute(service, "restart"),
@@ -166,7 +180,13 @@ describe("DispatchingServiceController", () => {
     mock.execute.mockReturnValue(selectedExecution);
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
     let dispatcherResolved = false;
 
     const execution = dispatcher
@@ -193,6 +213,7 @@ describe("DispatchingServiceController", () => {
       const mock = createController();
       const pm2 = createController();
       const docker = createController();
+      const compose = createController();
       const selectedController =
         managementAdapter === "mock"
           ? mock
@@ -216,6 +237,7 @@ describe("DispatchingServiceController", () => {
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
 
       await expect(
@@ -237,8 +259,14 @@ describe("DispatchingServiceController", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
+    const compose = createController();
     pm2.execute.mockRejectedValue(failure);
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
 
     try {
       await dispatcher.execute(service, operation);
@@ -262,10 +290,18 @@ describe("DispatchingServiceController", () => {
     const replacementMock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dependencies = { mock: originalMock, pm2, docker };
+    const compose = createController();
+    const replacementCompose = createController();
+    const dependencies = {
+      mock: originalMock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    };
     const dispatcher = new DispatchingServiceController(dependencies);
 
     dependencies.mock = replacementMock;
+    dependencies["docker-compose"] = replacementCompose;
 
     await dispatcher.execute(createService("mock"), "stop");
     expect(originalMock.execute).toHaveBeenCalledOnce();
@@ -279,9 +315,30 @@ describe("DispatchingServiceController", () => {
 
   it.each([
     [undefined],
-    [{ mock: undefined, pm2: createController(), docker: createController() }],
-    [{ mock: createController(), pm2: undefined, docker: createController() }],
-    [{ mock: createController(), pm2: createController(), docker: undefined }],
+    [
+      {
+        mock: undefined,
+        pm2: createController(),
+        docker: createController(),
+        "docker-compose": createController(),
+      },
+    ],
+    [
+      {
+        mock: createController(),
+        pm2: undefined,
+        docker: createController(),
+        "docker-compose": createController(),
+      },
+    ],
+    [
+      {
+        mock: createController(),
+        pm2: createController(),
+        docker: undefined,
+        "docker-compose": createController(),
+      },
+    ],
   ])(
     "rejects missing controller configuration without fallback",
     (dependencies) => {
@@ -292,6 +349,7 @@ describe("DispatchingServiceController", () => {
               readonly mock: ServiceController;
               readonly pm2: ServiceController;
               readonly docker: ServiceController;
+              readonly "docker-compose": ServiceController;
             },
           ),
       ).toThrowError(
@@ -308,7 +366,13 @@ describe("DispatchingServiceController", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
     const service = createService("mock");
     const invalidService = {
       ...service,
@@ -343,6 +407,7 @@ describe("ControlRegisteredService with controller dispatcher", () => {
       const mock = createController();
       const pm2 = createController();
       const docker = createController();
+      const compose = createController();
       const selectedController =
         managementAdapter === "mock"
           ? mock
@@ -365,6 +430,7 @@ describe("ControlRegisteredService with controller dispatcher", () => {
         mock,
         pm2,
         docker,
+        "docker-compose": compose,
       });
       const clock = { now: vi.fn(() => new Date(completedAt)) };
       const controlService = new ControlRegisteredService(
@@ -406,7 +472,13 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,
@@ -436,7 +508,13 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const compose = createController();
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,
@@ -465,8 +543,14 @@ describe("ControlRegisteredService with controller dispatcher", () => {
     const mock = createController();
     const pm2 = createController();
     const docker = createController();
+    const compose = createController();
     pm2.execute.mockRejectedValue(failure);
-    const dispatcher = new DispatchingServiceController({ mock, pm2, docker });
+    const dispatcher = new DispatchingServiceController({
+      mock,
+      pm2,
+      docker,
+      "docker-compose": compose,
+    });
     const clock = { now: vi.fn() };
     const controlService = new ControlRegisteredService(
       catalog,
