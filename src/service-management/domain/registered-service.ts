@@ -10,6 +10,7 @@ import { ServiceScheduleValidationError } from "../../service-scheduling/domain/
 export const SERVICE_MANAGEMENT_ADAPTERS = Object.freeze([
   "mock",
   "pm2",
+  "docker",
 ] as const);
 
 export type ServiceManagementAdapter =

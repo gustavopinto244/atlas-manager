@@ -10,7 +10,9 @@ import {
   DispatchingServiceStatusReaderError,
 } from "../../../src/service-management/infrastructure/dispatching-service-status-reader.js";
 
-function createService(managementAdapter: "mock" | "pm2"): RegisteredService {
+function createService(
+  managementAdapter: "mock" | "pm2" | "docker",
+): RegisteredService {
   return RegisteredService.create({
     id: `${managementAdapter}-service`,
     displayName: `${managementAdapter.toUpperCase()} Service`,
@@ -33,23 +35,37 @@ function createReader(
 
 describe("DispatchingServiceStatusReader", () => {
   it.each([
-    ["mock", "running", "pm2"],
-    ["pm2", "failed", "mock"],
+    ["mock", "running", "pm2", "docker"],
+    ["pm2", "failed", "mock", "docker"],
+    ["docker", "stopped", "mock", "pm2"],
   ] as const)(
     "delegates a %s service only to its configured reader",
-    async (managementAdapter, state, nonSelectedAdapter) => {
+    async (
+      managementAdapter,
+      state,
+      nonSelectedAdapter1,
+      nonSelectedAdapter2,
+    ) => {
       const service = createService(managementAdapter);
       const mock = createReader("unknown");
       const pm2 = createReader("unknown");
-      const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
-      const selectedReader = managementAdapter === "mock" ? mock : pm2;
-      const nonSelectedReader = nonSelectedAdapter === "mock" ? mock : pm2;
+      const docker = createReader("unknown");
+      const dispatcher = new DispatchingServiceStatusReader({
+        mock,
+        pm2,
+        docker,
+      });
+      const readers = { mock, pm2, docker };
+      const selectedReader = readers[managementAdapter];
+      const nonSelectedReader1 = readers[nonSelectedAdapter1];
+      const nonSelectedReader2 = readers[nonSelectedAdapter2];
       selectedReader.read.mockResolvedValueOnce(state);
 
       await expect(dispatcher.read(service)).resolves.toBe(state);
       expect(selectedReader.read).toHaveBeenCalledExactlyOnceWith(service);
       expect(selectedReader.read.mock.calls[0]?.[0]).toBe(service);
-      expect(nonSelectedReader.read).not.toHaveBeenCalled();
+      expect(nonSelectedReader1.read).not.toHaveBeenCalled();
+      expect(nonSelectedReader2.read).not.toHaveBeenCalled();
     },
   );
 
@@ -58,7 +74,12 @@ describe("DispatchingServiceStatusReader", () => {
     async (state) => {
       const mock = createReader(state);
       const pm2 = createReader("running");
-      const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+      const docker = createReader("running");
+      const dispatcher = new DispatchingServiceStatusReader({
+        mock,
+        pm2,
+        docker,
+      });
 
       await expect(dispatcher.read(createService("mock"))).resolves.toBe(state);
     },
@@ -85,32 +106,69 @@ describe("DispatchingServiceStatusReader", () => {
         windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
       },
     });
+    const dockerService = RegisteredService.create({
+      id: "docker-named-service",
+      displayName: "Misleading Docker Service",
+      managementAdapter: "docker",
+      externalResourceId: "docker-external-resource",
+      supportedOperations: ["readStatus", "start", "stop", "restart"],
+      availabilityPolicy: { mode: "always" },
+    });
     const mock = createReader("stopped");
     const pm2 = createReader("failed");
-    const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+    const docker = createReader("running");
+    const dispatcher = new DispatchingServiceStatusReader({
+      mock,
+      pm2,
+      docker,
+    });
 
     await expect(dispatcher.read(mockService)).resolves.toBe("stopped");
     await expect(dispatcher.read(pm2Service)).resolves.toBe("failed");
+    await expect(dispatcher.read(dockerService)).resolves.toBe("running");
     expect(mock.read).toHaveBeenCalledExactlyOnceWith(mockService);
     expect(pm2.read).toHaveBeenCalledExactlyOnceWith(pm2Service);
+    expect(docker.read).toHaveBeenCalledExactlyOnceWith(dockerService);
   });
 
-  it.each(["mock", "pm2"] as const)(
+  it.each(["mock", "pm2", "docker"] as const)(
     "propagates a %s-reader failure unchanged without fallback",
     async (managementAdapter) => {
       const failure = new Error("Selected reader failure");
       const mock = createReader();
       const pm2 = createReader();
-      const selectedReader = managementAdapter === "mock" ? mock : pm2;
-      const nonSelectedReader = managementAdapter === "mock" ? pm2 : mock;
+      const docker = createReader();
+      const selectedReader =
+        managementAdapter === "mock"
+          ? mock
+          : managementAdapter === "pm2"
+            ? pm2
+            : docker;
+      const nonSelectedReader1 =
+        managementAdapter === "mock"
+          ? pm2
+          : managementAdapter === "pm2"
+            ? mock
+            : mock;
+      const nonSelectedReader2 =
+        managementAdapter === "mock"
+          ? docker
+          : managementAdapter === "pm2"
+            ? docker
+            : pm2;
       selectedReader.read.mockRejectedValue(failure);
-      const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+      const dispatcher = new DispatchingServiceStatusReader({
+        mock,
+        pm2,
+        docker,
+      });
 
       await expect(
         dispatcher.read(createService(managementAdapter)),
       ).rejects.toBe(failure);
       expect(selectedReader.read).toHaveBeenCalledOnce();
-      expect(nonSelectedReader.read).not.toHaveBeenCalled();
+      expect(nonSelectedReader1.read).not.toHaveBeenCalled();
+      expect(nonSelectedReader2.read).not.toHaveBeenCalled();
     },
   );
 
@@ -119,8 +177,13 @@ describe("DispatchingServiceStatusReader", () => {
     const failure = new Error("Selected reader failure");
     const mock = createReader();
     const pm2 = createReader();
+    const docker = createReader();
     pm2.read.mockRejectedValue(failure);
-    const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+    const dispatcher = new DispatchingServiceStatusReader({
+      mock,
+      pm2,
+      docker,
+    });
 
     try {
       await dispatcher.read(service);
@@ -141,7 +204,8 @@ describe("DispatchingServiceStatusReader", () => {
     const originalMock = createReader("stopped");
     const replacementMock = createReader("failed");
     const pm2 = createReader();
-    const dependencies = { mock: originalMock, pm2 };
+    const docker = createReader();
+    const dependencies = { mock: originalMock, pm2, docker };
     const dispatcher = new DispatchingServiceStatusReader(dependencies);
 
     dependencies.mock = replacementMock;
@@ -159,8 +223,9 @@ describe("DispatchingServiceStatusReader", () => {
 
   it.each([
     [undefined],
-    [{ mock: undefined, pm2: createReader() }],
-    [{ mock: createReader(), pm2: undefined }],
+    [{ mock: undefined, pm2: createReader(), docker: createReader() }],
+    [{ mock: createReader(), pm2: undefined, docker: createReader() }],
+    [{ mock: createReader(), pm2: createReader(), docker: undefined }],
   ])(
     "rejects missing reader configuration without fallback",
     (dependencies) => {
@@ -170,6 +235,7 @@ describe("DispatchingServiceStatusReader", () => {
             dependencies as unknown as {
               readonly mock: ServiceStatusReader;
               readonly pm2: ServiceStatusReader;
+              readonly docker: ServiceStatusReader;
             },
           ),
       ).toThrowError(
@@ -185,7 +251,12 @@ describe("DispatchingServiceStatusReader", () => {
   it("rejects an invalid runtime adapter without selecting a reader", async () => {
     const mock = createReader();
     const pm2 = createReader();
-    const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+    const docker = createReader();
+    const dispatcher = new DispatchingServiceStatusReader({
+      mock,
+      pm2,
+      docker,
+    });
     const service = createService("mock");
     const invalidService = {
       ...service,
@@ -197,6 +268,7 @@ describe("DispatchingServiceStatusReader", () => {
     );
     expect(mock.read).not.toHaveBeenCalled();
     expect(pm2.read).not.toHaveBeenCalled();
+    expect(docker.read).not.toHaveBeenCalled();
   });
 });
 
@@ -204,6 +276,7 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
   it.each([
     ["mock", "stopped"],
     ["pm2", "failed"],
+    ["docker", "running"],
   ] as const)(
     "produces a complete status for a registered %s service",
     async (managementAdapter, state) => {
@@ -215,9 +288,19 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
       };
       const mock = createReader("unknown");
       const pm2 = createReader("unknown");
-      const selectedReader = managementAdapter === "mock" ? mock : pm2;
+      const docker = createReader("unknown");
+      const selectedReader =
+        managementAdapter === "mock"
+          ? mock
+          : managementAdapter === "pm2"
+            ? pm2
+            : docker;
       selectedReader.read.mockResolvedValue(state);
-      const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+      const dispatcher = new DispatchingServiceStatusReader({
+        mock,
+        pm2,
+        docker,
+      });
       const observedAt = "2026-07-23T18:00:00.000Z";
       const clock = { now: vi.fn(() => new Date(observedAt)) };
       const getStatus = new GetRegisteredServiceStatus(
@@ -247,7 +330,12 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
     };
     const mock = createReader();
     const pm2 = createReader();
-    const dispatcher = new DispatchingServiceStatusReader({ mock, pm2 });
+    const docker = createReader();
+    const dispatcher = new DispatchingServiceStatusReader({
+      mock,
+      pm2,
+      docker,
+    });
     const clock = { now: vi.fn() };
     const getStatus = new GetRegisteredServiceStatus(
       catalog,
@@ -260,6 +348,7 @@ describe("GetRegisteredServiceStatus with dispatcher", () => {
     );
     expect(mock.read).not.toHaveBeenCalled();
     expect(pm2.read).not.toHaveBeenCalled();
+    expect(docker.read).not.toHaveBeenCalled();
     expect(clock.now).not.toHaveBeenCalled();
   });
 });

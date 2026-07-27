@@ -19,20 +19,31 @@ dates.
 
 ## Current phase
 
-Atlas Manager is currently in the project-foundation phase.
+Atlas Manager is currently implementing v0.5 — Docker management.
 
-Completed foundation work includes:
+Completed milestones include:
 
-- initial product vision;
-- initial product requirements;
-- the decision to use Express.js;
-- Node.js and TypeScript initialization;
-- ESLint and Prettier configuration;
-- coding-agent instructions;
-- project README;
-- high-level architecture documentation;
-- contribution workflow;
-- project glossary.
+- v0.1 — Project foundation;
+- v0.2 — Server health;
+- v0.3 — Service catalog and manual control;
+- v0.4 — Service availability scheduling.
+
+The v0.4 milestone delivered the complete service availability scheduling
+persistence and recovery chain, including registered-service configuration,
+availability schedule parsing, reconciliation occurrence generation, persistent
+occurrence claim acquisition, controlled service operation execution,
+reconciliation completeness evaluation, expired availability override pruning,
+completed occurrence claim pruning, and compare-and-set scheduler cursor
+advancement with comprehensive process-style reconstruction and recovery
+coverage.
+
+The v0.5 milestone introduces Docker containers as fully supported registered
+services through a complete vertical slice covering Docker as an approved
+service-management adapter, registered Docker-container configuration, safe
+Docker CLI execution boundaries, generic registered-service status support,
+Docker-specific health and resource details, start/stop/restart control,
+dispatching integration, service-management composition integration,
+availability scheduling integration, and file-backed scheduler coverage.
 
 The administrative API and server-management capabilities have not yet been
 implemented.
@@ -122,7 +133,7 @@ Introduce a controlled model for identifying and managing approved services.
 External clients must use registered service identifiers rather than arbitrary
 process names.
 
-## v0.4 — Service availability scheduling
+## v0.4 — Service availability scheduling (completed)
 
 ### Objective
 
@@ -147,7 +158,15 @@ Allow registered services to follow explicit availability policies.
 The expected initial timezone is `America/Sao_Paulo`, but it must be configured
 explicitly.
 
-## v0.5 — Docker management
+### Completion status
+
+This milestone is completed. The implementation delivered the complete service
+availability scheduling persistence and recovery chain with comprehensive
+process-style reconstruction and recovery coverage across all scheduler
+outcomes (idle, advanced, incomplete, conflict, rejected operation) and
+recovery boundaries.
+
+## v0.5 — Docker management (active)
 
 ### Objective
 

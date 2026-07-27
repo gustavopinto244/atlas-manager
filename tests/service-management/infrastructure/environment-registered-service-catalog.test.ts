@@ -301,7 +301,7 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
   it.each([
     ["an invalid service ID", { id: "Invalid Service" }],
     ["an invalid display name", { displayName: " " }],
-    ["an invalid adapter", { managementAdapter: "docker" }],
+    ["an invalid adapter", { managementAdapter: "kubernetes" }],
     ["an invalid external resource", { externalResourceId: " " }],
     ["an invalid operation", { supportedOperations: ["readStatus", "reload"] }],
     [
