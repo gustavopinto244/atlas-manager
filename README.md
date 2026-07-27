@@ -733,6 +733,40 @@ repeat an already claimed occurrence; completed claim pruning uses
 authoritative cursor `T2`; the scheduler cycle is not transactional across all
 stages; and the scheduler does not provide globally exactly-once execution.
 
+Post-conflict next-interval cursor-conflict recovery is covered through a
+file-backed reconstruction scenario that validates scheduler behavior when two
+consecutive intervals encounter resolved compare-and-set cursor conflicts. After
+a first interval creates a first-interval claim and advances the cursor to
+`T1`, the next interval creates a second-interval claim, completes its
+controlled effect, removes an expired override, and prunes the first-interval
+claim through authoritative `T1` before a first competing real file-backed
+cursor operation advances the cursor to `T2`. The local compare-and-set
+returns the existing conflict result. A new override expired at `T3` is
+persisted through the public store API. A complete reconstruction at canonical
+target `T3` reads `T2` as authoritative and processes only the `T2` to `T3`
+interval. The third cycle acquires a third-interval claim through the real
+occurrence executor and completes the controlled service effect successfully.
+Expired override pruning then removes the `T3`-expired override successfully.
+Completed occurrence claim pruning executes through authoritative `T2` and
+removes the second-interval claim while preserving the third-interval claim. A
+second competing real file-backed cursor operation then advances the cursor
+from `T2` to `T3`. The local compare-and-set returns the existing conflict
+result. The third scheduler cycle returns a frozen `conflict` result; the
+authoritative cursor is `T3`; successful override removal remains committed;
+successful completed claim pruning remains committed; and the third-interval
+claim remains persisted. A complete reconstruction at the same target `T3`
+reads authoritative cursor `T3`, derives canonical target `T3`, and returns a
+frozen `idle` result. No occurrence is regenerated, no controlled service
+effect is repeated, no maintenance operation executes, and no additional
+cursor advancement is attempted. This confirms that consecutive cursor
+conflicts do not prevent scheduler progress; a cursor conflict is a resolved
+scheduler result rather than an exception; intervals made authoritative by
+competing processes are not replayed; successful local maintenance is not
+rolled back; a process reconstructed at the same authoritative target returns
+`idle`; compare-and-set semantics prevent stale cursor writes; the scheduler
+cycle is not transactional across all stages; and the scheduler does not
+provide globally exactly-once execution.
+
 A separate controlled scheduler-loop boundary can repeatedly invoke that cycle
 after an explicit `start`. Its first cycle runs immediately; `advanced` and
 `idle` results schedule one non-overlapping follow-up cycle after a fixed
