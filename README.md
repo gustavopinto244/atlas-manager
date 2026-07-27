@@ -1057,6 +1057,95 @@ A Docker control operation may complete before a later scheduler persistence
 stage fails. The existing persisted claim model provides at-most-once-oriented
 duplicate protection, not globally exactly-once Docker execution.
 
+### Docker Compose managed services
+
+Atlas Manager supports Docker Compose projects as registered services through
+the `docker-compose` management adapter. A configured Compose project is
+treated as one whole-project resource and is not manageable at the individual
+Compose service level.
+
+Compose projects require adapter-specific management configuration:
+
+```json
+{
+  "id": "atlas-stack",
+  "displayName": "Atlas Stack",
+  "managementAdapter": "docker-compose",
+  "externalResourceId": "atlas-stack",
+  "supportedOperations": ["readStatus", "readLogs", "start", "stop", "restart"],
+  "managementConfiguration": {
+    "composeFile": "/srv/atlas/compose.yaml",
+    "projectDirectory": "/srv/atlas"
+  },
+  "availabilityPolicy": {
+    "mode": "manual"
+  }
+}
+```
+
+The `composeFile` must be an absolute path and must be inside the configured
+`projectDirectory` according to normalized lexical path comparison. Path
+traversal using `..` is rejected. Control operations use `start`, `stop`, and
+`restart` only; `up`, `down`, `build`, and `pull` are not supported. Compose
+project-level status is aggregated from individual container states.
+
+#### Compose project runtime state mapping
+
+The aggregate project runtime state is calculated from its service states:
+
+- All services running → `running`
+- All services stopped → `stopped`
+- Any dead service or non-zero exit → `failed`
+- Mixed running/stopped → `unknown`
+
+#### Compose intentional limitations
+
+The Compose vertical slice does not claim:
+
+- Compose `up`, `down`, `build`, `pull`
+- service-level control inside a project
+- scaling individual Compose services
+- resource creation or deletion
+- image management
+- Compose profiles
+- Docker contexts
+- cross-service dependency orchestration
+
+### Controlled service logs
+
+The `readLogs` supported operation enables bounded log retrieval for registered
+Docker containers and Docker Compose projects. The generic
+`GetRegisteredServiceLogs` use case validates that `readLogs` is configured and
+delegates to adapter-specific log readers.
+
+Log retrieval is bounded by `tailLines` (1 to 500, default 100). Results are
+returned as an immutable batch with separate `stdoutLines` and `stderrLines`,
+plus a `truncated` indicator.
+
+Log content is normalized: ANSI escape sequences and control characters are
+removed, line lengths are capped, and total lines are bounded.
+
+#### Log safety
+
+Logs may contain application-generated sensitive content. The implementation:
+
+- does not expose raw Docker stdout/stderr through public errors
+- does not claim secret redaction
+- does not write raw logs to application logs
+- does not provide streaming or follow mode
+- does not expose an HTTP log endpoint
+
+#### Log intentional limitations
+
+The log capability does not provide:
+
+- streaming or follow mode
+- HTTP delivery
+- regex or search filtering
+- guaranteed secret redaction
+- historical log persistence
+- service selection inside a Compose project
+
 ## Technology context
 
 Currently configured:

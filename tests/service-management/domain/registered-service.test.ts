@@ -49,6 +49,7 @@ describe("RegisteredService", () => {
         timezone: null,
         schedule: null,
       },
+      managementConfiguration: null,
     });
   });
 
@@ -209,15 +210,31 @@ describe("RegisteredService", () => {
   });
 
   it("defines exactly the initial adapters and supported operations", () => {
-    expect(SERVICE_MANAGEMENT_ADAPTERS).toEqual(["mock", "pm2", "docker"]);
+    expect(SERVICE_MANAGEMENT_ADAPTERS).toEqual([
+      "mock",
+      "pm2",
+      "docker",
+      "docker-compose",
+    ]);
     expect(SUPPORTED_SERVICE_OPERATIONS).toEqual([
       "readStatus",
+      "readLogs",
       "start",
       "stop",
       "restart",
     ]);
 
-    const service = RegisteredService.create(createValidInput());
+    const service = RegisteredService.create(
+      createValidInput({
+        supportedOperations: [
+          "readStatus",
+          "readLogs",
+          "start",
+          "stop",
+          "restart",
+        ],
+      }),
+    );
 
     expect(service.supportedOperations).toEqual(SUPPORTED_SERVICE_OPERATIONS);
   });

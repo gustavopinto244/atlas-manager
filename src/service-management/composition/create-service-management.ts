@@ -4,6 +4,7 @@ import { ExecuteRegisteredServiceAvailabilityReconciliation } from "../applicati
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
+import { GetRegisteredServiceLogs } from "../application/get-registered-service-logs.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/plan-registered-service-availability-reconciliation.js";
@@ -18,8 +19,14 @@ import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../applicati
 import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
 import { ServiceAvailabilityReconciliationSchedulerLoop } from "../application/service-availability-reconciliation-scheduler-loop.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
+import { ComposeServiceController } from "../infrastructure/compose-service-controller.js";
+import { ComposeServiceStatusReader } from "../infrastructure/compose-service-status-reader.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
 import { DispatchingServiceStatusReader } from "../infrastructure/dispatching-service-status-reader.js";
+import type { DockerComposeProjectControlExecutor } from "../infrastructure/docker-compose-executors.js";
+import type { DockerComposeProjectStatusExecutor } from "../infrastructure/docker-compose-executors.js";
+import type { DockerComposeProjectLogExecutor } from "../infrastructure/docker-compose-executors.js";
+import type { DockerContainerLogExecutor } from "../infrastructure/docker-compose-executors.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../infrastructure/environment-registered-service-catalog.js";
 import { InMemoryServiceAvailabilityOverrideStore } from "../infrastructure/in-memory-service-availability-override-store.js";
 import { InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore } from "../infrastructure/in-memory-service-availability-reconciliation-occurrence-claim-store.js";
@@ -47,11 +54,23 @@ import { NodeDockerContainerControlExecutor } from "../infrastructure/node-docke
 import type { DockerContainerControlExecutor } from "../infrastructure/docker-container-control-executor.js";
 import { DockerServiceStatusReader } from "../infrastructure/docker-service-status-reader.js";
 import { DockerServiceController } from "../infrastructure/docker-service-controller.js";
+import {
+  NodeDockerComposeProjectStatusExecutor,
+  NodeDockerComposeProjectControlExecutor,
+  NodeDockerComposeProjectLogExecutor,
+  NodeDockerContainerLogExecutor,
+} from "../infrastructure/node-docker-compose-executors.js";
+import {
+  DockerContainerLogReader,
+  ComposeProjectLogReader,
+  DispatchingServiceLogReader,
+} from "../infrastructure/service-log-readers.js";
 
 export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
   readonly getRegisteredServiceStatus: GetRegisteredServiceStatus;
   readonly controlRegisteredService: ControlRegisteredService;
+  readonly getRegisteredServiceLogs: GetRegisteredServiceLogs;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
@@ -78,6 +97,10 @@ export interface ServiceManagementCompositionOverrides {
   readonly dockerContainerInspectExecutor?: DockerContainerInspectExecutor;
   readonly dockerContainerStatsExecutor?: DockerContainerStatsExecutor;
   readonly dockerContainerControlExecutor?: DockerContainerControlExecutor;
+  readonly dockerComposeProjectStatusExecutor?: DockerComposeProjectStatusExecutor;
+  readonly dockerComposeProjectControlExecutor?: DockerComposeProjectControlExecutor;
+  readonly dockerComposeProjectLogExecutor?: DockerComposeProjectLogExecutor;
+  readonly dockerContainerLogExecutor?: DockerContainerLogExecutor;
 }
 
 export function createServiceManagement(
@@ -126,16 +149,48 @@ export function createServiceManagement(
     dockerInspectExecutor,
     dockerControlExecutor,
   );
+  const composeStatusExecutor =
+    overrides?.dockerComposeProjectStatusExecutor ??
+    new NodeDockerComposeProjectStatusExecutor();
+  const composeControlExecutor =
+    overrides?.dockerComposeProjectControlExecutor ??
+    new NodeDockerComposeProjectControlExecutor();
+  const composeLogExecutor =
+    overrides?.dockerComposeProjectLogExecutor ??
+    new NodeDockerComposeProjectLogExecutor();
+  const containerLogExecutor =
+    overrides?.dockerContainerLogExecutor ??
+    new NodeDockerContainerLogExecutor();
+  const composeStatusReader = new ComposeServiceStatusReader(
+    composeStatusExecutor,
+  );
+  const composeController = new ComposeServiceController(
+    composeControlExecutor,
+  );
   const statusReader = new DispatchingServiceStatusReader({
     mock: mockStatusReader,
     pm2: pm2StatusReader,
     docker: dockerStatusReader,
+    "docker-compose": composeStatusReader,
   });
   const controller = new DispatchingServiceController({
     mock: mockController,
     pm2: pm2Controller,
     docker: dockerController,
+    "docker-compose": composeController,
   });
+  const containerLogReader = new DockerContainerLogReader(containerLogExecutor);
+  const composeProjectLogReader = new ComposeProjectLogReader(
+    composeLogExecutor,
+  );
+  const logReader = new DispatchingServiceLogReader(
+    containerLogReader,
+    composeProjectLogReader,
+  );
+  const getRegisteredServiceLogs = new GetRegisteredServiceLogs(
+    catalog,
+    logReader,
+  );
   const listRegisteredServices = new ListRegisteredServices(catalog);
   const pruneExpiredRegisteredServiceAvailabilityOverrides =
     new PruneExpiredRegisteredServiceAvailabilityOverrides(
@@ -201,6 +256,7 @@ export function createServiceManagement(
       clock,
     ),
     controlRegisteredService,
+    getRegisteredServiceLogs,
     setRegisteredServiceAvailabilityOverride:
       new SetRegisteredServiceAvailabilityOverride(
         catalog,

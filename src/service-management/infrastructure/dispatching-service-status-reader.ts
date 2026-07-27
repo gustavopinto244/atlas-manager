@@ -6,6 +6,7 @@ export interface DispatchingServiceStatusReaderDependencies {
   readonly mock: ServiceStatusReader;
   readonly pm2: ServiceStatusReader;
   readonly docker: ServiceStatusReader;
+  readonly "docker-compose"?: ServiceStatusReader;
 }
 
 export class DispatchingServiceStatusReaderError extends Error {
@@ -21,6 +22,7 @@ export class DispatchingServiceStatusReader implements ServiceStatusReader {
   private readonly mockReader: ServiceStatusReader;
   private readonly pm2Reader: ServiceStatusReader;
   private readonly dockerReader: ServiceStatusReader;
+  private readonly composeReader: ServiceStatusReader;
 
   public constructor(dependencies: DispatchingServiceStatusReaderDependencies) {
     if (
@@ -34,6 +36,7 @@ export class DispatchingServiceStatusReader implements ServiceStatusReader {
     this.mockReader = dependencies.mock;
     this.pm2Reader = dependencies.pm2;
     this.dockerReader = dependencies.docker;
+    this.composeReader = dependencies["docker-compose"] ?? this.dockerReader;
     Object.freeze(this);
   }
 
@@ -45,6 +48,8 @@ export class DispatchingServiceStatusReader implements ServiceStatusReader {
         return this.pm2Reader.read(service);
       case "docker":
         return this.dockerReader.read(service);
+      case "docker-compose":
+        return this.composeReader.read(service);
       default:
         return Promise.reject(new DispatchingServiceStatusReaderError());
     }

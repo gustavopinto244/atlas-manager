@@ -190,6 +190,7 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
         timezone: null,
         schedule: null,
       },
+      managementConfiguration: null,
     });
     expect(services[1]?.managementAdapter).toBe("pm2");
     expect(

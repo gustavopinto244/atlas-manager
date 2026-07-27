@@ -19,7 +19,10 @@ const requiredEntryFields = Object.freeze([
   "supportedOperations",
   "availabilityPolicy",
 ] as const);
-const requiredEntryFieldSet = new Set<string>(requiredEntryFields);
+const allowedEntryFields = Object.freeze([
+  ...requiredEntryFields,
+  "managementConfiguration",
+]);
 
 export type RegisteredServiceConfigurationErrorCode =
   | "registered_services_too_large"
@@ -127,6 +130,7 @@ function parseEntryShape(entry: unknown): CreateRegisteredServiceInput {
   const externalResourceId = entry["externalResourceId"];
   const supportedOperations = entry["supportedOperations"];
   const availabilityPolicy = entry["availabilityPolicy"];
+  const managementConfiguration = entry["managementConfiguration"];
 
   if (
     typeof id !== "string" ||
@@ -150,8 +154,18 @@ function parseEntryShape(entry: unknown): CreateRegisteredServiceInput {
     externalResourceId,
     supportedOperations,
     availabilityPolicy,
+    ...(Object.hasOwn(entry, "managementConfiguration")
+      ? {
+          managementConfiguration: managementConfiguration as Record<
+            string,
+            unknown
+          >,
+        }
+      : {}),
   };
 }
+
+const allowedEntryFieldSet = new Set<string>(allowedEntryFields);
 
 function hasExactlyRequiredFields(
   entry: Record<PropertyKey, unknown>,
@@ -159,10 +173,9 @@ function hasExactlyRequiredFields(
   const fields = Reflect.ownKeys(entry);
 
   return (
-    fields.length === requiredEntryFields.length &&
     requiredEntryFields.every((field) => Object.hasOwn(entry, field)) &&
     fields.every(
-      (field) => typeof field === "string" && requiredEntryFieldSet.has(field),
+      (field) => typeof field === "string" && allowedEntryFieldSet.has(field),
     )
   );
 }
