@@ -5,6 +5,10 @@ import {
 } from "./machine-shutdown-occurrence.js";
 import type { MachineShutdownOccurrenceExecutionResult } from "./machine-shutdown-occurrence-execution-result.js";
 import type { MachineShutdownReadinessDecision } from "./machine-shutdown-readiness-decision.js";
+import {
+  createMachineShutdownPreparationReport,
+  type MachineShutdownPreparationReport,
+} from "./machine-shutdown-preparation-report.js";
 
 export type MachinePowerSchedulerItem =
   | Readonly<{
@@ -24,6 +28,7 @@ export type MachinePowerSchedulerItem =
       kind: "rejected";
       occurrence: MachineShutdownOccurrence;
       decision: MachineShutdownReadinessDecision;
+      preparationReport?: MachineShutdownPreparationReport;
     }>;
 export interface MachinePowerSchedulerReport {
   readonly completedThrough: string;
@@ -63,12 +68,22 @@ export function createMachinePowerSchedulerItem(
     input["kind"] === "rejected" &&
     Object.hasOwn(input, "occurrence") &&
     Object.hasOwn(input, "decision")
-  )
+  ) {
+    const preparationReport = Object.hasOwn(input, "preparationReport")
+      ? createMachineShutdownPreparationReport(input["preparationReport"])
+      : undefined;
+    if (
+      preparationReport !== undefined &&
+      preparationReport.outcome !== "blocked"
+    )
+      throw new Error("invalid scheduler item");
     return Object.freeze({
       kind: "rejected" as const,
       occurrence: createMachineShutdownOccurrence(input["occurrence"]),
       decision: input["decision"] as MachineShutdownReadinessDecision,
+      ...(preparationReport ? { preparationReport } : {}),
     });
+  }
   throw new Error("invalid scheduler item");
 }
 export function createMachinePowerSchedulerReport(
@@ -86,7 +101,10 @@ export function createMachinePowerSchedulerReport(
   );
   const complete = occurrenceResults.every(
     (item) =>
-      item.kind === "completed" && item.execution.outcome !== "rejected",
+      item.kind === "completed" &&
+      item.execution.outcome !== "rejected" &&
+      item.execution.outcome !== "preparation_incomplete" &&
+      item.execution.outcome !== "not_due",
   );
   if (
     input["complete"] !== complete ||

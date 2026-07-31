@@ -88,6 +88,9 @@ export class RunMachinePowerSchedulerTick {
             kind: "rejected" as const,
             occurrence,
             decision: execution.decision,
+            ...(execution.preparationReport
+              ? { preparationReport: execution.preparationReport }
+              : {}),
           });
         else items.push({ kind: "completed" as const, execution });
       } catch (error) {
@@ -103,7 +106,12 @@ export class RunMachinePowerSchedulerTick {
         completedThrough: current.completedThrough,
         tickedThrough: tickedAt,
         occurrenceResults: items,
-        complete: items.every((item) => item.kind === "completed"),
+        complete: items.every(
+          (item) =>
+            item.kind === "completed" &&
+            item.execution.outcome !== "preparation_incomplete" &&
+            item.execution.outcome !== "not_due",
+        ),
       });
     const pruning = await this.#claims.pruneCompletedThrough(current);
     if (!report.complete)

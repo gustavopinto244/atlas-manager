@@ -222,6 +222,7 @@ describe("createServiceManagement", () => {
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
       "getRegisteredServiceAvailabilityForInterval",
+      "orchestrateRegisteredServicesStop",
       "pruneExpiredRegisteredServiceAvailabilityOverrides",
       "pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims",
       "planRegisteredServiceAvailabilityReconciliation",
@@ -233,6 +234,12 @@ describe("createServiceManagement", () => {
       "serviceAvailabilityReconciliationSchedulerLoop",
     ]);
     expect(Object.isFrozen(capabilities)).toBe(true);
+    expect(capabilities.orchestrateRegisteredServicesStop).toBe(
+      capabilities.orchestrateRegisteredServicesStop,
+    );
+    expect(
+      Object.isFrozen(capabilities.orchestrateRegisteredServicesStop),
+    ).toBe(true);
     expect(capabilities).not.toHaveProperty("catalog");
     expect(capabilities).not.toHaveProperty("statusReader");
     expect(capabilities).not.toHaveProperty("controller");
