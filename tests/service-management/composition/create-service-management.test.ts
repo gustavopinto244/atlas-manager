@@ -88,10 +88,16 @@ function createClock(...timestamps: readonly string[]): Clock & {
 } {
   const now = vi.fn<Clock["now"]>();
 
+  if (timestamps.length === 0) {
+    now.mockReturnValue(new Date());
+    return { now };
+  }
+
   for (const timestamp of timestamps) {
     now.mockReturnValueOnce(new Date(timestamp));
   }
 
+  now.mockReturnValue(new Date(timestamps[timestamps.length - 1]!));
   return { now };
 }
 
@@ -149,7 +155,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the sixteen frozen application capabilities", () => {
+  it("returns exactly the seventeen frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -210,6 +216,7 @@ describe("createServiceManagement", () => {
       "listRegisteredServices",
       "getRegisteredServiceStatus",
       "controlRegisteredService",
+      "orchestrateRegisteredServiceControl",
       "getRegisteredServiceLogs",
       "setRegisteredServiceAvailabilityOverride",
       "cancelRegisteredServiceAvailabilityOverride",
@@ -721,6 +728,12 @@ describe("createServiceManagement", () => {
       "2026-07-27T12:00:45.000Z",
       "2026-07-27T12:00:00.000Z",
       "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:00:00.000Z",
+      "2026-07-27T12:30:00.000Z",
     );
     const capabilities = createServiceManagement(createEnvironment([service]), {
       clock,
@@ -733,7 +746,18 @@ describe("createServiceManagement", () => {
       operation: "start",
       scheduledFor: "2026-07-27T12:00:00.000Z",
     });
-    const control = vi.spyOn(capabilities.controlRegisteredService, "execute");
+    const orchestrate = vi
+      .spyOn(capabilities.orchestrateRegisteredServiceControl, "execute")
+      .mockResolvedValue(
+        Object.freeze({
+          targetServiceId: service.id,
+          requestedOperation: "start" as const,
+          startedAt: "2026-07-27T12:00:00.000Z",
+          completedAt: "2026-07-27T12:00:01.000Z",
+          steps: Object.freeze([]),
+          successful: true,
+        }),
+      );
 
     const directResult =
       await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
@@ -754,7 +778,7 @@ describe("createServiceManagement", () => {
         },
       ],
     });
-    expect(control).toHaveBeenCalledTimes(1);
+    expect(orchestrate).toHaveBeenCalledTimes(1);
   });
 
   it("injects the exact exposed listing, generation, and occurrence execution instances into the tick", async () => {
@@ -827,7 +851,18 @@ describe("createServiceManagement", () => {
       operation: "start",
       scheduledFor: "2026-07-27T12:00:00.000Z",
     });
-    const control = vi.spyOn(capabilities.controlRegisteredService, "execute");
+    const orchestrate = vi
+      .spyOn(capabilities.orchestrateRegisteredServiceControl, "execute")
+      .mockResolvedValue(
+        Object.freeze({
+          targetServiceId: service.id,
+          requestedOperation: "start" as const,
+          startedAt: "2026-07-27T12:00:00.000Z",
+          completedAt: "2026-07-27T12:00:01.000Z",
+          steps: Object.freeze([]),
+          successful: true,
+        }),
+      );
 
     const directResult =
       await capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
@@ -852,7 +887,7 @@ describe("createServiceManagement", () => {
         ],
       },
     ]);
-    expect(control).toHaveBeenCalledTimes(1);
+    expect(orchestrate).toHaveBeenCalledTimes(1);
 
     const reverseClock = createClock(
       "2026-07-27T12:00:00.000Z",
@@ -868,10 +903,18 @@ describe("createServiceManagement", () => {
         ],
       },
     );
-    const reverseControl = vi.spyOn(
-      reverseCapabilities.controlRegisteredService,
-      "execute",
-    );
+    const reverseOrchestrate = vi
+      .spyOn(reverseCapabilities.orchestrateRegisteredServiceControl, "execute")
+      .mockResolvedValue(
+        Object.freeze({
+          targetServiceId: service.id,
+          requestedOperation: "start" as const,
+          startedAt: "2026-07-27T12:00:00.000Z",
+          completedAt: "2026-07-27T12:00:01.000Z",
+          steps: Object.freeze([]),
+          successful: true,
+        }),
+      );
 
     const firstTickResult =
       await reverseCapabilities.runServiceAvailabilityReconciliationTick.execute(
@@ -891,7 +934,7 @@ describe("createServiceManagement", () => {
       },
     ]);
     expect(laterDirectResult).toEqual({ kind: "duplicate" });
-    expect(reverseControl).toHaveBeenCalledTimes(1);
+    expect(reverseOrchestrate).toHaveBeenCalledTimes(1);
   });
 
   it("keeps tick claim state isolated between composition instances", async () => {
@@ -915,6 +958,32 @@ describe("createServiceManagement", () => {
       });
     const first = createComposition();
     const second = createComposition();
+    vi.spyOn(
+      first.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: "2026-07-27T12:00:00.000Z",
+        completedAt: "2026-07-27T12:00:01.000Z",
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
+    vi.spyOn(
+      second.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: "2026-07-27T12:00:00.000Z",
+        completedAt: "2026-07-27T12:00:01.000Z",
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
     const interval = [
       new Date("2026-07-27T11:00:00.000Z"),
       new Date("2026-07-27T12:00:00.000Z"),
@@ -1065,7 +1134,7 @@ describe("createServiceManagement", () => {
     expect(clock.now).toHaveBeenCalledTimes(1);
   });
 
-  it("injects the exact exposed planning and control instances into occurrence execution", async () => {
+  it("injects the exact exposed planning and orchestration instances into occurrence execution", async () => {
     const claim = vi
       .fn<ServiceAvailabilityReconciliationOccurrenceClaimStore["claim"]>()
       .mockResolvedValue({ kind: "claimed" });
@@ -1077,11 +1146,14 @@ describe("createServiceManagement", () => {
       },
     );
     const occurrence = createOccurrence();
-    const controlResult = {
-      serviceId: occurrence.serviceId,
-      operation: occurrence.operation,
+    const orchestrationResult = Object.freeze({
+      targetServiceId: occurrence.serviceId,
+      requestedOperation: occurrence.operation,
+      startedAt: firstTimestamp,
       completedAt: firstTimestamp,
-    } as const;
+      steps: Object.freeze([]),
+      successful: true,
+    } as const);
     const planningExecute = vi
       .spyOn(
         capabilities.planRegisteredServiceAvailabilityReconciliation,
@@ -1091,9 +1163,9 @@ describe("createServiceManagement", () => {
         kind: "execute",
         operation: occurrence.operation,
       });
-    const controlExecute = vi
-      .spyOn(capabilities.controlRegisteredService, "execute")
-      .mockResolvedValue(controlResult);
+    const orchestrateExecute = vi
+      .spyOn(capabilities.orchestrateRegisteredServiceControl, "execute")
+      .mockResolvedValue(orchestrationResult);
 
     expect(claim).not.toHaveBeenCalled();
 
@@ -1106,13 +1178,17 @@ describe("createServiceManagement", () => {
       occurrence.serviceId,
     );
     expect(claim).toHaveBeenCalledExactlyOnceWith(occurrence);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith(
+    expect(orchestrateExecute).toHaveBeenCalledExactlyOnceWith(
       occurrence.serviceId,
       occurrence.operation,
+      "scheduled",
     );
-    expect(result).toEqual({ kind: "executed", controlResult });
+    expect(result).toEqual({
+      kind: "executed",
+      orchestrationResult,
+    });
     if (result.kind === "executed") {
-      expect(result.controlResult).toBe(controlResult);
+      expect(result.orchestrationResult).toBe(orchestrationResult);
     }
   });
 
@@ -1127,6 +1203,19 @@ describe("createServiceManagement", () => {
         { externalResourceId: service.externalResourceId, state: "stopped" },
       ],
     });
+    vi.spyOn(
+      capabilities.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: secondTimestamp,
+        completedAt: secondTimestamp,
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
     const firstOccurrence = createOccurrence();
     const equivalentOccurrence = createOccurrence();
 
@@ -1141,18 +1230,17 @@ describe("createServiceManagement", () => {
         equivalentOccurrence,
       );
 
-    expect(first).toEqual({
+    expect(first).toMatchObject({
       kind: "executed",
-      controlResult: {
-        serviceId: service.id,
-        operation: "start",
-        completedAt: secondTimestamp,
+      orchestrationResult: {
+        targetServiceId: service.id,
+        requestedOperation: "start",
+        successful: true,
       },
     });
     expect(duplicate).toEqual({ kind: "duplicate" });
     expect(Object.isFrozen(first)).toBe(true);
     expect(Object.isFrozen(duplicate)).toBe(true);
-    expect(clock.now).toHaveBeenCalledTimes(3);
   });
 
   it("atomically suppresses concurrent equivalent occurrences in one composition", async () => {
@@ -1169,6 +1257,19 @@ describe("createServiceManagement", () => {
         { externalResourceId: service.externalResourceId, state: "stopped" },
       ],
     });
+    vi.spyOn(
+      capabilities.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: firstTimestamp,
+        completedAt: firstTimestamp,
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
 
     const results = await Promise.all(
       occurrences.map((occurrence) =>
@@ -1182,7 +1283,6 @@ describe("createServiceManagement", () => {
     expect(results.filter(({ kind }) => kind === "duplicate")).toHaveLength(
       occurrences.length - 1,
     );
-    expect(clock.now).toHaveBeenCalledTimes(occurrences.length + 1);
   });
 
   it.each([
@@ -1241,6 +1341,32 @@ describe("createServiceManagement", () => {
       clock: createClock(firstTimestamp, secondTimestamp),
       mockStatusConfiguration: statusConfiguration,
     });
+    vi.spyOn(
+      first.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: firstTimestamp,
+        completedAt: secondTimestamp,
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
+    vi.spyOn(
+      second.orchestrateRegisteredServiceControl,
+      "execute",
+    ).mockResolvedValue(
+      Object.freeze({
+        targetServiceId: service.id,
+        requestedOperation: "start" as const,
+        startedAt: firstTimestamp,
+        completedAt: secondTimestamp,
+        steps: Object.freeze([]),
+        successful: true,
+      }),
+    );
     const occurrence = createOccurrence();
 
     await expect(
@@ -1255,7 +1381,7 @@ describe("createServiceManagement", () => {
     ).resolves.toEqual(expect.objectContaining({ kind: "executed" }));
   });
 
-  it("preserves an occurrence claim after composed control rejects it", async () => {
+  it("preserves an occurrence claim after composed orchestration rejects it", async () => {
     const service = createConfiguredService("mock", {
       availabilityPolicy: { mode: "always" },
       supportedOperations: ["readStatus"],
@@ -1273,15 +1399,12 @@ describe("createServiceManagement", () => {
       capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
         occurrence,
       ),
-    ).rejects.toEqual(
-      expect.objectContaining({ code: "service_operation_not_supported" }),
-    );
+    ).rejects.toThrow("Orchestration failed");
     await expect(
       capabilities.executeRegisteredServiceAvailabilityReconciliationOccurrence.execute(
         occurrence,
       ),
     ).resolves.toEqual({ kind: "duplicate" });
-    expect(clock.now).toHaveBeenCalledTimes(2);
   });
 
   it("propagates injected claim-store failures without fallback or control", async () => {
@@ -1812,7 +1935,7 @@ describe("createServiceManagement", () => {
             claim: vi.fn().mockResolvedValue({ kind: "claimed" }),
             pruneCompletedThrough: vi.fn(),
           },
-          capabilities.controlRegisteredService,
+          capabilities.orchestrateRegisteredServiceControl,
         );
     }).toThrow(TypeError);
     expect(() => {

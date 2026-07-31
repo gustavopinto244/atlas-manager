@@ -2054,3 +2054,52 @@ The project follows this workflow:
 7. squash merge.
 
 Commit messages follow the Conventional Commits convention.
+
+## Dependency-aware service orchestration
+
+Registered services may declare dependencies using only canonical registered
+service IDs:
+
+```json
+{
+  "id": "atlas-api",
+  "dependencies": ["atlas-postgres", "atlas-redis"],
+  "readinessPolicy": {
+    "mode": "health",
+    "timeoutMilliseconds": 30000,
+    "pollIntervalMilliseconds": 500
+  }
+}
+```
+
+The catalog validates unknown targets, duplicate edges, self-dependencies,
+cycles, direct-dependency limits, and readiness policy bounds before startup.
+The resulting immutable graph uses deterministic topological ordering: starts
+run dependencies first and stops run dependents first. Shared dependencies are
+processed once.
+
+Readiness defaults to runtime mode, where only `running` is ready. Docker
+containers and Docker Compose projects may opt into health mode; Docker health
+must be `healthy` and Compose aggregate health must be `healthy`. `starting`,
+`unhealthy`, `mixed`, `unknown`, and `not_configured` remain not ready. Waiting
+uses bounded timeout and poll intervals with an injected application clock and
+timer in tests.
+
+Restart stops active dependents, restarts the target once, confirms target
+readiness, and restores only dependents stopped by that orchestration. A
+dependent that was already stopped remains stopped. Manual orchestration and
+scheduled orchestration share dependency ordering; scheduled starts additionally
+block when a dependency's effective availability is unavailable.
+
+Availability occurrences are claimed for the scheduled target before
+orchestration. Child dependency steps create no claims. Consequently, a
+process reconstructed after a partial orchestration sees the target claim as a
+duplicate and does not automatically replay the dependency sequence. Earlier
+effects remain committed; there is no automatic retry, rollback, compensation,
+or transaction across services.
+
+Dependency configuration cannot supply Docker targets, Compose service names,
+paths, commands, shell probes, HTTP endpoints, TCP probes, or custom scripts.
+The implementation intentionally does not discover dependencies from Compose
+files or labels, start services in parallel, mutate the graph at runtime, or
+provide a new HTTP endpoint.

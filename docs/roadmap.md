@@ -150,10 +150,7 @@ Allow registered services to follow explicit availability policies.
 - explicit timezone handling;
 - temporary overrides;
 - override expiration and cancellation;
-- scheduler execution;
-- dependency-aware startup and shutdown;
-- circular-dependency detection;
-- dependency readiness confirmation.
+- scheduler execution.
 
 The expected initial timezone is `America/Sao_Paulo`, but it must be configured
 explicitly.
@@ -180,14 +177,14 @@ Manage approved Docker resources through controlled project-level operations.
 - safe no-shell Docker CLI execution with finite timeouts and bounded output;
 - availability scheduling integration with file-backed scheduler compatibility;
 - adapter-specific management configuration validation;
-- dispatching and composition integration.
+- dispatching and composition integration;
+- registered-service dependency graphs with unknown-target and cycle rejection;
+- deterministic dependency-aware start, stop, and restart orchestration;
+- runtime and Docker/Compose health readiness confirmation;
+- scheduler ordering and file-backed dependency reconstruction coverage.
 
 ### Remaining scope
 
-- dependency graphs involving Docker resources;
-- dependency-aware orchestration;
-- readiness confirmation for dependent services;
-- circular-dependency detection;
 - Compose profiles;
 - v0.5 hardening, acceptance matrix, and milestone readiness.
 

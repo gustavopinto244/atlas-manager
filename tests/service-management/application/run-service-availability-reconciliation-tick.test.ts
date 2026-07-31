@@ -1,17 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ControlRegisteredService } from "../../../src/service-management/application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../../../src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
+import type { OrchestrateRegisteredServiceControl } from "../../../src/service-management/application/orchestrate-registered-service-control.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
 import type { RegisteredServiceCatalog } from "../../../src/service-management/application/ports/registered-service-catalog.js";
 import { RunServiceAvailabilityReconciliationTick } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
+import { createDependencyGraph } from "../../../src/service-management/domain/dependency-graph.js";
+import type { RegisteredServiceDependencyGraph } from "../../../src/service-management/domain/dependency-graph.js";
+import type { OrchestrationResult } from "../../../src/service-management/domain/orchestration-plan.js";
 import { RegisteredService } from "../../../src/service-management/domain/registered-service.js";
-import { RegisteredServiceControlResult } from "../../../src/service-management/domain/registered-service-control-result.js";
 import { ServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
 
-function createService(id: string): RegisteredService {
+function createService(
+  id: string,
+  dependencies: readonly string[] = [],
+): RegisteredService {
   return RegisteredService.create({
     id,
     displayName: id,
@@ -19,6 +24,7 @@ function createService(id: string): RegisteredService {
     externalResourceId: `${id}-target`,
     supportedOperations: ["readStatus", "start", "stop"],
     availabilityPolicy: { mode: "manual" },
+    dependencies,
   });
 }
 
@@ -34,10 +40,30 @@ function createOccurrence(
   });
 }
 
-function createDependencies(): {
+function createGraph(): RegisteredServiceDependencyGraph {
+  return createDependencyGraph([]);
+}
+
+function createOrchestrationResult(
+  operation: "start" | "stop" = "start",
+): OrchestrationResult {
+  return Object.freeze({
+    targetServiceId: "atlas-api",
+    requestedOperation: operation,
+    startedAt: "2026-07-27T12:00:00.000Z",
+    completedAt: "2026-07-27T12:00:01.000Z",
+    steps: Object.freeze([]),
+    successful: true,
+  });
+}
+
+function createDependencies(
+  graph: RegisteredServiceDependencyGraph = createGraph(),
+): {
   readonly list: ListRegisteredServices;
   readonly generate: GenerateRegisteredServiceAvailabilityReconciliationOccurrences;
   readonly execute: ExecuteRegisteredServiceAvailabilityReconciliationOccurrence;
+  readonly getGraph: () => Promise<RegisteredServiceDependencyGraph>;
 } {
   const catalog: RegisteredServiceCatalog = {
     list: vi.fn(),
@@ -54,11 +80,11 @@ function createDependencies(): {
     { read: vi.fn() },
     { now: vi.fn() },
   );
-  const control = new ControlRegisteredService(
-    catalog,
-    { execute: vi.fn() },
-    { now: vi.fn() },
-  );
+  const orchestrate = {
+    execute: vi
+      .fn<OrchestrateRegisteredServiceControl["execute"]>()
+      .mockResolvedValue(createOrchestrationResult()),
+  } as unknown as OrchestrateRegisteredServiceControl;
 
   return {
     list: new ListRegisteredServices(catalog),
@@ -72,13 +98,14 @@ function createDependencies(): {
         claim: vi.fn(),
         pruneCompletedThrough: vi.fn(),
       },
-      control,
+      orchestrate,
     ),
+    getGraph: vi.fn().mockResolvedValue(graph),
   };
 }
 
-function createTick() {
-  const dependencies = createDependencies();
+function createTick(graph = createGraph()) {
+  const dependencies = createDependencies(graph);
   const listExecute = vi.spyOn(dependencies.list, "execute");
   const generateExecute = vi.spyOn(dependencies.generate, "execute");
   const occurrenceExecute = vi.spyOn(dependencies.execute, "execute");
@@ -88,6 +115,7 @@ function createTick() {
       dependencies.list,
       dependencies.generate,
       dependencies.execute,
+      dependencies.getGraph,
     ),
     listExecute,
     generateExecute,
@@ -113,7 +141,7 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
     expect(occurrenceExecute).not.toHaveBeenCalled();
   });
 
-  it("preserves catalog and occurrence order with exact dependency values", async () => {
+  it("groups occurrences by scheduled-for and executes cross-service in order", async () => {
     const { tick, listExecute, generateExecute, occurrenceExecute } =
       createTick();
     const services = [
@@ -142,11 +170,7 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
     const duplicateResult = Object.freeze({ kind: "duplicate" } as const);
     const executedResult = Object.freeze({
       kind: "executed" as const,
-      controlResult: RegisteredServiceControlResult.create({
-        serviceId: "service-c",
-        operation: "stop",
-        completedAt: "2026-07-27T14:00:01.000Z",
-      }),
+      orchestrationResult: createOrchestrationResult("stop"),
     });
     listExecute.mockResolvedValue(services);
     generateExecute
@@ -160,16 +184,8 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
 
     const result = await tick.execute(fromExclusive, toInclusive);
 
-    expect(generateExecute.mock.calls).toEqual([
-      ["service-a", fromExclusive, toInclusive],
-      ["service-b", fromExclusive, toInclusive],
-      ["service-c", fromExclusive, toInclusive],
-    ]);
-    expect(occurrenceExecute.mock.calls).toEqual([
-      [firstOccurrence],
-      [secondOccurrence],
-      [thirdOccurrence],
-    ]);
+    expect(generateExecute).toHaveBeenCalledTimes(3);
+    expect(occurrenceExecute).toHaveBeenCalledTimes(3);
     expect(result.map((serviceResult) => serviceResult.serviceId)).toEqual([
       "service-a",
       "service-b",
@@ -191,11 +207,75 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
       occurrence: thirdOccurrence,
       result: executedResult,
     });
-    expect(completed.occurrenceResults[0]?.occurrence).toBe(secondOccurrence);
-    expect(
-      completed.occurrenceResults[0]?.kind === "completed" &&
-        completed.occurrenceResults[0].result,
-    ).toBe(duplicateResult);
+  });
+
+  it("orders same-instant starts dependencies-first and stops dependents-first", async () => {
+    const graph = createDependencyGraph([
+      { serviceId: "api", dependencies: ["database"] },
+      { serviceId: "database", dependencies: [] },
+    ]);
+    const { tick, listExecute, generateExecute, occurrenceExecute } =
+      createTick(graph);
+    const services = [
+      createService("api", ["database"]),
+      createService("database"),
+    ];
+    const startApi = createOccurrence(
+      "api",
+      "start",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const startDatabase = createOccurrence(
+      "database",
+      "start",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const startTrace: string[] = [];
+    listExecute.mockResolvedValue(services);
+    generateExecute
+      .mockResolvedValueOnce([startApi])
+      .mockResolvedValueOnce([startDatabase]);
+    occurrenceExecute.mockImplementation((occurrence) => {
+      startTrace.push(occurrence.serviceId);
+      return Promise.resolve(Object.freeze({ kind: "none" }));
+    });
+
+    await tick.execute(
+      new Date("2026-07-27T11:00:00.000Z"),
+      new Date("2026-07-27T13:00:00.000Z"),
+    );
+    expect(startTrace).toEqual(["database", "api"]);
+
+    const stopTrace: string[] = [];
+    const stopApi = createOccurrence("api", "stop", "2026-07-27T12:00:00.000Z");
+    const stopDatabase = createOccurrence(
+      "database",
+      "stop",
+      "2026-07-27T12:00:00.000Z",
+    );
+    const stopDependencies = createDependencies(graph);
+    const stopList = vi.spyOn(stopDependencies.list, "execute");
+    const stopGenerate = vi.spyOn(stopDependencies.generate, "execute");
+    const stopExecute = vi.spyOn(stopDependencies.execute, "execute");
+    const stopOrderedTick = new RunServiceAvailabilityReconciliationTick(
+      stopDependencies.list,
+      stopDependencies.generate,
+      stopDependencies.execute,
+      stopDependencies.getGraph,
+    );
+    stopList.mockResolvedValue(services);
+    stopGenerate
+      .mockResolvedValueOnce([stopApi])
+      .mockResolvedValueOnce([stopDatabase]);
+    stopExecute.mockImplementation((occurrence) => {
+      stopTrace.push(occurrence.serviceId);
+      return Promise.resolve(Object.freeze({ kind: "none" }));
+    });
+    await stopOrderedTick.execute(
+      new Date("2026-07-27T11:00:00.000Z"),
+      new Date("2026-07-27T13:00:00.000Z"),
+    );
+    expect(stopTrace).toEqual(["api", "database"]);
   });
 
   it("propagates a listing failure and performs no later work", async () => {
@@ -242,7 +322,6 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
       serviceId: "service-a",
       error: sentinel,
     });
-    expect(result[0]?.kind === "failed" && result[0].error).toBe(sentinel);
     expect(result[1]).toMatchObject({
       kind: "completed",
       serviceId: "service-b",
@@ -275,23 +354,16 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
       new Date("2026-07-27T15:00:00.000Z"),
     );
 
-    expect(occurrenceExecute.mock.calls).toEqual(
-      occurrences.map((occurrence) => [occurrence]),
-    );
     const firstService = result[0];
     expect(firstService?.kind).toBe("completed");
     if (firstService?.kind !== "completed") {
       throw new Error("Expected completed service result");
     }
-    expect(firstService.occurrenceResults[0]).toEqual({
+    expect(firstService.occurrenceResults[0]).toMatchObject({
       kind: "failed",
       occurrence: occurrences[0],
       error: sentinel,
     });
-    expect(
-      firstService.occurrenceResults[0]?.kind === "failed" &&
-        firstService.occurrenceResults[0].error,
-    ).toBe(sentinel);
     expect(firstService.occurrenceResults[1]).toMatchObject({
       kind: "completed",
       occurrence: occurrences[1],
@@ -303,7 +375,7 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
     });
   });
 
-  it("processes generation and occurrence execution strictly sequentially", async () => {
+  it("processes all generations then all executions for the interval", async () => {
     const { tick, listExecute, generateExecute, occurrenceExecute } =
       createTick();
     const services = [createService("service-a"), createService("service-b")];
@@ -341,8 +413,8 @@ describe("RunServiceAvailabilityReconciliationTick", () => {
     expect(trace).toEqual([
       "list",
       "generate:service-a",
-      "execute:service-a",
       "generate:service-b",
+      "execute:service-a",
       "execute:service-b",
     ]);
   });

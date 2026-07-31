@@ -5,7 +5,13 @@ import type { RegisteredServiceCatalog } from "./ports/registered-service-catalo
 import type { ServiceAvailabilityOverrideStore } from "./ports/service-availability-override-store.js";
 import { RegisteredServiceNotFoundError } from "./registered-service-not-found-error.js";
 
-export class GetRegisteredServiceEffectiveAvailability {
+export interface GetRegisteredServiceEffectiveAvailabilityPort {
+  readonly execute: (
+    serviceId: string,
+  ) => Promise<ServiceAvailabilityExpectation>;
+}
+
+export class GetRegisteredServiceEffectiveAvailability implements GetRegisteredServiceEffectiveAvailabilityPort {
   public constructor(
     private readonly catalog: RegisteredServiceCatalog,
     private readonly overrideStore: ServiceAvailabilityOverrideStore,

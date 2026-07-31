@@ -50,6 +50,12 @@ describe("RegisteredService", () => {
         schedule: null,
       },
       managementConfiguration: null,
+      dependencies: Object.freeze([]),
+      readinessPolicy: Object.freeze({
+        mode: "runtime",
+        timeoutMilliseconds: 30000,
+        pollIntervalMilliseconds: 500,
+      }),
     });
   });
 

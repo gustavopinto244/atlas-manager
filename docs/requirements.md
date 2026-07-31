@@ -204,6 +204,13 @@ The system shall support declared dependencies between registered services.
 The system shall respect dependency order when starting or stopping related
 services.
 
+Dependency identifiers shall refer only to registered-service IDs. Unknown
+targets, duplicate edges, self-dependencies, and circular graphs shall reject
+startup configuration. Starts shall wait for each dependency's configured
+runtime or health readiness before starting a dependent. Stops shall process
+dependents before their dependencies. Scheduled operations shall apply the
+same ordering while respecting each dependency's effective availability.
+
 For example, it shall start a database container and wait for it to become
 healthy before starting its dependent API.
 

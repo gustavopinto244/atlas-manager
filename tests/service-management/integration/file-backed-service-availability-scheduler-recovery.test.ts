@@ -11,6 +11,7 @@ import { FileServiceAvailabilityOverrideStore } from "../../../src/service-manag
 import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js";
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -105,6 +106,7 @@ describe("file-backed service availability scheduler recovery", () => {
     const firstCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
     const firstComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: createMockOrchestrate(),
       clock: createClock(
         "2026-07-27T12:00:30.000Z",
         "2026-07-27T12:00:30.000Z",
@@ -177,6 +179,7 @@ describe("file-backed service availability scheduler recovery", () => {
     const persistedFirstCursor = await secondCursorStore.read();
     expect(persistedFirstCursor).toEqual(firstResult.cursor);
     const secondComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: createMockOrchestrate(),
       clock: createClock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",

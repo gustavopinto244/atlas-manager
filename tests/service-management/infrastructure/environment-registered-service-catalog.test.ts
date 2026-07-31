@@ -14,6 +14,8 @@ interface ConfiguredService {
   readonly externalResourceId: unknown;
   readonly supportedOperations: unknown;
   readonly availabilityPolicy: unknown;
+  readonly dependencies?: unknown;
+  readonly readinessPolicy?: unknown;
 }
 
 function createConfiguredService(
@@ -191,6 +193,12 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
         schedule: null,
       },
       managementConfiguration: null,
+      dependencies: Object.freeze([]),
+      readinessPolicy: Object.freeze({
+        mode: "runtime",
+        timeoutMilliseconds: 30000,
+        pollIntervalMilliseconds: 500,
+      }),
     });
     expect(services[1]?.managementAdapter).toBe("pm2");
     expect(
@@ -200,6 +208,37 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     expect(
       services.every((service) => Object.isFrozen(service.supportedOperations)),
     ).toBe(true);
+  });
+
+  it("constructs and freezes a validated dependency graph catalog", async () => {
+    const catalog = createRegisteredServiceCatalogFromEnvironment(
+      createEnvironment([
+        createConfiguredService(0),
+        createConfiguredService(1, {
+          dependencies: ["service-0"],
+        }),
+      ]),
+    );
+
+    const services = await catalog.list();
+    expect(services[1]?.dependencies).toEqual(["service-0"]);
+    expect(Object.isFrozen(services[1]?.dependencies)).toBe(true);
+  });
+
+  it.each([
+    [
+      "unknown dependency",
+      [createConfiguredService(0, { dependencies: ["missing"] })],
+    ],
+    [
+      "direct cycle",
+      [
+        createConfiguredService(0, { dependencies: ["service-1"] }),
+        createConfiguredService(1, { dependencies: ["service-0"] }),
+      ],
+    ],
+  ] as const)("rejects %s after catalog construction", (_label, entries) => {
+    expectConfigurationError(entries, "registered_services_dependency_invalid");
   });
 
   it.each([
@@ -418,13 +457,13 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     expectConfigurationError(configuredServices, "registered_service_invalid");
   });
 
-  it("translates duplicate stable IDs as a catalog failure", () => {
+  it("translates duplicate stable IDs as a dependency failure", () => {
     expectConfigurationError(
       [
         createConfiguredService(1),
         createConfiguredService(2, { id: "service-1" }),
       ],
-      "registered_service_catalog_invalid",
+      "registered_services_dependency_invalid",
     );
   });
 
@@ -494,7 +533,7 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
           externalResourceId: "another-private-process",
         }),
       ]),
-      "registered_service_catalog_invalid",
+      "registered_services_dependency_invalid",
     ],
     [
       "invalid policy data",

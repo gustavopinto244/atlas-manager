@@ -19,6 +19,7 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -193,7 +194,9 @@ describe("file-backed scheduler claim-pruning failure recovery", () => {
       firstRealClaimStore,
       pruningFailure,
     );
+    const firstOrchestrate = createMockOrchestrate();
     const firstComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -217,7 +220,12 @@ describe("file-backed scheduler claim-pruning failure recovery", () => {
     expect(failingClaimStore.claimCallCount).toBe(1);
     expect(failingClaimStore.pruneCallCount).toBe(1);
     expect(failingClaimStore.interceptedCursor).toEqual(initialCursor);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("stop", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
 
     const afterFailureCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
@@ -247,7 +255,9 @@ describe("file-backed scheduler claim-pruning failure recovery", () => {
       new FileServiceAvailabilityReconciliationOccurrenceClaimStore(claimPath);
     const retryCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
+    const retryOrchestrate = createMockOrchestrate();
     const retryComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: createClock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -289,7 +299,7 @@ describe("file-backed scheduler claim-pruning failure recovery", () => {
       kind: "pruned",
     });
     expect(Object.isFrozen(retryResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(1);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
     expect(JSON.stringify(retryResult)).not.toContain(directory);
 
     const finalClaimStore =

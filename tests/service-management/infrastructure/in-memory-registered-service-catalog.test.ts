@@ -224,6 +224,12 @@ describe("InMemoryRegisteredServiceCatalog", () => {
         schedule: null,
       },
       managementConfiguration: null,
+      dependencies: Object.freeze([]),
+      readinessPolicy: Object.freeze({
+        mode: "runtime",
+        timeoutMilliseconds: 30000,
+        pollIntervalMilliseconds: 500,
+      }),
     };
 
     expectCatalogError([unvalidatedService], "invalid_registered_service");

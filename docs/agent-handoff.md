@@ -1,93 +1,45 @@
 # Agent handoff
 
-This document records the current implementation context for the next agent
-working on Atlas Manager. It is intentionally repository-local and contains no
-credentials or machine-specific configuration.
-
 ## Current work
 
 The active branch is:
 
 ```text
-test/file-backed-post-advance-override-pruning-failure-recovery
+feature/registered-service-dependency-graphs-and-readiness-orchestration
 ```
 
-This branch starts from the updated `main` at:
+This branch starts from Pull Request #213 (`098cbdc`). The Issue #214 changes
+are intentionally uncommitted; the current working tree is authoritative.
+
+The implementation adds registered-service dependencies, catalog graph
+validation, deterministic graph traversal, runtime and Docker/Compose health
+readiness, readiness waiting, dependency-aware orchestration, scheduler
+occurrence ordering, and documentation reconciliation. No dependency or
+persistence schema was changed, and no HTTP endpoint was added.
+
+## Validation
+
+Using the repository's Node.js 24.18.0 installation:
 
 ```text
-5dea734 test: add post-advance claim-pruning failure recovery coverage (#183)
+npm ci                         PASS after approved escalation (Node 26 emitted an engine warning)
+npm run format:check           PASS
+npm run lint                   PASS
+npm run typecheck              PASS
+npm test -- --maxWorkers=1     PASS — 105 files, 1795 tests
+npm run build                  PASS
+git diff --check               PASS
+npm audit --omit=dev           PASS — 0 vulnerabilities
 ```
 
-The current Issue's changes are not committed yet. Do not reset or discard
-the existing work when continuing.
+The earlier `npm ci` output included npm's local audit-summary warning, but the
+subsequent production audit completed successfully with zero vulnerabilities.
+No automatic audit fix was run.
 
-Current Issue changes:
+## Safe next steps
 
-- `tests/service-management/integration/file-backed-post-advance-override-pruning-failure-recovery.test.ts`
-- `README.md`
+1. Confirm the final test matrix and documentation with the project owner.
+2. Commit with a Conventional Commit only after explicit review.
 
-The handoff document itself is also modified to preserve this context for the
-next agent. No production source file, dependency, persistence schema, or
-configuration file was changed.
-
-No production source file, dependency, persistence schema, or configuration
-file was changed.
-
-## Scenario implemented
-
-The integration test uses one deterministic PM2-registered service and the
-real service-management composition, scheduler cycle, reconciliation tick,
-occurrence executor, and all three file-backed stores. It creates a temporary
-directory containing the override, occurrence-claim, and scheduler-cursor
-files, and removes it in `afterEach` even after failures.
-
-The timeline is fixed at UTC `T0 = 2026-07-27T12:00:00.000Z`,
-`T1 = 2026-07-27T20:00:00.000Z`, and
-`T2 = 2026-08-03T12:00:00.000Z`. The Monday schedule produces one occurrence
-in each interval.
-
-- The first process executes the `T0 → T1` effect, preserves its claim through
-  `T0`, and advances the cursor to `T1`.
-- The second process persists and executes the `T1 → T2` effect, then fails
-  the first conditional expired-override removal through a test-local wrapper.
-- The scheduler returns frozen `incomplete` with a null claim-pruning result;
-  the cursor remains `T1`, and the override plus both claims remain persisted.
-- A reconstructed retry sees the second occurrence as duplicate, removes the
-  override, prunes the first claim through authoritative `T1`, preserves the
-  current claim, and advances to `T2`.
-
-The test asserts exact error/report behavior, persisted state, effect counts,
-and the existing at-most-once behavior after claim acquisition. It does not
-claim transactional rollback or globally exactly-once execution.
-
-## Validation already completed
-
-Validation was run with the repository's Node.js 24 installation (`v24.18.0`):
-
-```text
-npm ci
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run build
-git diff --check
-npm audit --omit=dev
-```
-
-All passed. The test suite reported 72 files and 1554 tests passing, and the
-production-dependency audit reported zero vulnerabilities. `nvm` was not
-available as a shell command in the handoff environment, so the explicit Node
-24 installation path was used.
-
-## Next steps
-
-1. Review the test, README, and handoff-documentation diff.
-2. Commit using a Conventional Commit, for example:
-   `test: cover post-advance override-pruning failure recovery`.
-3. Push the Issue-specific branch and open the pull request using the normal
-   review workflow.
-
-Do not add production replay logic, new reconciliation result kinds, cross-store
-transactions, locking guarantees, or external PM2/network operations as part
-of this scenario.
+Do not reset, discard, commit, push, merge, or open a Pull Request without the
+project owner's approval.

@@ -13,6 +13,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const services = [
@@ -141,7 +142,9 @@ describe("file-backed post-advance occurrence claim cleanup", () => {
       ).read(),
     ).resolves.toEqual(initialCursor);
 
+    const firstOrchestrate = createMockOrchestrate();
     const first = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(t1),
       serviceAvailabilityOverrideStore:
         new FileServiceAvailabilityOverrideStore(overridePath),
@@ -188,10 +191,17 @@ describe("file-backed post-advance occurrence claim cleanup", () => {
         ],
       });
     }
-    expect(controlExecute).toHaveBeenCalledTimes(2);
-    for (const service of services) {
-      expect(controlExecute).toHaveBeenCalledWith("start", service.processId);
-    }
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(2);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "service-a",
+      "start",
+      "scheduled",
+    );
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "service-b",
+      "start",
+      "scheduled",
+    );
 
     const afterFirstClaimStore =
       new FileServiceAvailabilityReconciliationOccurrenceClaimStore(claimPath);
@@ -206,7 +216,9 @@ describe("file-backed post-advance occurrence claim cleanup", () => {
       ).read(),
     ).resolves.toEqual(firstResult.cursor);
 
+    const secondOrchestrate = createMockOrchestrate();
     const second = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: secondOrchestrate,
       clock: createClock(t2),
       serviceAvailabilityOverrideStore:
         new FileServiceAvailabilityOverrideStore(overridePath),
@@ -259,10 +271,17 @@ describe("file-backed post-advance occurrence claim cleanup", () => {
         ],
       });
     }
-    expect(controlExecute).toHaveBeenCalledTimes(4);
-    for (const service of services) {
-      expect(controlExecute).toHaveBeenCalledWith("stop", service.processId);
-    }
+    expect(secondOrchestrate.execute).toHaveBeenCalledTimes(2);
+    expect(secondOrchestrate.execute).toHaveBeenCalledWith(
+      "service-a",
+      "stop",
+      "scheduled",
+    );
+    expect(secondOrchestrate.execute).toHaveBeenCalledWith(
+      "service-b",
+      "stop",
+      "scheduled",
+    );
 
     const finalClaims =
       new FileServiceAvailabilityReconciliationOccurrenceClaimStore(claimPath);
