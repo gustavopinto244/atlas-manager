@@ -2334,3 +2334,30 @@ and simulated-shutdown chain to continue.
 The preparation capability is explicitly invoked and has no timer, background
 worker, scheduler loop, persistence journal, real RTC effect, real shutdown,
 or administrative event history.
+
+### Secure Linux power-helper foundation
+
+The reviewed application-side Linux boundary uses protocol version `1` and the
+fixed helper executable `/usr/local/libexec/atlas-manager-power-helper`. It
+supports only RTC information, wake-alarm read/schedule/cancel, and shutdown
+request operations. Requests and responses are immutable, strictly validated,
+canonical JSON objects; unknown fields, operations, versions, timestamps,
+states, transitions, and failure codes are rejected.
+
+Before each helper execution, Atlas checks that the platform is Linux and that
+the fixed helper is a root-owned regular executable with safe file and
+`/usr/local/libexec` permissions. The transport uses no shell, no arguments,
+working directory `/`, only `LANG=C` and `LC_ALL=C`, a fixed five-second
+timeout, and bounded stdout/stderr. Same-instance operations are sequential and
+transport or helper failures become focused project-owned errors without paths,
+commands, output, environment values, exit details, or helper text.
+
+The helper-backed RTC, wake-alarm, and shutdown adapters share one frozen
+transport bundle and can be supplied through existing narrow test overrides.
+Default `createPowerManagement` remains mock-first, with eleven capabilities;
+construction performs no helper inspection or process work. The privileged
+helper is not implemented or installed by this project slice, and no real RTC,
+wake-alarm, filesystem, or machine-shutdown effect is enabled. Production
+activation waits for authenticated administration, authorization, destructive
+confirmation, persistent audit events, deployment validation, recovery
+procedures, and a security review as recorded in ADR-002.

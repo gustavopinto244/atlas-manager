@@ -307,6 +307,38 @@ This slice does not stop services, drain tasks, run backups, synchronize
 filesystems, persist events, authenticate operators, or perform real power
 operations. v0.6 remains active.
 
+### Delivered mock safe-shutdown preparation slice
+
+Supported blockers can be prepared explicitly through dependency-aware
+registered-service stopping, active-task draining, backup completion,
+filesystem synchronization, ordered in-memory events, and fresh final
+readiness. Preparation remains retryable until the shutdown occurrence is
+claimed. Real machine effects, event persistence, and automatic lifecycle
+scheduling remain deferred. v0.6 remains active.
+
+### Delivered secure Linux power-helper foundation
+
+- accepted ADR-002 for a fixed privileged helper boundary;
+- immutable version-1 helper requests and responses with strict operation,
+  timestamp, state, transition, and failure-code validation;
+- fixed root-owned helper installation inspection;
+- bounded no-shell Linux transport with a fixed five-second timeout, minimal
+  environment, sequential same-instance execution, and streaming output
+  limits;
+- helper-backed RTC, wake-alarm reader/controller, and machine-shutdown
+  adapters with safe project-owned error translation;
+- frozen adapter bundle and deterministic fake/fixture infrastructure;
+- security-focused protocol, installation, transport, adapter, composition,
+  and integration coverage.
+
+This is an application-side foundation only. The external helper is not
+implemented, installed, or production-wired. Authentication, authorization,
+destructive confirmation, persistent administrative auditing, deployment and
+permission validation, recovery procedures, supported Linux verification,
+operator-visible failures, and helper security review remain activation gates.
+Real RTC, wake-alarm, filesystem, and machine-shutdown effects remain
+deferred. v0.6 remains active.
+
 ## v0.7 — Backup orchestration
 
 ### Objective
@@ -439,12 +471,3 @@ Update this roadmap when:
 Do not use this roadmap as a substitute for acceptance criteria.
 
 Every implementation task must still be represented by a scoped GitHub Issue.
-
-### v0.6 preparation slice
-
-The mock safe-shutdown preparation boundary is delivered: supported blockers
-can be prepared explicitly through dependency-aware service stopping, task
-draining, backup completion, filesystem synchronization, ordered in-memory
-events, and fresh final readiness. Preparation remains retryable until the
-shutdown occurrence is claimed. Real machine effects, event persistence, and
-automatic lifecycle scheduling remain deferred. v0.6 remains active.
