@@ -5,19 +5,18 @@
 The active branch is:
 
 ```text
-test/add-v0.5-dependency-and-readiness-acceptance-coverage
+feat/mock-first-rtc-and-shutdown-foundation
 ```
 
-It contains the v0.5 readiness audit documentation and focused acceptance
-coverage for dependency and readiness contracts. Production source and
-dependency files remain unchanged.
+It starts from the v0.5 acceptance-coverage baseline at commit `4ea9d0b`.
+This branch introduces the isolated `src/power-management/` feature boundary:
+immutable RTC and wake-alarm models, application-owned clock/reader/controller
+ports, read-only RTC and simulated shutdown use cases, deterministic mock
+adapters, composition, and isolated tests.
 
-The audit confirms that Docker containers, whole-project Docker Compose,
-bounded logs, availability scheduling, dependency graphs, runtime and
-Docker/Compose health readiness, deterministic orchestration, and file-backed
-reconstruction are implemented and focused acceptance-tested. Compose profiles
-are not an accepted v0.5 requirement and remain a future consideration rather
-than a blocker.
+No real RTC device, kernel file, system bus, child process, executable,
+filesystem write, privileged interface, HTTP endpoint, scheduler integration,
+or real machine power operation exists in this slice.
 
 ## Validation
 
@@ -28,23 +27,35 @@ npm ci                        PASS — lockfile unchanged; npm reported one dev-
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1    PASS — 105 files, 1892 tests
+npm test -- --maxWorkers=1    PASS — 113 files, 1962 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
 ```
 
-## Audit conclusion
+These totals were confirmed after the complete repository validation. The
+development-tree advisory from `npm ci` was not fixed or changed; the
+production audit remains clean.
 
-**Ready.** The focused tests close the dependency-validation, graph-ordering,
-readiness-policy, Docker health, Compose aggregate health, failure-propagation,
-dispatcher-routing, no-fallback, immutability, and controlled-timer evidence
-gaps identified by Issue #216. The v0.5 milestone is completed and v0.6 Power
-management is now active.
+## Delivered capabilities
 
-Intentional limitations remain: no Compose profiles, custom readiness probes,
-parallel orchestration, automatic retry/rollback/compensation, or globally
-exactly-once execution.
+The mock-first v0.6 slice provides:
+
+- project-owned canonical RTC information;
+- immutable wake-alarm states `unsupported`, `not_scheduled`, and `scheduled`;
+- exact application-owned observation/request timestamps;
+- deterministic mock RTC information reader;
+- narrow simulated shutdown controller;
+- immutable simulated shutdown results;
+- frozen `createPowerManagement` capabilities;
+- controlled unit, composition, and integration tests.
+
+## Next recommended work
+
+Implement validated wake-alarm scheduling with mock replacement,
+cancellation, and deterministic next-alarm queries. Keep real RTC and
+privileged power adapters deferred until confirmation, authorization, and
+security boundaries are explicitly designed.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.
