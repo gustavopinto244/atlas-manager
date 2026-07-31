@@ -36,6 +36,24 @@ import type { MachinePowerSchedulerCursorStore } from "../application/ports/mach
 import { InMemoryMachinePowerSchedulerCursorStore } from "../infrastructure/in-memory-machine-power-scheduler-cursor-store.js";
 import { FileMachinePowerSchedulerCursorStore } from "../infrastructure/file-machine-power-scheduler-cursor-store.js";
 import { FileMachineShutdownOccurrenceClaimStore } from "../infrastructure/file-machine-shutdown-occurrence-claim-store.js";
+import { EvaluateMachineShutdownReadiness } from "../application/evaluate-machine-shutdown-readiness.js";
+import type {
+  MachineShutdownActiveTaskReadinessReader,
+  MachineShutdownBackupReadinessReader,
+  MachineShutdownConfirmationReader,
+  MachineShutdownEventRecordingReadinessReader,
+  MachineShutdownFilesystemReadinessReader,
+  MachineShutdownServiceReadinessReader,
+} from "../application/ports/machine-shutdown-readiness-readers.js";
+import {
+  MockMachineShutdownConfirmationReader,
+  MockMachineShutdownReadinessReader,
+  MockMachineShutdownServiceReadinessReader,
+} from "../infrastructure/mock-machine-shutdown-readiness-readers.js";
+import {
+  ServiceManagementMachineShutdownReadinessReader,
+  type PublicServiceManagementReadinessCapabilities,
+} from "../infrastructure/service-management-machine-shutdown-readiness-reader.js";
 
 export interface PowerManagementCapabilities {
   readonly getRtcInformation: GetRtcInformation;
@@ -46,6 +64,7 @@ export interface PowerManagementCapabilities {
   readonly planNextMachineShutdownOccurrence: PlanNextMachineShutdownOccurrence;
   readonly executeMachineShutdownOccurrence: ExecuteMachineShutdownOccurrence;
   readonly runMachinePowerSchedulerTick: RunMachinePowerSchedulerTick;
+  readonly evaluateMachineShutdownReadiness: EvaluateMachineShutdownReadiness;
   readonly requestMachineShutdown: RequestMachineShutdown;
 }
 
@@ -63,6 +82,13 @@ export interface PowerManagementCompositionOverrides {
   readonly machineOperatingPolicy?: unknown;
   readonly machineShutdownOccurrenceClaimStore?: MachineShutdownOccurrenceClaimStore;
   readonly persistence?: unknown;
+  readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
+  readonly machineShutdownServiceReadinessReader?: MachineShutdownServiceReadinessReader;
+  readonly machineShutdownActiveTaskReadinessReader?: MachineShutdownActiveTaskReadinessReader;
+  readonly machineShutdownBackupReadinessReader?: MachineShutdownBackupReadinessReader;
+  readonly machineShutdownFilesystemReadinessReader?: MachineShutdownFilesystemReadinessReader;
+  readonly machineShutdownEventRecordingReadinessReader?: MachineShutdownEventRecordingReadinessReader;
+  readonly serviceManagementReadinessCapabilities?: PublicServiceManagementReadinessCapabilities;
 }
 
 const DEFAULT_MOCK_RTC_INFORMATION = Object.freeze({
@@ -108,11 +134,48 @@ export function createPowerManagement(
     overrides.machineShutdownOccurrenceClaimStore ??
     createClaimStore(persistence);
   const cursorStore = createCursorStore(persistence);
+  const readiness = new EvaluateMachineShutdownReadiness(clock, {
+    confirmation:
+      overrides.machineShutdownConfirmationReader ??
+      new MockMachineShutdownConfirmationReader(),
+    services:
+      overrides.machineShutdownServiceReadinessReader ??
+      (overrides.serviceManagementReadinessCapabilities
+        ? new ServiceManagementMachineShutdownReadinessReader(
+            overrides.serviceManagementReadinessCapabilities,
+          )
+        : new MockMachineShutdownServiceReadinessReader()),
+    activeTasks:
+      overrides.machineShutdownActiveTaskReadinessReader ??
+      new MockMachineShutdownReadinessReader({
+        area: "active_tasks",
+        state: "ready",
+      }),
+    backups:
+      overrides.machineShutdownBackupReadinessReader ??
+      new MockMachineShutdownReadinessReader({
+        area: "backups",
+        state: "ready",
+      }),
+    filesystem:
+      overrides.machineShutdownFilesystemReadinessReader ??
+      new MockMachineShutdownReadinessReader({
+        area: "filesystem",
+        state: "ready",
+      }),
+    eventRecording:
+      overrides.machineShutdownEventRecordingReadinessReader ??
+      new MockMachineShutdownReadinessReader({
+        area: "event_recording",
+        state: "ready",
+      }),
+  });
   const executeMachineShutdownOccurrence = new ExecuteMachineShutdownOccurrence(
     clock,
     claimStore,
     wakeAlarmController,
     machineShutdownController,
+    readiness,
   );
   const runMachinePowerSchedulerTick = new RunMachinePowerSchedulerTick(
     clock,
@@ -133,6 +196,7 @@ export function createPowerManagement(
     ),
     executeMachineShutdownOccurrence,
     runMachinePowerSchedulerTick,
+    evaluateMachineShutdownReadiness: readiness,
     requestMachineShutdown: new RequestMachineShutdown(
       clock,
       machineShutdownController,

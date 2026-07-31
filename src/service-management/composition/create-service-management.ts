@@ -84,6 +84,7 @@ import {
 import type { ServiceReadinessReader } from "../application/ports/service-readiness-reader.js";
 
 import type { ServiceController } from "../application/ports/service-controller.js";
+import { GetRegisteredServiceAvailabilityForInterval } from "../application/get-registered-service-availability-for-interval.js";
 
 export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
@@ -94,6 +95,7 @@ export interface ServiceManagementCapabilities {
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
+  readonly getRegisteredServiceAvailabilityForInterval: GetRegisteredServiceAvailabilityForInterval;
   readonly pruneExpiredRegisteredServiceAvailabilityOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides;
   readonly pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
@@ -270,6 +272,8 @@ export function createServiceManagement(
       overrideStore,
       clock,
     );
+  const getRegisteredServiceAvailabilityForInterval =
+    new GetRegisteredServiceAvailabilityForInterval(catalog, overrideStore);
   const orchestrateRegisteredServiceControl =
     overrides?.orchestrateRegisteredServiceControl ??
     new OrchestrateRegisteredServiceControl(
@@ -354,6 +358,7 @@ export function createServiceManagement(
     cancelRegisteredServiceAvailabilityOverride:
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
     getRegisteredServiceEffectiveAvailability,
+    getRegisteredServiceAvailabilityForInterval,
     pruneExpiredRegisteredServiceAvailabilityOverrides,
     pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     planRegisteredServiceAvailabilityReconciliation,

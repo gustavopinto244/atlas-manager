@@ -294,6 +294,19 @@ This remains an explicit mock-first capability. It adds no automatic loop,
 process lifecycle integration, persistent wake-alarm state, real RTC operation,
 real shutdown, service coordination, confirmation, or privileged adapter.
 
+### Delivered safe-shutdown readiness slice
+
+- public registered-service availability assessment for explicit UTC intervals;
+- fail-closed machine shutdown readiness decisions;
+- runtime service, schedule, active-task, backup, filesystem, and event blockers;
+- explicit mock confirmation with a safe `not_confirmed` default;
+- readiness enforcement before occurrence claims and effects;
+- retryable scheduler incompleteness after readiness rejection.
+
+This slice does not stop services, drain tasks, run backups, synchronize
+filesystems, persist events, authenticate operators, or perform real power
+operations. v0.6 remains active.
+
 ## v0.7 — Backup orchestration
 
 ### Objective

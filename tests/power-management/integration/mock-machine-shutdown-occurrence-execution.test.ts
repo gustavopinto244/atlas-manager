@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPowerManagement } from "../../../src/power-management/composition/create-power-management.js";
 import { createSequenceClock } from "../../test-helpers/controlled-time.js";
+import {
+  MockMachineShutdownConfirmationReader,
+  MockMachineShutdownServiceReadinessReader,
+} from "../../../src/power-management/infrastructure/mock-machine-shutdown-readiness-readers.js";
 
 const policy = {
   mode: "scheduled" as const,
@@ -31,6 +35,13 @@ describe("mock machine shutdown occurrence execution", () => {
     const capabilities = createPowerManagement({
       clock,
       machineOperatingPolicy: policy,
+      machineShutdownConfirmationReader:
+        new MockMachineShutdownConfirmationReader("confirmed"),
+      machineShutdownServiceReadinessReader:
+        new MockMachineShutdownServiceReadinessReader({
+          state: "ready",
+          blockers: [],
+        }),
     });
     const planned = capabilities.planNextMachineShutdownOccurrence.execute();
     expect(planned).toEqual({ state: "planned", occurrence });
@@ -96,6 +107,13 @@ describe("mock machine shutdown occurrence execution", () => {
     const capabilities = createPowerManagement({
       clock,
       mockWakeAlarmController: { scheduleFailure: new Error("wake") },
+      machineShutdownConfirmationReader:
+        new MockMachineShutdownConfirmationReader("confirmed"),
+      machineShutdownServiceReadinessReader:
+        new MockMachineShutdownServiceReadinessReader({
+          state: "ready",
+          blockers: [],
+        }),
     });
     await expect(
       capabilities.executeMachineShutdownOccurrence.execute(occurrence),
@@ -113,6 +131,13 @@ describe("mock machine shutdown occurrence execution", () => {
     const capabilities = createPowerManagement({
       clock,
       mockMachineShutdownController: { failure: new Error("shutdown") },
+      machineShutdownConfirmationReader:
+        new MockMachineShutdownConfirmationReader("confirmed"),
+      machineShutdownServiceReadinessReader:
+        new MockMachineShutdownServiceReadinessReader({
+          state: "ready",
+          blockers: [],
+        }),
     });
     await expect(
       capabilities.executeMachineShutdownOccurrence.execute(occurrence),

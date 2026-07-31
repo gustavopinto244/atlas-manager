@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createPowerManagement } from "../../../src/power-management/composition/create-power-management.js";
 import { createSequenceClock } from "../../test-helpers/controlled-time.js";
+import {
+  MockMachineShutdownConfirmationReader,
+  MockMachineShutdownServiceReadinessReader,
+} from "../../../src/power-management/infrastructure/mock-machine-shutdown-readiness-readers.js";
 
 const policy = {
   mode: "scheduled" as const,
@@ -27,6 +31,13 @@ describe("file-backed machine power scheduler recovery", () => {
         persistence,
         machineOperatingPolicy: policy,
         clock: createSequenceClock([new Date("2026-08-03T13:00:00.000Z")]),
+        machineShutdownConfirmationReader:
+          new MockMachineShutdownConfirmationReader("confirmed"),
+        machineShutdownServiceReadinessReader:
+          new MockMachineShutdownServiceReadinessReader({
+            state: "ready",
+            blockers: [],
+          }),
       });
       await expect(
         first.runMachinePowerSchedulerTick.execute(),
@@ -35,6 +46,13 @@ describe("file-backed machine power scheduler recovery", () => {
         persistence,
         machineOperatingPolicy: policy,
         clock: createSequenceClock([new Date("2026-08-03T20:59:00.000Z")]),
+        machineShutdownConfirmationReader:
+          new MockMachineShutdownConfirmationReader("confirmed"),
+        machineShutdownServiceReadinessReader:
+          new MockMachineShutdownServiceReadinessReader({
+            state: "ready",
+            blockers: [],
+          }),
       });
       await expect(
         second.runMachinePowerSchedulerTick.execute(),
@@ -49,6 +67,13 @@ describe("file-backed machine power scheduler recovery", () => {
           new Date("2026-08-03T21:00:00.000Z"),
           new Date("2026-08-03T21:00:00.000Z"),
         ]),
+        machineShutdownConfirmationReader:
+          new MockMachineShutdownConfirmationReader("confirmed"),
+        machineShutdownServiceReadinessReader:
+          new MockMachineShutdownServiceReadinessReader({
+            state: "ready",
+            blockers: [],
+          }),
       });
       await expect(
         third.runMachinePowerSchedulerTick.execute(),
@@ -67,6 +92,13 @@ describe("file-backed machine power scheduler recovery", () => {
         persistence,
         machineOperatingPolicy: policy,
         clock: createSequenceClock([new Date("2026-08-03T21:05:00.000Z")]),
+        machineShutdownConfirmationReader:
+          new MockMachineShutdownConfirmationReader("confirmed"),
+        machineShutdownServiceReadinessReader:
+          new MockMachineShutdownServiceReadinessReader({
+            state: "ready",
+            blockers: [],
+          }),
       });
       await expect(
         fourth.runMachinePowerSchedulerTick.execute(),

@@ -120,6 +120,27 @@ or shutdown replay even when the process stopped before the effect began. Mock
 wake-alarm state remains process-local and is not reconstructed from files.
 Equivalent machine policy configuration is assumed during reconstruction.
 
+The next readiness slice adds a fail-closed safe-shutdown boundary. A machine
+offline interval is `[scheduledFor, wakeScheduledFor)`. Before an occurrence
+can be claimed, the application requires explicit mock confirmation, evaluates
+registered-service availability and runtime status through public
+service-management capabilities, and reads active-task, backup, filesystem,
+and event-recording readiness.
+
+The safe default is `not_confirmed`; service readiness also fails closed unless
+an explicit reader or public service-management adapter is supplied. A running,
+failed, unknown, or interval-required service blocks shutdown. Active tasks,
+backup activity, filesystem state, unavailable event recording, and dependency
+failures produce project-owned blockers. Readiness checks are sequential,
+bounded, immutable, and expose no raw dependency errors.
+
+Rejected readiness decisions do not claim occurrences and do not mutate wake
+alarms or request simulated shutdown. They remain retryable. The scheduler
+reports a rejected occurrence as incomplete and keeps its cursor unchanged, so
+a later explicit tick can retry after confirmation or readiness changes. No
+service is stopped, task is cancelled, backup is run, filesystem is synced, or
+event is persisted by this slice.
+
 ## Capability history and planned work
 
 The planned initial release includes:

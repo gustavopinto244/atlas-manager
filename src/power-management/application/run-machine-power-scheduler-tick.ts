@@ -82,10 +82,14 @@ export class RunMachinePowerSchedulerTick {
     const items = [];
     for (const occurrence of occurrences) {
       try {
-        items.push({
-          kind: "completed" as const,
-          execution: await this.#executor.execute(occurrence),
-        });
+        const execution = await this.#executor.execute(occurrence);
+        if (execution.outcome === "rejected")
+          items.push({
+            kind: "rejected" as const,
+            occurrence,
+            decision: execution.decision,
+          });
+        else items.push({ kind: "completed" as const, execution });
       } catch (error) {
         const failureCode =
           error instanceof MachineShutdownOccurrenceExecutionError
