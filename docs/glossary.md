@@ -630,6 +630,49 @@ shutdown or wake transition.
 
 ### Wake alarm
 
+### Machine shutdown occurrence
+
+An immutable planned shutdown operation containing the canonical UTC shutdown
+instant and next canonical UTC wake instant. Its identity is the exact tuple
+of operation, shutdown time, and wake time; it is not a random ID.
+
+### Occurrence claim
+
+The process-local decision that an exact machine shutdown occurrence has been
+accepted for one execution attempt. A later equivalent claim is a duplicate;
+claims are permanent for the mock adapter lifetime and are not persisted.
+
+### Due occurrence
+
+A shutdown occurrence processed at or after its shutdown instant and strictly
+before its wake instant. Only a due occurrence may be claimed.
+
+### Stale occurrence
+
+A shutdown occurrence processed at or after its wake instant. It is rejected
+without claim or mutation and is not automatically replaced.
+
+### Duplicate occurrence
+
+An occurrence whose complete identity was already claimed by the same store.
+Duplicate execution performs no wake or shutdown mutation.
+
+### Wake preparation
+
+Scheduling the occurrence's next wake alarm before its simulated shutdown.
+A failed preparation prevents shutdown.
+
+### Partial-effect failure
+
+A failure after an earlier approved effect completed. If simulated shutdown
+fails after wake preparation, the wake alarm remains scheduled; no rollback or
+compensation is attempted.
+
+### At-most-once execution attempt
+
+The claim guarantee that one exact occurrence passes the claim once and later
+attempts are duplicates. It does not guarantee exactly-once machine operation.
+
 A hardware or operating-system mechanism used to request that Atlas starts at a
 future time. The current v0.6 slices query and mutate one simulated next alarm
 through project-owned mock data only; real configuration requires a future
