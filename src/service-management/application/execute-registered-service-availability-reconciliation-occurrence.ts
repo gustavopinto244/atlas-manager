@@ -1,6 +1,6 @@
-import type { RegisteredServiceControlResult } from "../domain/registered-service-control-result.js";
+import type { OrchestrationResult } from "../domain/orchestration-plan.js";
 import type { ServiceAvailabilityReconciliationOccurrence } from "../domain/service-availability-reconciliation-occurrence.js";
-import type { ControlRegisteredService } from "./control-registered-service.js";
+import type { OrchestrateRegisteredServiceControlPort } from "./orchestrate-registered-service-control.js";
 import type { PlanRegisteredServiceAvailabilityReconciliation } from "./plan-registered-service-availability-reconciliation.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "./ports/service-availability-reconciliation-occurrence-claim-store.js";
 
@@ -13,7 +13,7 @@ export type ExecuteRegisteredServiceAvailabilityReconciliationOccurrenceResult =
     }>
   | Readonly<{
       kind: "executed";
-      controlResult: RegisteredServiceControlResult;
+      orchestrationResult: OrchestrationResult;
     }>;
 
 const NO_OPERATION_RESULT = Object.freeze({
@@ -28,7 +28,7 @@ export class ExecuteRegisteredServiceAvailabilityReconciliationOccurrence {
   public constructor(
     private readonly planner: PlanRegisteredServiceAvailabilityReconciliation,
     private readonly claimStore: ServiceAvailabilityReconciliationOccurrenceClaimStore,
-    private readonly controlRegisteredService: ControlRegisteredService,
+    private readonly orchestrate: OrchestrateRegisteredServiceControlPort,
   ) {}
 
   public async execute(
@@ -49,14 +49,21 @@ export class ExecuteRegisteredServiceAvailabilityReconciliationOccurrence {
       return DUPLICATE_RESULT;
     }
 
-    const controlResult = await this.controlRegisteredService.execute(
+    const orchestrationResult = await this.orchestrate.execute(
       occurrence.serviceId,
       occurrence.operation,
+      "scheduled",
     );
+
+    if (!orchestrationResult.successful) {
+      throw new Error(
+        `Orchestration failed for ${occurrence.serviceId}: ${occurrence.operation}`,
+      );
+    }
 
     return Object.freeze({
       kind: "executed",
-      controlResult,
+      orchestrationResult,
     });
   }
 }

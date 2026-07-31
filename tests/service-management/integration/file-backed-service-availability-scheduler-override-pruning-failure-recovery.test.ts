@@ -17,6 +17,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 import {
   createServiceAvailabilityOverride,
   type ServiceAvailabilityOverride,
@@ -171,7 +172,9 @@ describe("file-backed override-pruning failure recovery", () => {
       new FileServiceAvailabilityOverrideStore(overridePath),
       removalError,
     );
+    const firstOrchestrate = createMockOrchestrate();
     const first = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -201,7 +204,12 @@ describe("file-backed override-pruning failure recovery", () => {
       { kind: "failed", serviceId, error: removalError },
     ]);
     expect(firstOverrideStore.calls).toBe(1);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("stop", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
 
     await expect(
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(
@@ -223,7 +231,9 @@ describe("file-backed override-pruning failure recovery", () => {
       kind: "duplicate",
     });
 
+    const retryOrchestrate = createMockOrchestrate();
     const retry = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -258,7 +268,7 @@ describe("file-backed override-pruning failure recovery", () => {
     expect(result.pruningReport).toEqual([{ kind: "removed", serviceId }]);
     expect(result.occurrenceClaimPruningResult).toEqual({ kind: "pruned" });
     expect(Object.isFrozen(result)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(1);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
 
     await expect(
       new FileServiceAvailabilityOverrideStore(overridePath).findByServiceId(

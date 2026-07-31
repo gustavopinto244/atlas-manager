@@ -7,18 +7,27 @@ import { GetRegisteredServiceEffectiveAvailability } from "../application/get-re
 import { GetRegisteredServiceLogs } from "../application/get-registered-service-logs.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
+import {
+  OrchestrateRegisteredServiceControl,
+  type OrchestrateRegisteredServiceControlPort,
+} from "../application/orchestrate-registered-service-control.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../application/ports/service-availability-reconciliation-scheduler-timer.js";
+import type { ServiceReadinessTimer } from "../application/ports/service-readiness-timer.js";
 import { PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims } from "../application/prune-completed-service-availability-reconciliation-occurrence-claims.js";
 import { PruneExpiredRegisteredServiceAvailabilityOverrides } from "../application/prune-expired-registered-service-availability-overrides.js";
 import { RunServiceAvailabilityReconciliationSchedulerCycle } from "../application/run-service-availability-reconciliation-scheduler-cycle.js";
 import { RunServiceAvailabilityReconciliationTick } from "../application/run-service-availability-reconciliation-tick.js";
 import { ServiceAvailabilityReconciliationSchedulerLoop } from "../application/service-availability-reconciliation-scheduler-loop.js";
 import { SetRegisteredServiceAvailabilityOverride } from "../application/set-registered-service-availability-override.js";
+import { WaitForRegisteredServiceReadiness } from "../application/wait-for-registered-service-readiness.js";
+import { DefaultPlanRegisteredServiceOrchestration } from "../application/plan-registered-service-orchestration.js";
+import { createDependencyGraph } from "../domain/dependency-graph.js";
+import type { RegisteredServiceDependencyGraph } from "../domain/dependency-graph.js";
 import { ComposeServiceController } from "../infrastructure/compose-service-controller.js";
 import { ComposeServiceStatusReader } from "../infrastructure/compose-service-status-reader.js";
 import { DispatchingServiceController } from "../infrastructure/dispatching-service-controller.js";
@@ -65,11 +74,22 @@ import {
   ComposeProjectLogReader,
   DispatchingServiceLogReader,
 } from "../infrastructure/service-log-readers.js";
+import {
+  RuntimeReadinessReader,
+  DockerHealthReadinessReader,
+  ComposeHealthReadinessReader,
+  createDispatchingReadinessReader,
+  NodeServiceReadinessTimer,
+} from "../infrastructure/readiness-infrastructure.js";
+import type { ServiceReadinessReader } from "../application/ports/service-readiness-reader.js";
+
+import type { ServiceController } from "../application/ports/service-controller.js";
 
 export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
   readonly getRegisteredServiceStatus: GetRegisteredServiceStatus;
   readonly controlRegisteredService: ControlRegisteredService;
+  readonly orchestrateRegisteredServiceControl: OrchestrateRegisteredServiceControlPort;
   readonly getRegisteredServiceLogs: GetRegisteredServiceLogs;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
@@ -101,6 +121,10 @@ export interface ServiceManagementCompositionOverrides {
   readonly dockerComposeProjectControlExecutor?: DockerComposeProjectControlExecutor;
   readonly dockerComposeProjectLogExecutor?: DockerComposeProjectLogExecutor;
   readonly dockerContainerLogExecutor?: DockerContainerLogExecutor;
+  readonly serviceReadinessTimer?: ServiceReadinessTimer;
+  readonly serviceReadinessReader?: ServiceReadinessReader;
+  readonly serviceController?: ServiceController;
+  readonly orchestrateRegisteredServiceControl?: OrchestrateRegisteredServiceControlPort;
 }
 
 export function createServiceManagement(
@@ -173,12 +197,14 @@ export function createServiceManagement(
     docker: dockerStatusReader,
     "docker-compose": composeStatusReader,
   });
-  const controller = new DispatchingServiceController({
-    mock: mockController,
-    pm2: pm2Controller,
-    docker: dockerController,
-    "docker-compose": composeController,
-  });
+  const controller =
+    overrides?.serviceController ??
+    new DispatchingServiceController({
+      mock: mockController,
+      pm2: pm2Controller,
+      docker: dockerController,
+      "docker-compose": composeController,
+    });
   const containerLogReader = new DockerContainerLogReader(containerLogExecutor);
   const composeProjectLogReader = new ComposeProjectLogReader(
     composeLogExecutor,
@@ -192,7 +218,71 @@ export function createServiceManagement(
     logReader,
     clock,
   );
+
   const listRegisteredServices = new ListRegisteredServices(catalog);
+  const controlRegisteredService = new ControlRegisteredService(
+    catalog,
+    controller,
+    clock,
+  );
+
+  const graphPromise: Promise<RegisteredServiceDependencyGraph> = catalog
+    .list()
+    .then((services) =>
+      createDependencyGraph(
+        services.map((s) => ({
+          serviceId: s.id,
+          dependencies: s.dependencies,
+        })),
+      ),
+    );
+  const getGraph = (): Promise<RegisteredServiceDependencyGraph> =>
+    graphPromise;
+
+  const runtimeReadinessReader = new RuntimeReadinessReader(
+    statusReader,
+    clock,
+  );
+  const dispatchingReadinessReader =
+    overrides?.serviceReadinessReader ??
+    createDispatchingReadinessReader({
+      runtimeReader: runtimeReadinessReader,
+      dockerHealthReader: new DockerHealthReadinessReader(
+        dockerInspectExecutor,
+        clock,
+      ),
+      composeHealthReader: new ComposeHealthReadinessReader(
+        composeStatusExecutor,
+        clock,
+      ),
+    });
+  const readinessTimer =
+    overrides?.serviceReadinessTimer ?? new NodeServiceReadinessTimer();
+  const waitForReadiness = new WaitForRegisteredServiceReadiness(
+    catalog,
+    dispatchingReadinessReader,
+    readinessTimer,
+    clock,
+  );
+  const getRegisteredServiceEffectiveAvailability =
+    new GetRegisteredServiceEffectiveAvailability(
+      catalog,
+      overrideStore,
+      clock,
+    );
+  const orchestrateRegisteredServiceControl =
+    overrides?.orchestrateRegisteredServiceControl ??
+    new OrchestrateRegisteredServiceControl(
+      catalog,
+      controller,
+      getGraph,
+      waitForReadiness,
+      clock,
+      getRegisteredServiceEffectiveAvailability,
+      statusReader,
+      controlRegisteredService,
+      new DefaultPlanRegisteredServiceOrchestration(),
+    );
   const pruneExpiredRegisteredServiceAvailabilityOverrides =
     new PruneExpiredRegisteredServiceAvailabilityOverrides(
       listRegisteredServices,
@@ -204,11 +294,6 @@ export function createServiceManagement(
       schedulerCursorStore,
       occurrenceClaimStore,
     );
-  const controlRegisteredService = new ControlRegisteredService(
-    catalog,
-    controller,
-    clock,
-  );
   const planRegisteredServiceAvailabilityReconciliation =
     new PlanRegisteredServiceAvailabilityReconciliation(
       catalog,
@@ -225,7 +310,7 @@ export function createServiceManagement(
     new ExecuteRegisteredServiceAvailabilityReconciliationOccurrence(
       planRegisteredServiceAvailabilityReconciliation,
       occurrenceClaimStore,
-      controlRegisteredService,
+      orchestrateRegisteredServiceControl,
     );
   const generateRegisteredServiceAvailabilityReconciliationOccurrences =
     new GenerateRegisteredServiceAvailabilityReconciliationOccurrences(catalog);
@@ -234,6 +319,7 @@ export function createServiceManagement(
       listRegisteredServices,
       generateRegisteredServiceAvailabilityReconciliationOccurrences,
       executeRegisteredServiceAvailabilityReconciliationOccurrence,
+      getGraph,
     );
   const runServiceAvailabilityReconciliationSchedulerCycle =
     new RunServiceAvailabilityReconciliationSchedulerCycle(
@@ -257,6 +343,7 @@ export function createServiceManagement(
       clock,
     ),
     controlRegisteredService,
+    orchestrateRegisteredServiceControl,
     getRegisteredServiceLogs,
     setRegisteredServiceAvailabilityOverride:
       new SetRegisteredServiceAvailabilityOverride(
@@ -266,12 +353,7 @@ export function createServiceManagement(
       ),
     cancelRegisteredServiceAvailabilityOverride:
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
-    getRegisteredServiceEffectiveAvailability:
-      new GetRegisteredServiceEffectiveAvailability(
-        catalog,
-        overrideStore,
-        clock,
-      ),
+    getRegisteredServiceEffectiveAvailability,
     pruneExpiredRegisteredServiceAvailabilityOverrides,
     pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     planRegisteredServiceAvailabilityReconciliation,

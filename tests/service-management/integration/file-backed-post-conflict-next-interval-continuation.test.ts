@@ -15,6 +15,7 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -178,7 +179,9 @@ describe("file-backed post-conflict next-interval continuation", () => {
     const afterSetup = createStores(directory);
     await expect(afterSetup.cursorStore.read()).resolves.toEqual(initialCursor);
 
+    const firstOrchestrate = createMockOrchestrate();
     const first = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(t1, 4),
       serviceAvailabilityOverrideStore: stores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore: stores.claimStore,
@@ -210,7 +213,12 @@ describe("file-backed post-conflict next-interval continuation", () => {
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("start", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(Object.isFrozen(firstResult)).toBe(true);
 
     const afterFirst = createStores(directory);
@@ -246,7 +254,9 @@ describe("file-backed post-conflict next-interval continuation", () => {
       competingCursorStore,
       competingCursor,
     );
+    const secondOrchestrate = createMockOrchestrate();
     const second = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: secondOrchestrate,
       clock: createClock(t2, 4),
       serviceAvailabilityOverrideStore: secondStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -286,8 +296,12 @@ describe("file-backed post-conflict next-interval continuation", () => {
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledWith("stop", processId);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
+    expect(secondOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(secondOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
     expect(conflictWrapper.competingAdvanceCalls).toBe(1);
     expect(Object.isFrozen(secondResult)).toBe(true);
 
@@ -300,7 +314,9 @@ describe("file-backed post-conflict next-interval continuation", () => {
     ).resolves.toBeNull();
 
     const thirdStores = createStores(directory);
+    const thirdOrchestrate = createMockOrchestrate();
     const third = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: thirdOrchestrate,
       clock: createClock(t3, 4),
       serviceAvailabilityOverrideStore: thirdStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -337,8 +353,12 @@ describe("file-backed post-conflict next-interval continuation", () => {
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledWith("start", processId);
-    expect(controlExecute).toHaveBeenCalledTimes(3);
+    expect(thirdOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(thirdOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(Object.isFrozen(thirdResult)).toBe(true);
 
     const finalStores = createStores(directory);

@@ -1,5 +1,8 @@
 import type { ComposeProjectService } from "../domain/compose-project.js";
-import { calculateComposeAggregateRuntimeState } from "../domain/compose-project.js";
+import {
+  calculateComposeAggregateHealthState,
+  calculateComposeAggregateRuntimeState,
+} from "../domain/compose-project.js";
 import type { ServiceRuntimeState } from "../domain/registered-service-status.js";
 import { mapDockerStateToRuntimeState } from "../domain/docker-container-runtime-state.js";
 
@@ -23,6 +26,7 @@ export class ComposeStatusParserError extends Error {
 export interface ParsedComposeProjectStatus {
   readonly services: readonly ComposeProjectService[];
   readonly runtimeState: ServiceRuntimeState;
+  readonly healthState: ReturnType<typeof calculateComposeAggregateHealthState>;
 }
 
 export function parseComposeProjectStatus(
@@ -100,10 +104,12 @@ export function parseComposeProjectStatus(
 
   const runtimeStates = services.map((s) => s.runtimeState);
   const aggregateState = calculateComposeAggregateRuntimeState(runtimeStates);
+  const healthState = calculateComposeAggregateHealthState(services);
 
   return Object.freeze({
     services: Object.freeze(services),
     runtimeState: aggregateState,
+    healthState,
   });
 }
 

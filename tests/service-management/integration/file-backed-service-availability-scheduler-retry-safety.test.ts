@@ -17,6 +17,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -142,7 +143,9 @@ describe("file-backed service availability scheduler retry safety", () => {
 
     const firstCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
+    const firstOrchestrate = createMockOrchestrate();
     const firstComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(
         "2026-07-27T12:00:30.000Z",
         "2026-07-27T12:00:30.000Z",
@@ -168,7 +171,12 @@ describe("file-backed service availability scheduler retry safety", () => {
     await expect(
       firstComposition.runServiceAvailabilityReconciliationSchedulerCycle.execute(),
     ).rejects.toBe(advanceFailure);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("start", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
 
     const afterFailureCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
@@ -185,7 +193,9 @@ describe("file-backed service availability scheduler retry safety", () => {
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
     const retryClaimStore =
       new FileServiceAvailabilityReconciliationOccurrenceClaimStore(claimPath);
+    const retryOrchestrate = createMockOrchestrate();
     const retryComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: createClock(
         "2026-07-27T12:00:30.000Z",
         "2026-07-27T12:00:30.000Z",
@@ -224,7 +234,7 @@ describe("file-backed service availability scheduler retry safety", () => {
       kind: "no_cursor",
     });
     expect(Object.isFrozen(retryResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(1);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
 
     const afterRetryCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
@@ -240,7 +250,9 @@ describe("file-backed service availability scheduler retry safety", () => {
     const laterCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
     await expect(laterCursorStore.read()).resolves.toEqual(retryResult.cursor);
+    const laterOrchestrate = createMockOrchestrate();
     const laterComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: laterOrchestrate,
       clock: createClock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -283,8 +295,12 @@ describe("file-backed service availability scheduler retry safety", () => {
       kind: "pruned",
     });
     expect(Object.isFrozen(laterResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
-    expect(controlExecute).toHaveBeenLastCalledWith("stop", processId);
+    expect(laterOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(laterOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
     expect(JSON.stringify(retryResult)).not.toContain(directory);
     expect(JSON.stringify(laterResult)).not.toContain(directory);
 

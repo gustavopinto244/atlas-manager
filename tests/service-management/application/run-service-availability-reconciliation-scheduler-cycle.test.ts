@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ControlRegisteredService } from "../../../src/service-management/application/control-registered-service.js";
 import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.js";
 import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../../../src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { ListRegisteredServices } from "../../../src/service-management/application/list-registered-services.js";
+import type { OrchestrateRegisteredServiceControl } from "../../../src/service-management/application/orchestrate-registered-service-control.js";
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../../../src/service-management/application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../../../src/service-management/application/ports/clock.js";
 import type { RegisteredServiceCatalog } from "../../../src/service-management/application/ports/registered-service-catalog.js";
@@ -25,7 +25,9 @@ import {
   RunServiceAvailabilityReconciliationTick,
   type ServiceAvailabilityReconciliationTickServiceResult,
 } from "../../../src/service-management/application/run-service-availability-reconciliation-tick.js";
-import { RegisteredServiceControlResult } from "../../../src/service-management/domain/registered-service-control-result.js";
+import { createDependencyGraph } from "../../../src/service-management/domain/dependency-graph.js";
+import type { RegisteredServiceDependencyGraph } from "../../../src/service-management/domain/dependency-graph.js";
+import type { OrchestrationResult } from "../../../src/service-management/domain/orchestration-plan.js";
 import { ServiceAvailabilityReconciliationOccurrence } from "../../../src/service-management/domain/service-availability-reconciliation-occurrence.js";
 import { ServiceAvailabilityReconciliationSchedulerCursor } from "../../../src/service-management/domain/service-availability-reconciliation-scheduler-cursor.js";
 import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
@@ -40,6 +42,23 @@ function createCursor(
   return ServiceAvailabilityReconciliationSchedulerCursor.create({
     completedThrough,
   });
+}
+
+function createOrchestrationResult(
+  operation: "start" | "stop" = "start",
+): OrchestrationResult {
+  return Object.freeze({
+    targetServiceId: "atlas-api",
+    requestedOperation: operation,
+    startedAt: "2026-07-26T12:30:00.000Z",
+    completedAt: "2026-07-26T12:30:01.000Z",
+    steps: Object.freeze([]),
+    successful: true,
+  });
+}
+
+function createGraph(): RegisteredServiceDependencyGraph {
+  return createDependencyGraph([]);
 }
 
 function createRunTick(): RunServiceAvailabilityReconciliationTick {
@@ -58,11 +77,11 @@ function createRunTick(): RunServiceAvailabilityReconciliationTick {
     { read: vi.fn() },
     { now: vi.fn() },
   );
-  const control = new ControlRegisteredService(
-    catalog,
-    { execute: vi.fn() },
-    { now: vi.fn() },
-  );
+  const orchestrate = {
+    execute: vi
+      .fn<OrchestrateRegisteredServiceControl["execute"]>()
+      .mockResolvedValue(createOrchestrationResult()),
+  } as unknown as OrchestrateRegisteredServiceControl;
 
   return new RunServiceAvailabilityReconciliationTick(
     new ListRegisteredServices(catalog),
@@ -70,8 +89,9 @@ function createRunTick(): RunServiceAvailabilityReconciliationTick {
     new ExecuteRegisteredServiceAvailabilityReconciliationOccurrence(
       planner,
       { claim: vi.fn(), pruneCompletedThrough: vi.fn() },
-      control,
+      orchestrate,
     ),
+    vi.fn().mockResolvedValue(createGraph()),
   );
 }
 
@@ -170,7 +190,7 @@ function createCycle(
 }
 
 function createCompletedOccurrenceReport(
-  resultKind: "none" | "duplicate" | "executed",
+  _resultKind: "none" | "duplicate" | "executed",
 ): readonly ServiceAvailabilityReconciliationTickServiceResult[] {
   const occurrence = ServiceAvailabilityReconciliationOccurrence.create({
     serviceId: "atlas-api",
@@ -178,16 +198,12 @@ function createCompletedOccurrenceReport(
     scheduledFor: "2026-07-26T12:30:00.000Z",
   });
   const result =
-    resultKind === "executed"
+    _resultKind === "executed"
       ? Object.freeze({
           kind: "executed" as const,
-          controlResult: RegisteredServiceControlResult.create({
-            serviceId: "atlas-api",
-            operation: "start",
-            completedAt: "2026-07-26T12:30:01.000Z",
-          }),
+          orchestrationResult: createOrchestrationResult("start"),
         })
-      : Object.freeze({ kind: resultKind });
+      : Object.freeze({ kind: _resultKind });
 
   return Object.freeze([
     Object.freeze({

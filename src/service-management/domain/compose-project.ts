@@ -55,15 +55,10 @@ export function calculateComposeAggregateHealthState(
 
   if (allNone) return "not_configured";
 
-  if (hasConfig && !allNone) {
-    const configHealth = healthStates.filter((h) => h !== "none");
-    const allHealthy = configHealth.every((h) => h === "healthy");
-    if (allHealthy) return "mixed";
-    return "unknown";
-  }
-
   const allHealthy = healthStates.every((h) => h === "healthy");
   if (allHealthy) return "healthy";
+
+  if (hasConfig && !allNone) return "mixed";
 
   return "unknown";
 }

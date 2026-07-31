@@ -598,6 +598,9 @@ adapter.
 A relationship indicating that one registered service requires another service
 to be available or healthy.
 
+The declaration contains only another registered-service identifier; it does
+not contain Docker targets, paths, commands, hosts, or probes.
+
 ### Dependency
 
 The service required by another service.
@@ -626,6 +629,33 @@ A representation of registered service dependency relationships.
 The dependency graph must reject invalid configurations such as missing
 services or circular dependencies.
 
+The graph is immutable after catalog construction and supports direct and
+transitive dependency/dependent queries plus deterministic topological order.
+
+### Direct dependency
+
+A service named directly in another service's `dependencies` collection.
+
+### Transitive dependency
+
+A dependency reached through one or more dependency edges. A shared dependency
+appears once in a closure.
+
+### Dependent
+
+A registered service that requires another registered service. Dependents are
+stopped before the service they require.
+
+### Dependency closure
+
+The unique set of transitive dependencies or dependents reachable from a target
+service.
+
+### Topological order
+
+An ordering in which every dependency appears before its dependent. Atlas
+Manager uses canonical registered-service IDs as deterministic tie-breakers.
+
 ### Circular dependency
 
 An invalid configuration in which a sequence of services eventually depends on
@@ -645,6 +675,35 @@ The process of verifying that a dependency has reached its required health or
 availability state before starting a dependent service.
 
 A process being started does not necessarily mean it is ready.
+
+### Readiness policy
+
+The registered-service configuration selecting `runtime` or `health` readiness
+and bounded timeout/poll intervals.
+
+### Runtime readiness
+
+Readiness inferred from generic registered-service runtime state. Only
+`running` is ready.
+
+### Health readiness
+
+Readiness inferred from adapter-approved health state. Docker and Compose
+health models are supported; running alone is insufficient.
+
+### Orchestration plan
+
+An immutable, deterministic sequence of project-owned control and readiness
+steps produced before effects begin.
+
+### Orchestration step
+
+One control or readiness action for one registered-service ID.
+
+### Partial orchestration effect
+
+The state left by already completed external steps when a later step fails.
+Atlas Manager does not automatically roll back or compensate those effects.
 
 ## Backup and event terms
 

@@ -13,6 +13,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { DockerComposeProjectStatusExecutor } from "../../../src/service-management/infrastructure/docker-compose-executors.js";
 import type { DockerComposeProjectControlExecutor } from "../../../src/service-management/infrastructure/docker-compose-executors.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-stack";
@@ -132,6 +133,7 @@ describe("file-backed docker compose scheduling", () => {
       execute: vi.fn().mockResolvedValue(undefined),
     };
     const first = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: createMockOrchestrate(),
       clock: createClock(t1, 4),
       serviceAvailabilityOverrideStore: stores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore: stores.claimStore,
@@ -163,13 +165,10 @@ describe("file-backed docker compose scheduling", () => {
         ],
       },
     ]);
-    /* eslint-disable-next-line @typescript-eslint/unbound-method */
-    expect(controlExecutor1.execute).toHaveBeenCalledExactlyOnceWith(
-      "start",
-      projectName,
-      projectDirectory,
-      composeFile,
-    );
+
+    expect(
+      first.orchestrateRegisteredServiceControl.execute,
+    ).toHaveBeenCalledExactlyOnceWith(serviceId, "start", "scheduled");
     expect(Object.isFrozen(firstResult)).toBe(true);
 
     const afterFirst = createStores(directory);
@@ -193,6 +192,7 @@ describe("file-backed docker compose scheduling", () => {
     };
     const secondStores = createStores(directory);
     const second = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: createMockOrchestrate(),
       clock: createClock(t2, 4),
       serviceAvailabilityOverrideStore: secondStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -226,13 +226,10 @@ describe("file-backed docker compose scheduling", () => {
         ],
       },
     ]);
-    /* eslint-disable-next-line @typescript-eslint/unbound-method */
-    expect(controlExecutor2.execute).toHaveBeenCalledExactlyOnceWith(
-      "stop",
-      projectName,
-      projectDirectory,
-      composeFile,
-    );
+
+    expect(
+      second.orchestrateRegisteredServiceControl.execute,
+    ).toHaveBeenCalledExactlyOnceWith(serviceId, "stop", "scheduled");
     expect(Object.isFrozen(secondResult)).toBe(true);
 
     const finalStores = createStores(directory);

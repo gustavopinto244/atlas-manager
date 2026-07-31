@@ -18,6 +18,7 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -169,7 +170,9 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
     const afterSetup = createStores(directory);
     await expect(afterSetup.cursorStore.read()).resolves.toEqual(initialCursor);
 
+    const firstOrchestrate = createMockOrchestrate();
     const first = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(t1, 4),
       serviceAvailabilityOverrideStore: stores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore: stores.claimStore,
@@ -201,7 +204,11 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("start", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledExactlyOnceWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(Object.isFrozen(firstResult)).toBe(true);
 
     const afterFirst = createStores(directory);
@@ -229,7 +236,9 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
       secondStores.cursorStore,
       cursorFailure,
     );
+    const secondOrchestrate = createMockOrchestrate();
     const second = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: secondOrchestrate,
       clock: createClock(t2, 4),
       serviceAvailabilityOverrideStore: secondStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -243,8 +252,11 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
       second.runServiceAvailabilityReconciliationSchedulerCycle.execute(),
     ).rejects.toBe(cursorFailure);
     expect(failingCursorStore.advanceCalls).toBe(1);
-    expect(controlExecute).toHaveBeenCalledWith("stop", processId);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
+    expect(secondOrchestrate.execute).toHaveBeenCalledExactlyOnceWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
 
     const afterFailure = createStores(directory);
     await expect(afterFailure.cursorStore.read()).resolves.toEqual(
@@ -255,7 +267,9 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
     ).resolves.toBeNull();
 
     const retryStores = createStores(directory);
+    const retryOrchestrate = createMockOrchestrate();
     const retry = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: createClock(t2, 3),
       serviceAvailabilityOverrideStore: retryStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -292,7 +306,7 @@ describe("file-backed post-advance cursor-advancement failure recovery", () => {
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
     expect(Object.isFrozen(retryResult)).toBe(true);
 
     const finalStores = createStores(directory);

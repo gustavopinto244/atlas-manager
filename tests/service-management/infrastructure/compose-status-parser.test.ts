@@ -109,6 +109,18 @@ describe("parseComposeProjectStatus", () => {
     const result = parseComposeProjectStatus(output);
 
     expect(result.services[0]?.healthState).toBe("healthy");
+    expect(result.healthState).toBe("healthy");
+  });
+
+  it("maps mixed aggregate health to mixed", () => {
+    const result = parseComposeProjectStatus(
+      JSON.stringify([
+        { Name: "api", State: "running", Health: "healthy", ExitCode: 0 },
+        { Name: "worker", State: "running", Health: "none", ExitCode: 0 },
+      ]),
+    );
+
+    expect(result.healthState).toBe("mixed");
   });
 
   it("maps unhealthy health state", () => {

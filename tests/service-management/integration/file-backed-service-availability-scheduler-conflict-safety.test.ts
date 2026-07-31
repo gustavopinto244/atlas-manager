@@ -18,6 +18,7 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 
 const temporaryDirectories: string[] = [];
 const serviceId = "atlas-api";
@@ -178,7 +179,9 @@ describe("file-backed service availability scheduler conflict safety", () => {
       schedulerCursorStore,
       competingCursorStore,
     );
+    const firstOrchestrate = createMockOrchestrate();
     const firstComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(
         "2026-07-27T12:00:30.000Z",
         "2026-07-27T12:00:30.000Z",
@@ -240,7 +243,12 @@ describe("file-backed service availability scheduler conflict safety", () => {
       kind: "no_cursor",
     });
     expect(Object.isFrozen(conflictResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("start", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(JSON.stringify(conflictResult)).not.toContain(directory);
 
     const afterConflictOverrideStore = new FileServiceAvailabilityOverrideStore(
@@ -265,7 +273,9 @@ describe("file-backed service availability scheduler conflict safety", () => {
     const idleProcessListExecutor = createProcessListExecutor("stopped");
     const idleCursorStore =
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(cursorPath);
+    const idleOrchestrate = createMockOrchestrate();
     const idleComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: idleOrchestrate,
       clock: createClock("2026-07-27T12:00:30.000Z"),
       serviceAvailabilityOverrideStore:
         new FileServiceAvailabilityOverrideStore(overridePath),
@@ -288,7 +298,7 @@ describe("file-backed service availability scheduler conflict safety", () => {
     expect(Object.keys(idleResult)).toEqual(["kind", "cursor"]);
     expect(Object.isFrozen(idleResult)).toBe(true);
     expect(idleProcessListExecutor.execute).not.toHaveBeenCalled();
-    expect(controlExecute).toHaveBeenCalledTimes(1);
+    expect(idleOrchestrate.execute).not.toHaveBeenCalled();
 
     const afterIdleOverrideStore = new FileServiceAvailabilityOverrideStore(
       overridePath,
@@ -307,7 +317,9 @@ describe("file-backed service availability scheduler conflict safety", () => {
     await expect(laterCursorStore.read()).resolves.toEqual(
       conflictResult.cursor,
     );
+    const laterOrchestrate = createMockOrchestrate();
     const laterComposition = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: laterOrchestrate,
       clock: createClock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -353,9 +365,12 @@ describe("file-backed service availability scheduler conflict safety", () => {
       kind: "pruned",
     });
     expect(Object.isFrozen(laterResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
-    expect(controlExecute).toHaveBeenNthCalledWith(1, "start", processId);
-    expect(controlExecute).toHaveBeenNthCalledWith(2, "stop", processId);
+    expect(laterOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(laterOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
     expect(JSON.stringify(laterResult)).not.toContain(directory);
 
     const finalOverrideStore = new FileServiceAvailabilityOverrideStore(

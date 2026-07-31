@@ -14,6 +14,8 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
+import { createOrchestrationResult } from "../../../src/service-management/domain/orchestration-plan.js";
 
 const directories: string[] = [];
 const serviceId = "atlas-api";
@@ -101,6 +103,9 @@ describe("file-backed incomplete reconciliation recovery", () => {
     const historical = occurrence("start", t0);
     const current = occurrence("stop", t1);
     const controlFailure = new Error("controlled service-control failure");
+    const expectedControlFailure = new Error(
+      "Orchestration failed for atlas-api: stop",
+    );
     const controlExecute = vi
       .fn<Pm2ServiceControlExecutor["execute"]>()
       .mockRejectedValueOnce(controlFailure)
@@ -133,7 +138,36 @@ describe("file-backed incomplete reconciliation recovery", () => {
       ).read(),
     ).resolves.toEqual(initialCursor);
 
+    const firstOrchestrate = createMockOrchestrate();
+    firstOrchestrate.execute.mockImplementation(
+      async (serviceId, operation) => {
+        if (serviceId === "atlas-api" && operation === "stop") {
+          return createOrchestrationResult({
+            targetServiceId: serviceId,
+            requestedOperation: operation,
+            startedAt: "2026-07-27T20:00:30.000Z",
+            completedAt: "2026-07-27T20:00:30.000Z",
+            steps: [
+              {
+                serviceId,
+                kind: "control",
+                operation,
+                outcome: {
+                  kind: "failed",
+                  error: "controlled service-control failure",
+                },
+              },
+            ],
+            successful: false,
+          });
+        }
+        throw new Error(
+          `Unexpected orchestration request: ${serviceId} ${operation}`,
+        );
+      },
+    );
     const first = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -165,7 +199,7 @@ describe("file-backed incomplete reconciliation recovery", () => {
           {
             kind: "failed",
             occurrence: current,
-            error: controlFailure,
+            error: expectedControlFailure,
           },
         ],
       },
@@ -175,7 +209,12 @@ describe("file-backed incomplete reconciliation recovery", () => {
       kind: "pruned",
     });
     expect(Object.isFrozen(firstResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("stop", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
 
     await expect(
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(
@@ -193,7 +232,9 @@ describe("file-backed incomplete reconciliation recovery", () => {
       kind: "duplicate",
     });
 
+    const retryOrchestrate = createMockOrchestrate();
     const retry = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -233,7 +274,7 @@ describe("file-backed incomplete reconciliation recovery", () => {
       kind: "unchanged",
     });
     expect(Object.isFrozen(retryResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(1);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
 
     await expect(
       new FileServiceAvailabilityOverrideStore(overridePath).findByServiceId(

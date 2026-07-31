@@ -7,6 +7,10 @@ import {
   InMemoryRegisteredServiceCatalog,
   RegisteredServiceCatalogError,
 } from "./in-memory-registered-service-catalog.js";
+import {
+  createDependencyGraph,
+  DependencyValidationError,
+} from "../domain/dependency-graph.js";
 
 const REGISTERED_SERVICES_VARIABLE = "REGISTERED_SERVICES_JSON";
 const MAX_REGISTERED_SERVICES_JSON_BYTES = 65_536;
@@ -22,6 +26,8 @@ const requiredEntryFields = Object.freeze([
 const allowedEntryFields = Object.freeze([
   ...requiredEntryFields,
   "managementConfiguration",
+  "dependencies",
+  "readinessPolicy",
 ]);
 
 export type RegisteredServiceConfigurationErrorCode =
@@ -30,7 +36,8 @@ export type RegisteredServiceConfigurationErrorCode =
   | "registered_services_invalid_shape"
   | "registered_services_limit_exceeded"
   | "registered_service_invalid"
-  | "registered_service_catalog_invalid";
+  | "registered_service_catalog_invalid"
+  | "registered_services_dependency_invalid";
 
 export class RegisteredServiceConfigurationError extends Error {
   public override readonly name = "RegisteredServiceConfigurationError";
@@ -83,6 +90,22 @@ export function createRegisteredServiceCatalogFromEnvironment(
       throw error;
     }
   });
+
+  try {
+    createDependencyGraph(
+      services.map((s) => ({
+        serviceId: s.id,
+        dependencies: s.dependencies,
+      })),
+    );
+  } catch (error) {
+    if (error instanceof DependencyValidationError) {
+      throw new RegisteredServiceConfigurationError(
+        "registered_services_dependency_invalid",
+      );
+    }
+    throw error;
+  }
 
   try {
     return InMemoryRegisteredServiceCatalog.create(services);
@@ -160,6 +183,16 @@ function parseEntryShape(entry: unknown): CreateRegisteredServiceInput {
             string,
             unknown
           >,
+        }
+      : {}),
+    ...(Object.hasOwn(entry, "dependencies")
+      ? {
+          dependencies: entry["dependencies"],
+        }
+      : {}),
+    ...(Object.hasOwn(entry, "readinessPolicy")
+      ? {
+          readinessPolicy: entry["readinessPolicy"],
         }
       : {}),
   };

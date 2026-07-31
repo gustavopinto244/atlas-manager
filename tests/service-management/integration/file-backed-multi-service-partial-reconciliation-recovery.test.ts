@@ -14,6 +14,57 @@ import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../..
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
 import { createServiceAvailabilityOverride } from "../../../src/service-scheduling/domain/service-availability-override.js";
+import type { OrchestrationResult } from "../../../src/service-management/domain/orchestration-plan.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
+
+function createSuccessfulOrchestrationResult(
+  serviceId: string,
+  operation: "start" | "stop" | "restart",
+): OrchestrationResult {
+  return Object.freeze({
+    targetServiceId: serviceId,
+    requestedOperation: operation,
+    startedAt: "2026-07-27T20:00:30.000Z",
+    completedAt: "2026-07-27T20:00:30.000Z",
+    steps: Object.freeze([
+      Object.freeze({
+        serviceId,
+        kind: "control" as const,
+        operation,
+        outcome: Object.freeze({
+          kind: "executed" as const,
+          completedAt: "2026-07-27T20:00:30.000Z",
+        }),
+      }),
+    ]),
+    successful: true,
+  });
+}
+
+function createFailedOrchestrationResult(
+  serviceId: string,
+  operation: "start" | "stop" | "restart",
+  error: Error,
+): OrchestrationResult {
+  return Object.freeze({
+    targetServiceId: serviceId,
+    requestedOperation: operation,
+    startedAt: "2026-07-27T20:00:30.000Z",
+    completedAt: "2026-07-27T20:00:30.000Z",
+    steps: Object.freeze([
+      Object.freeze({
+        serviceId,
+        kind: "control" as const,
+        operation,
+        outcome: Object.freeze({
+          kind: "failed" as const,
+          error: error.message,
+        }),
+      }),
+    ]),
+    successful: false,
+  });
+}
 
 const directories: string[] = [];
 const services = [
@@ -103,16 +154,11 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
     const historical = services.map(({ id }) => occurrence(id, "start", t0));
     const current = services.map(({ id }) => occurrence(id, "stop", t1));
     const serviceBFailure = new Error("service-b control failure");
-    const successfulControlProcessIds: number[] = [];
-    const controlExecute = vi
-      .fn<Pm2ServiceControlExecutor["execute"]>()
-      .mockImplementation((_operation, processId) => {
-        if (processId === services[1].processId) throw serviceBFailure;
-        successfulControlProcessIds.push(processId);
-        return Promise.resolve();
-      });
+    const expectedServiceBError = new Error(
+      "Orchestration failed for service-b: stop",
+    );
     const controlExecutor: Pm2ServiceControlExecutor = {
-      execute: controlExecute,
+      execute: vi.fn().mockResolvedValue(undefined),
     };
 
     const setupCursor =
@@ -140,7 +186,21 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
       );
     }
 
+    const firstOrchestrate = createMockOrchestrate();
+    firstOrchestrate.execute.mockImplementation(
+      async (serviceId, operation) => {
+        if (serviceId === "service-b") {
+          return createFailedOrchestrationResult(
+            serviceId,
+            operation,
+            serviceBFailure,
+          );
+        }
+        return createSuccessfulOrchestrationResult(serviceId, operation);
+      },
+    );
     const first = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -179,7 +239,11 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
     expect(firstByService.get("service-b")).toMatchObject({
       kind: "completed",
       occurrenceResults: [
-        { occurrence: current[1], kind: "failed", error: serviceBFailure },
+        {
+          occurrence: current[1],
+          kind: "failed",
+          error: expectedServiceBError,
+        },
       ],
     });
     expect(firstResult.pruningReport).toEqual([
@@ -191,20 +255,17 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
     });
     expect(firstResult.cursor).toEqual(initialCursor);
     expect(Object.isFrozen(firstResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledWith("stop", services[0].processId);
-    expect(controlExecute).toHaveBeenCalledWith("stop", services[1].processId);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
-    expect(successfulControlProcessIds).toEqual([services[0].processId]);
-    expect(
-      controlExecute.mock.calls.filter(
-        ([, processId]) => processId === services[0].processId,
-      ),
-    ).toHaveLength(1);
-    expect(
-      controlExecute.mock.calls.filter(
-        ([, processId]) => processId === services[1].processId,
-      ),
-    ).toHaveLength(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(2);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "service-a",
+      "stop",
+      "scheduled",
+    );
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "service-b",
+      "stop",
+      "scheduled",
+    );
 
     await expect(
       new FileServiceAvailabilityReconciliationSchedulerCursorStore(
@@ -225,7 +286,9 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
       });
     }
 
+    const retryOrchestrate = createMockOrchestrate();
     const retry = createServiceManagement(environment(), {
+      orchestrateRegisteredServiceControl: retryOrchestrate,
       clock: clock(
         "2026-07-27T20:00:30.000Z",
         "2026-07-27T20:00:30.000Z",
@@ -271,8 +334,7 @@ describe("file-backed multi-service partial reconciliation recovery", () => {
       kind: "unchanged",
     });
     expect(Object.isFrozen(retryResult)).toBe(true);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
-    expect(successfulControlProcessIds).toEqual([services[0].processId]);
+    expect(retryOrchestrate.execute).not.toHaveBeenCalled();
 
     const finalClaims =
       new FileServiceAvailabilityReconciliationOccurrenceClaimStore(claimPath);

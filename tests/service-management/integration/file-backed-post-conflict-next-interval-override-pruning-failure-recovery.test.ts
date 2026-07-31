@@ -15,6 +15,7 @@ import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "../..
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../../../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { Pm2ProcessListExecutor } from "../../../src/service-management/infrastructure/pm2-process-list-executor.js";
 import type { Pm2ServiceControlExecutor } from "../../../src/service-management/infrastructure/pm2-service-control-executor.js";
+import { createMockOrchestrate } from "../../test-helpers/mock-orchestrate.js";
 import {
   createServiceAvailabilityOverride,
   type ServiceAvailabilityOverride,
@@ -220,7 +221,9 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
     const afterSetup = createStores(directory);
     await expect(afterSetup.cursorStore.read()).resolves.toEqual(initialCursor);
 
+    const firstOrchestrate = createMockOrchestrate();
     const first = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: firstOrchestrate,
       clock: createClock(t1, 4),
       serviceAvailabilityOverrideStore: stores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore: stores.claimStore,
@@ -252,7 +255,12 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledExactlyOnceWith("start", processId);
+    expect(firstOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(firstOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(Object.isFrozen(firstResult)).toBe(true);
 
     const afterFirst = createStores(directory);
@@ -288,7 +296,9 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
       competingCursorStore,
       competingCursor,
     );
+    const secondOrchestrate = createMockOrchestrate();
     const second = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: secondOrchestrate,
       clock: createClock(t2, 4),
       serviceAvailabilityOverrideStore: secondStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -328,8 +338,12 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledWith("stop", processId);
-    expect(controlExecute).toHaveBeenCalledTimes(2);
+    expect(secondOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(secondOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "stop",
+      "scheduled",
+    );
     expect(conflictWrapper.competingAdvanceCalls).toBe(1);
     expect(Object.isFrozen(secondResult)).toBe(true);
 
@@ -356,7 +370,9 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
     const failingOverrideStore = new FailFirstConditionalRemovalOverrideStore(
       thirdStores.overrideStore,
     );
+    const thirdOrchestrate = createMockOrchestrate();
     const third = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: thirdOrchestrate,
       clock: createClock(t3, 4),
       serviceAvailabilityOverrideStore: failingOverrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -395,8 +411,12 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledWith("start", processId);
-    expect(controlExecute).toHaveBeenCalledTimes(3);
+    expect(thirdOrchestrate.execute).toHaveBeenCalledTimes(1);
+    expect(thirdOrchestrate.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      "start",
+      "scheduled",
+    );
     expect(failingOverrideStore.conditionalRemovalCalls).toBe(1);
     expect(Object.isFrozen(thirdResult)).toBe(true);
 
@@ -409,7 +429,9 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
     ).resolves.toEqual(futureExpiredOverride);
 
     const fourthStores = createStores(directory);
+    const fourthOrchestrate = createMockOrchestrate();
     const fourth = createServiceManagement(environment, {
+      orchestrateRegisteredServiceControl: fourthOrchestrate,
       clock: createClock(t3, 3),
       serviceAvailabilityOverrideStore: fourthStores.overrideStore,
       serviceAvailabilityReconciliationOccurrenceClaimStore:
@@ -446,7 +468,7 @@ describe("file-backed post-conflict next-interval override-pruning failure recov
         ],
       },
     ]);
-    expect(controlExecute).toHaveBeenCalledTimes(3);
+    expect(fourthOrchestrate.execute).not.toHaveBeenCalled();
     expect(Object.isFrozen(fourthResult)).toBe(true);
 
     const finalStores = createStores(directory);

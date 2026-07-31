@@ -12,6 +12,12 @@ import {
   type DockerComposeManagementConfiguration,
   ManagementConfigurationValidationError,
 } from "./management-configuration.js";
+import {
+  createReadinessPolicy,
+  defaultReadinessPolicy,
+  type ReadinessPolicy,
+  ReadinessPolicyValidationError,
+} from "./readiness-policy.js";
 
 export const SERVICE_MANAGEMENT_ADAPTERS = Object.freeze([
   "mock",
@@ -41,7 +47,9 @@ export type RegisteredServiceValidationErrorCode =
   | "invalid_external_resource_id"
   | "invalid_supported_operations"
   | "invalid_availability_policy"
-  | "invalid_management_configuration";
+  | "invalid_management_configuration"
+  | "invalid_dependencies"
+  | "invalid_readiness_policy";
 
 export class RegisteredServiceValidationError extends Error {
   public override readonly name = "RegisteredServiceValidationError";
@@ -61,6 +69,8 @@ export interface CreateRegisteredServiceInput {
   readonly supportedOperations: readonly string[];
   readonly availabilityPolicy: unknown;
   readonly managementConfiguration?: ManagementConfiguration;
+  readonly dependencies?: unknown;
+  readonly readinessPolicy?: unknown;
 }
 
 export class RegisteredService {
@@ -72,6 +82,8 @@ export class RegisteredService {
     public readonly supportedOperations: readonly SupportedServiceOperation[],
     public readonly availabilityPolicy: ServiceAvailabilityPolicy,
     public readonly managementConfiguration: DockerComposeManagementConfiguration | null,
+    public readonly dependencies: readonly string[],
+    public readonly readinessPolicy: ReadinessPolicy,
   ) {
     Object.freeze(this);
   }
@@ -95,6 +107,15 @@ export class RegisteredService {
       managementAdapter,
       input.managementConfiguration,
     );
+    const dependencies = validateDependencies(input.dependencies, id);
+    const readinessPolicy = validateReadinessPolicy(input.readinessPolicy);
+    if (
+      readinessPolicy.mode === "health" &&
+      managementAdapter !== "docker" &&
+      managementAdapter !== "docker-compose"
+    ) {
+      throw new RegisteredServiceValidationError("invalid_readiness_policy");
+    }
 
     return new RegisteredService(
       id,
@@ -104,6 +125,8 @@ export class RegisteredService {
       supportedOperations,
       availabilityPolicy,
       managementConfiguration,
+      dependencies,
+      readinessPolicy,
     );
   }
 }
@@ -240,6 +263,68 @@ function validateSupportedOperations(
   return Object.freeze([...operations]) as readonly SupportedServiceOperation[];
 }
 
+function validateDependencies(deps: unknown, ownId: string): readonly string[] {
+  if (deps === undefined) {
+    return Object.freeze([]);
+  }
+
+  if (
+    !Array.isArray(deps) ||
+    !deps.every((value): value is string => typeof value === "string")
+  ) {
+    throw new RegisteredServiceValidationError("invalid_dependencies");
+  }
+
+  if (deps.length > MAX_DIRECT_DEPENDENCIES_PER_SERVICE) {
+    throw new RegisteredServiceValidationError("invalid_dependencies");
+  }
+
+  const seen = new Set<string>();
+
+  for (const dep of deps) {
+    if (dep.trim() !== dep || dep.length === 0) {
+      throw new RegisteredServiceValidationError("invalid_dependencies");
+    }
+
+    if (!SERVICE_ID_PATTERN.test(dep) || dep.length > 64) {
+      throw new RegisteredServiceValidationError("invalid_dependencies");
+    }
+
+    if (dep === ownId) {
+      throw new RegisteredServiceValidationError("invalid_dependencies");
+    }
+
+    if (seen.has(dep)) {
+      throw new RegisteredServiceValidationError("invalid_dependencies");
+    }
+
+    seen.add(dep);
+  }
+
+  return Object.freeze([...deps]);
+}
+
+function validateReadinessPolicy(input: unknown): ReadinessPolicy {
+  if (input === undefined) {
+    return defaultReadinessPolicy();
+  }
+
+  if (!isPlainRecord(input)) {
+    throw new RegisteredServiceValidationError("invalid_readiness_policy");
+  }
+
+  try {
+    return createReadinessPolicy(input);
+  } catch (error) {
+    if (error instanceof ReadinessPolicyValidationError) {
+      throw new RegisteredServiceValidationError("invalid_readiness_policy");
+    }
+    throw error;
+  }
+}
+
+const MAX_DIRECT_DEPENDENCIES_PER_SERVICE = 16;
+
 function containsControlCharacter(value: string): boolean {
   return Array.from(value).some((character) => {
     const codePoint = character.codePointAt(0);
@@ -249,4 +334,13 @@ function containsControlCharacter(value: string): boolean {
       (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
     );
   });
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
 }
