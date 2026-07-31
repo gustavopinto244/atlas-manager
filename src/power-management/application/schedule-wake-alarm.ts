@@ -14,6 +14,7 @@ import {
   DIRECT_POWER_AUDIT_SOURCE,
   MACHINE_AUDIT_TARGET,
 } from "./administrative-audit-context.js";
+import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
 
 export class ScheduleWakeAlarm {
   public constructor(
@@ -28,11 +29,25 @@ export class ScheduleWakeAlarm {
     const schedule = createWakeAlarmSchedule(input);
     const requestedAt = this.clock.now().toISOString();
     assertWakeAlarmScheduleIsFuture(requestedAt, schedule.scheduledFor);
+    return this.executeAsAuthorized(
+      input,
+      requestedAt,
+      DIRECT_POWER_AUDIT_SOURCE,
+    );
+  }
+
+  public async executeAsAuthorized(
+    input: unknown,
+    requestedAt: string,
+    source: AdministrativeEventSource,
+  ): Promise<WakeAlarmMutationResult> {
+    const schedule = createWakeAlarmSchedule(input);
+    assertWakeAlarmScheduleIsFuture(requestedAt, schedule.scheduledFor);
     if (!this.audit)
       return this.controller.schedule(requestedAt, schedule.scheduledFor);
     const attempt = await this.audit.begin({
       occurredAt: requestedAt,
-      source: DIRECT_POWER_AUDIT_SOURCE,
+      source,
       target: MACHINE_AUDIT_TARGET,
       operation: "schedule_wake_alarm",
       details: { scheduledFor: schedule.scheduledFor },

@@ -382,16 +382,20 @@ Provide traceability for administrative and automated operations.
 - event-history readiness integrated with shutdown readiness;
 - separation between event history and application logs.
 
+Issue #236 adds the mock-first access-control foundation: immutable
+administrative principals, deny-by-default authentication, fixed roles and
+permissions, audited authorization decisions, protected power and event-history
+facades, and verified actor propagation. It does not complete production
+authentication or protected delivery.
+
 The default remains in memory and no HTTP event-history endpoint is exposed.
 File persistence is explicit and has fixed line and file bounds. Cross-process
-locking, cryptographic tamper evidence, retention, rotation, authentication,
-authorization, and authenticated actor attribution remain future work. v0.8
-remains active.
+locking, cryptographic tamper evidence, retention, rotation, production
+authentication, and protected delivery remain future work. v0.8 remains
+active.
 
 ### Remaining v0.8 scope
 
-- authenticated actor propagation;
-- authorization-result auditing;
 - protected event-history delivery;
 - operational retention and export design;
 - tamper-evidence and multi-process persistence design when required.
@@ -420,6 +424,12 @@ Protect administrative capabilities before broader remote use.
 
 The authentication strategy should be recorded through an ADR before
 implementation.
+
+ADR-003 and Issue #236 establish the mock-first foundation under this
+milestone, but v0.9 remains active. The next prerequisite is a reviewed
+production administrative identity mechanism, followed by protected HTTP
+delivery, verified transport/proxy configuration, deployment ownership, and
+operator recovery procedures.
 
 ## v1.0 — Initial stable release
 

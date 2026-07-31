@@ -82,6 +82,61 @@ The current direct-operation source `administrative/unattributed-local`. It
 does not represent authenticated identity, authorization, session, or remote
 actor verification.
 
+### Administrative principal
+
+The immutable project-owned identity established by authentication. The current
+model contains only a canonical lowercase UUID and contains no credentials,
+tokens, sessions, claims, or caller-controlled metadata.
+
+### Authentication provider
+
+A narrow application port that establishes an administrative principal or
+returns a safe unauthenticated/unavailable result. It receives no raw password,
+header, cookie, token, or other credential value.
+
+### Authentication result
+
+The immutable result of administrative authentication: `authenticated`,
+`unauthenticated`, or `unavailable` with one safe reason category.
+
+### Administrative role
+
+One of the fixed project-owned roles `power_operator`, `scheduler_operator`,
+`auditor`, or `administrator`.
+
+### Administrative permission
+
+One explicit allowlisted capability such as `power.wake.schedule` or
+`event_history.read`. Wildcards and generic permission strings are not valid.
+
+### Authorization decision
+
+An immutable application result stating whether one authenticated principal may
+perform one explicit operation, including the mapped permission and safe deny
+reason when applicable.
+
+### Protected administrative operation
+
+An application facade that authenticates, authorizes, audits the decision, and
+only then invokes one approved capability. It does not accept caller-selected
+roles, permissions, or actor identifiers.
+
+### Verified audit actor
+
+The internally constructed actor `administrator:<canonical-principal-uuid>`.
+It is propagated only after successful authentication and authorization.
+
+### Deny-by-default authentication
+
+A security posture in which missing or unavailable identity evidence does not
+create a local administrator; the default authenticator rejects the request.
+
+### Authorization audit event
+
+An administrative event recording one requested operation, its fixed
+permission, an allowed or denied decision, and a safe reason code only when
+denied. It is recorded before the protected target operation.
+
 ### Partial-effect audit failure
 
 A safe error returned when an operation effect completed but its terminal

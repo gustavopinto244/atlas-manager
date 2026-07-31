@@ -67,6 +67,33 @@ describe("administrative event domain", () => {
     expect(() =>
       createAdministrativeEventTarget({ kind: "host", id: "atlas" }),
     ).toThrow();
+    expect(
+      createAdministrativeEventSource({
+        kind: "administrative",
+        actorId: "administrator:00000000-0000-4000-8000-000000000001",
+      }),
+    ).toEqual({
+      kind: "administrative",
+      actorId: "administrator:00000000-0000-4000-8000-000000000001",
+    });
+    expect(
+      createAdministrativeEventSource({
+        kind: "administrative",
+        actorId: "unauthenticated",
+      }),
+    ).toEqual({ kind: "administrative", actorId: "unauthenticated" });
+    expect(() =>
+      createAdministrativeEventSource({
+        kind: "administrative",
+        actorId: "administrator:00000000-0000-4000-8000-000000000002",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      createAdministrativeEventSource({
+        kind: "administrative",
+        actorId: "administrator:00000000-0000-4000-8000-00000000000Z",
+      }),
+    ).toThrow();
   });
 
   it("validates operation-specific details and rejects unsafe metadata", () => {
@@ -138,6 +165,43 @@ describe("administrative event domain", () => {
         details: { schedulerOutcome: "initialized", complete: true },
       }),
     ).toBeTruthy();
+    expect(
+      createAdministrativeEventInput({
+        ...common,
+        operation: "authorize_administrative_operation",
+        status: "succeeded",
+        details: {
+          requestedOperation: "schedule_wake_alarm",
+          permission: "power.wake.schedule",
+          decision: "allowed",
+        },
+      }),
+    ).toBeTruthy();
+    expect(
+      createAdministrativeEventInput({
+        ...common,
+        operation: "authorize_administrative_operation",
+        status: "rejected",
+        details: {
+          requestedOperation: "schedule_wake_alarm",
+          permission: "power.wake.schedule",
+          decision: "denied",
+          reasonCode: "permission_denied",
+        },
+      }),
+    ).toBeTruthy();
+    expect(() =>
+      createAdministrativeEventInput({
+        ...common,
+        operation: "authorize_administrative_operation",
+        status: "succeeded",
+        details: {
+          requestedOperation: "schedule_wake_alarm",
+          permission: "power.wake.cancel",
+          decision: "allowed",
+        },
+      }),
+    ).toThrow();
   });
 
   it("isolates caller-owned nested values", () => {

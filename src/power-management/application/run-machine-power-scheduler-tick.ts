@@ -20,6 +20,7 @@ import {
   MACHINE_AUDIT_TARGET,
   SCHEDULER_POWER_AUDIT_SOURCE,
 } from "./administrative-audit-context.js";
+import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
 
 const MAX_INTERVAL = 8 * 24 * 60 * 60 * 1000;
 export class RunMachinePowerSchedulerTick {
@@ -47,10 +48,17 @@ export class RunMachinePowerSchedulerTick {
   }
   public async execute(): Promise<MachinePowerSchedulerResult> {
     const tickedAt = this.#clock.now().toISOString();
+    return this.executeAsAuthorized(tickedAt, SCHEDULER_POWER_AUDIT_SOURCE);
+  }
+
+  public async executeAsAuthorized(
+    tickedAt: string,
+    source: AdministrativeEventSource,
+  ): Promise<MachinePowerSchedulerResult> {
     if (!this.#audit) return this.executeCore(tickedAt);
     const attempt = await this.#audit.begin({
       occurredAt: tickedAt,
-      source: SCHEDULER_POWER_AUDIT_SOURCE,
+      source,
       target: MACHINE_AUDIT_TARGET,
       operation: "run_machine_power_scheduler_tick",
       details: { tickedThrough: tickedAt },

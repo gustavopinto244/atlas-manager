@@ -10,6 +10,7 @@ import {
   DIRECT_POWER_AUDIT_SOURCE,
   MACHINE_AUDIT_TARGET,
 } from "./administrative-audit-context.js";
+import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
 
 export class CancelWakeAlarm {
   public constructor(
@@ -22,10 +23,17 @@ export class CancelWakeAlarm {
 
   public async execute(): Promise<WakeAlarmMutationResult> {
     const requestedAt = this.clock.now().toISOString();
+    return this.executeAsAuthorized(requestedAt, DIRECT_POWER_AUDIT_SOURCE);
+  }
+
+  public async executeAsAuthorized(
+    requestedAt: string,
+    source: AdministrativeEventSource,
+  ): Promise<WakeAlarmMutationResult> {
     if (!this.audit) return this.controller.cancel(requestedAt);
     const attempt = await this.audit.begin({
       occurredAt: requestedAt,
-      source: DIRECT_POWER_AUDIT_SOURCE,
+      source,
       target: MACHINE_AUDIT_TARGET,
       operation: "cancel_wake_alarm",
     });

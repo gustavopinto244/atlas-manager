@@ -39,6 +39,7 @@ import {
   DIRECT_POWER_AUDIT_SOURCE,
   MACHINE_AUDIT_TARGET,
 } from "./administrative-audit-context.js";
+import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
 
 const PREPARABLE = new Set([
   "service_running",
@@ -144,12 +145,24 @@ export class PrepareMachineShutdownOccurrence {
   public async execute(
     input: unknown,
   ): Promise<MachineShutdownPreparationReport> {
-    const occurrence = createMachineShutdownOccurrence(input);
     const processedAt = this.#clock.now().toISOString();
+    return this.executeAsAuthorized(
+      input,
+      processedAt,
+      DIRECT_POWER_AUDIT_SOURCE,
+    );
+  }
+
+  public async executeAsAuthorized(
+    input: unknown,
+    processedAt: string,
+    source: AdministrativeEventSource,
+  ): Promise<MachineShutdownPreparationReport> {
+    const occurrence = createMachineShutdownOccurrence(input);
     if (!this.#audit) return this.prepareAt(occurrence, processedAt);
     const attempt = await this.#audit.begin({
       occurredAt: processedAt,
-      source: DIRECT_POWER_AUDIT_SOURCE,
+      source,
       target: MACHINE_AUDIT_TARGET,
       operation: "prepare_machine_shutdown_occurrence",
       details: {

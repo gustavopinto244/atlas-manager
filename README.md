@@ -163,8 +163,22 @@ wake changes, or shutdown requests. If terminal recording fails after an
 effect, the effect remains applied and a safe partial-effect error is returned;
 there is no retry, rollback, or compensation. Direct calls are recorded as
 `administrative/unattributed-local`; scheduler calls use the trusted
-`automated/machine-power-scheduler` source. Authentication and authorization
-are not implemented, so this slice does not enable real power effects.
+`automated/machine-power-scheduler` source. Issue #236 adds a mock-first
+access-control boundary: authentication establishes an immutable UUID-only
+administrative principal, while authorization independently evaluates one
+explicit operation against the fixed roles `power_operator`,
+`scheduler_operator`, `auditor`, and `administrator`. The default authenticator
+denies all requests, role lookup fails closed, and callers cannot choose roles,
+permissions, or audit actors.
+
+Protected administration records an authorization decision before invoking the
+underlying power or event-history capability. Authenticated events use the
+verified actor `administrator:<canonical-principal-uuid>`; unauthenticated
+attempts use `administrative/unauthenticated`. Authorization does not replace
+explicit shutdown confirmation. The feature has no HTTP routes, credentials,
+sessions, tokens, production identity provider, real helper activation, or real
+machine effects. The next prerequisite is selecting and implementing production
+administrative identity verification.
 
 ## Capability history and planned work
 

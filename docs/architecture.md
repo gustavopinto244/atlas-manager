@@ -137,6 +137,37 @@ partial-effect errors without rollback or retry. The store is append-only
 within one process instance; cross-process locking and tamper-proof storage are
 not claimed.
 
+### Administrative access-control boundary
+
+Issue #236 adds a project-owned mock-first boundary before protected
+administration:
+
+```text
+delivery-owned authentication adapter
+        ↓
+access-control application
+        ↓
+protected administration facade
+        ↓
+power management / event history
+        ↓
+controlled infrastructure adapter
+```
+
+Authentication creates an immutable UUID-only principal. Authorization maps one
+explicit operation to one fixed permission and reads trusted role assignments
+exactly once. The default authenticator denies all requests and unknown or
+unavailable role data fails closed. Authorization events are stored through the
+same event-history boundary before a target capability runs.
+
+Power-management and event-history adapters do not receive credentials, roles,
+permissions, sessions, or authorization policy. Verified authenticated actors
+are constructed internally as `administrator:<principalId>`; callers cannot
+provide actor fields. Scheduler-generated occurrence events remain
+`automated/machine-power-scheduler`, even when a protected administrator
+authorizes the scheduler tick. This boundary is not HTTP-exposed and does not
+implement production identity verification.
+
 ## Feature-first modular organization
 
 Code should be organized primarily around product capabilities instead of
@@ -558,11 +589,14 @@ user-relevant administrative actions.
 
 ### Authentication and authorization
 
-Authentication and authorization are required before exposing privileged
-administrative operations outside a trusted development environment.
-
-The exact mechanism has not yet been selected and should be documented before
-implementation.
+Authentication and authorization are separate requirements before exposing
+privileged administrative operations. ADR-003 accepts project-owned
+application authorization and rejects controller-only, adapter-owned, and
+caller-selected roles or actors. The current implementation is mock-first:
+authentication has a deny-all default, authorization uses fixed roles and
+permissions, and every protected decision is audited before target invocation.
+Production identity verification, protected HTTP delivery, transport security,
+and deployment validation remain deferred.
 
 ## Testing strategy
 

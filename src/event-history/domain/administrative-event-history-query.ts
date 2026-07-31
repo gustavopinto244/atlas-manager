@@ -5,6 +5,7 @@ export interface AdministrativeEventHistoryQuery {
   readonly limit: number;
   readonly source?: "administrative" | "automated" | "system";
   readonly operation?:
+    | "authorize_administrative_operation"
     | "schedule_wake_alarm"
     | "cancel_wake_alarm"
     | "request_machine_shutdown"
@@ -81,6 +82,7 @@ export function createAdministrativeEventHistoryQuery(
   )
     throw new AdministrativeEventHistoryQueryError("invalid_source");
   const operations = [
+    "authorize_administrative_operation",
     "schedule_wake_alarm",
     "cancel_wake_alarm",
     "request_machine_shutdown",
