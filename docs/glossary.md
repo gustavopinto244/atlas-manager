@@ -583,6 +583,51 @@ preparation.
 Power scheduling is security-sensitive and must use controlled host
 capabilities.
 
+### Machine operating policy
+
+The project-owned policy describing when Atlas is expected to operate. The
+initial modes are `always_on`, `scheduled`, and `manual`. `always_on` and
+`manual` do not produce automatic transitions; `scheduled` evaluates an
+explicit weekly machine schedule.
+
+### Machine operating window
+
+An immutable weekly machine interval containing a lowercase weekday, a local
+`HH:mm` start, and a local `HH:mm` end. Windows use half-open `[start, end)`
+semantics. Adjacent windows are allowed and overlapping or overnight windows
+are rejected.
+
+### Schedule expectation
+
+The intent produced by evaluating a schedule at an explicit instant. Machine
+power planning uses `operating`, `offline`, or `manual`. It is not a report of
+the real machine's current power state.
+
+### Machine power plan
+
+An immutable read-only result containing the evaluation instant, schedule
+expectation, and the next planned shutdown and wake transitions. It describes
+intent only and does not execute either transition.
+
+### Planned shutdown
+
+An immutable machine power transition plan identifying the next UTC instant at
+which a scheduled policy expects its operating period to end. A planned
+shutdown is not a shutdown request and does not claim that shutdown will
+complete.
+
+### Planned wake
+
+An immutable machine power transition plan identifying the next UTC instant at
+which a scheduled policy expects its next operating period to begin. A planned
+wake is not an RTC configuration or wake-alarm mutation.
+
+### Manual machine power mode
+
+A machine operating-policy mode that intentionally suspends automatic power
+expectation. Its schedule expectation is `manual` and it produces no planned
+shutdown or wake transition.
+
 ### Wake alarm
 
 A hardware or operating-system mechanism used to request that Atlas starts at a
