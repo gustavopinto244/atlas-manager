@@ -736,6 +736,54 @@ at-most-once attempts and does not infer whether an external effect completed.
 The maximum eight-day duration accepted for one machine-power scheduler tick.
 Oversized intervals are blocked rather than silently skipped.
 
+### Machine offline interval
+
+The proposed machine-unavailable interval `[scheduledFor, wakeScheduledFor)`
+for one shutdown occurrence. The shutdown instant is included and the wake
+instant is excluded.
+
+### Safe-shutdown readiness
+
+The fail-closed evaluation that determines whether one due machine shutdown
+occurrence may proceed. It checks confirmation, service schedule/runtime state,
+active tasks, backups, filesystem readiness, and event-recording readiness.
+
+### Shutdown blocker
+
+An immutable project-owned explanation for why a shutdown occurrence cannot
+proceed. Blockers are canonically ordered and contain only safe details.
+
+### Readiness decision
+
+The immutable `approved` or `rejected` result produced before an occurrence
+claim. Approval contains no blockers; rejection contains at least one blocker.
+
+### Explicit confirmation
+
+A mock-first affirmative signal required before readiness dependencies can
+approve shutdown. Its safe default is `not_confirmed`; it is not authentication
+or authorization.
+
+### Service availability conflict
+
+A registered service is expected to be available during some portion of the
+machine offline interval. This produces a service-specific shutdown blocker.
+
+### Fail closed
+
+The safety rule that unknown, malformed, or unavailable readiness information
+rejects shutdown instead of being interpreted as ready.
+
+### Readiness rejection
+
+A rejected decision that consumes no occurrence claim and performs no wake or
+shutdown mutation. It is therefore retryable after conditions change.
+
+### Retryable rejection
+
+A rejected readiness attempt that may be evaluated again by a later explicit
+caller or scheduler tick because no at-most-once execution claim was consumed.
+
 A hardware or operating-system mechanism used to request that Atlas starts at a
 future time. The current v0.6 slices query and mutate one simulated next alarm
 through project-owned mock data only; real configuration requires a future

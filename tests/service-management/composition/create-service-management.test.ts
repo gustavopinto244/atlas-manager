@@ -221,6 +221,7 @@ describe("createServiceManagement", () => {
       "setRegisteredServiceAvailabilityOverride",
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
+      "getRegisteredServiceAvailabilityForInterval",
       "pruneExpiredRegisteredServiceAvailabilityOverrides",
       "pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims",
       "planRegisteredServiceAvailabilityReconciliation",

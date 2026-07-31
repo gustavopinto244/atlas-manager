@@ -4,6 +4,7 @@ import {
   type MachineShutdownOccurrence,
 } from "./machine-shutdown-occurrence.js";
 import type { MachineShutdownOccurrenceExecutionResult } from "./machine-shutdown-occurrence-execution-result.js";
+import type { MachineShutdownReadinessDecision } from "./machine-shutdown-readiness-decision.js";
 
 export type MachinePowerSchedulerItem =
   | Readonly<{
@@ -18,6 +19,11 @@ export type MachinePowerSchedulerItem =
         | "wake_alarm_preparation_failed"
         | "shutdown_failed_after_wake_scheduled"
         | "unexpected_execution_failure";
+    }>
+  | Readonly<{
+      kind: "rejected";
+      occurrence: MachineShutdownOccurrence;
+      decision: MachineShutdownReadinessDecision;
     }>;
 export interface MachinePowerSchedulerReport {
   readonly completedThrough: string;
@@ -53,6 +59,16 @@ export function createMachinePowerSchedulerItem(
         failureCode: code,
       });
   }
+  if (
+    input["kind"] === "rejected" &&
+    Object.hasOwn(input, "occurrence") &&
+    Object.hasOwn(input, "decision")
+  )
+    return Object.freeze({
+      kind: "rejected" as const,
+      occurrence: createMachineShutdownOccurrence(input["occurrence"]),
+      decision: input["decision"] as MachineShutdownReadinessDecision,
+    });
   throw new Error("invalid scheduler item");
 }
 export function createMachinePowerSchedulerReport(
@@ -68,7 +84,10 @@ export function createMachinePowerSchedulerReport(
   const occurrenceResults = Object.freeze(
     input["occurrenceResults"].map(createMachinePowerSchedulerItem),
   );
-  const complete = occurrenceResults.every((item) => item.kind === "completed");
+  const complete = occurrenceResults.every(
+    (item) =>
+      item.kind === "completed" && item.execution.outcome !== "rejected",
+  );
   if (
     input["complete"] !== complete ||
     Date.parse(input["completedThrough"]) > Date.parse(input["tickedThrough"])

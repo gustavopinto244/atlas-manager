@@ -7,6 +7,7 @@ import { createMachineShutdownOccurrenceClaimResult } from "../domain/machine-sh
 import { createMachineShutdownOccurrenceExecutionResult } from "../domain/machine-shutdown-occurrence-execution-result.js";
 import { createWakeAlarmMutationResult } from "../domain/wake-alarm-mutation-result.js";
 import { createMachineShutdownResult } from "../domain/machine-shutdown-result.js";
+import type { EvaluateMachineShutdownReadiness } from "./evaluate-machine-shutdown-readiness.js";
 
 export type MachineShutdownOccurrenceExecutionErrorCode =
   | "claim_failed"
@@ -27,16 +28,19 @@ export class ExecuteMachineShutdownOccurrence {
   readonly #claims: MachineShutdownOccurrenceClaimStore;
   readonly #wake: WakeAlarmController;
   readonly #shutdown: MachineShutdownController;
+  readonly #readiness: EvaluateMachineShutdownReadiness | undefined;
   public constructor(
     clock: PowerManagementClock,
     claims: MachineShutdownOccurrenceClaimStore,
     wake: WakeAlarmController,
     shutdown: MachineShutdownController,
+    readiness?: EvaluateMachineShutdownReadiness,
   ) {
     this.#clock = clock;
     this.#claims = claims;
     this.#wake = wake;
     this.#shutdown = shutdown;
+    this.#readiness = readiness;
     Object.freeze(this);
   }
   public async execute(
@@ -61,6 +65,19 @@ export class ExecuteMachineShutdownOccurrence {
         processedAt,
         outcome: "stale",
       });
+    if (this.#readiness) {
+      const decision = await this.#readiness.evaluateAt(
+        occurrence,
+        processedAt,
+      );
+      if (decision.outcome === "rejected")
+        return createMachineShutdownOccurrenceExecutionResult({
+          occurrence,
+          processedAt,
+          outcome: "rejected",
+          decision,
+        });
+    }
     let claim;
     try {
       claim = createMachineShutdownOccurrenceClaimResult(

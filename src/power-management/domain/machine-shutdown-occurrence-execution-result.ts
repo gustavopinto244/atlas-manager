@@ -11,12 +11,20 @@ import {
   createMachineShutdownResult,
   type MachineShutdownResult,
 } from "./machine-shutdown-result.js";
+import type { MachineShutdownReadinessDecision } from "./machine-shutdown-readiness-decision.js";
+import { createMachineShutdownReadinessDecision } from "./machine-shutdown-readiness-decision.js";
 
 export type MachineShutdownOccurrenceExecutionResult =
   | Readonly<{
       occurrence: MachineShutdownOccurrence;
       processedAt: string;
       outcome: "not_due" | "stale" | "duplicate";
+    }>
+  | Readonly<{
+      occurrence: MachineShutdownOccurrence;
+      processedAt: string;
+      outcome: "rejected";
+      decision: MachineShutdownReadinessDecision;
     }>
   | Readonly<{
       occurrence: MachineShutdownOccurrence;
@@ -54,7 +62,7 @@ export function createMachineShutdownOccurrenceExecutionResult(
     );
   const keys = Reflect.ownKeys(input);
   const base = ["occurrence", "processedAt", "outcome"];
-  const allowed = [...base, "wakeAlarmMutation", "shutdownResult"];
+  const allowed = [...base, "wakeAlarmMutation", "shutdownResult", "decision"];
   if (keys.some((key) => typeof key !== "string" || !allowed.includes(key)))
     throw new MachineShutdownOccurrenceExecutionResultValidationError(
       "invalid_field",
@@ -76,6 +84,7 @@ export function createMachineShutdownOccurrenceExecutionResult(
     outcome !== "not_due" &&
     outcome !== "stale" &&
     outcome !== "duplicate" &&
+    outcome !== "rejected" &&
     outcome !== "executed"
   )
     throw new MachineShutdownOccurrenceExecutionResultValidationError(
@@ -83,8 +92,38 @@ export function createMachineShutdownOccurrenceExecutionResult(
     );
   const hasWake = Object.hasOwn(input, "wakeAlarmMutation");
   const hasShutdown = Object.hasOwn(input, "shutdownResult");
+  const hasDecision = Object.hasOwn(input, "decision");
+  if (outcome === "rejected") {
+    if (hasWake || hasShutdown || !hasDecision)
+      throw new MachineShutdownOccurrenceExecutionResultValidationError(
+        "invalid_effect",
+      );
+    let decision: MachineShutdownReadinessDecision;
+    try {
+      decision = createMachineShutdownReadinessDecision(input["decision"]);
+    } catch {
+      throw new MachineShutdownOccurrenceExecutionResultValidationError(
+        "invalid_effect",
+      );
+    }
+    if (
+      decision.outcome !== "rejected" ||
+      decision.evaluatedAt !== input["processedAt"] ||
+      decision.occurrence.scheduledFor !== occurrence.scheduledFor ||
+      decision.occurrence.wakeScheduledFor !== occurrence.wakeScheduledFor
+    )
+      throw new MachineShutdownOccurrenceExecutionResultValidationError(
+        "invalid_effect",
+      );
+    return Object.freeze({
+      occurrence,
+      processedAt: input["processedAt"],
+      outcome: "rejected" as const,
+      decision,
+    });
+  }
   if (outcome !== "executed") {
-    if (hasWake || hasShutdown)
+    if (hasWake || hasShutdown || hasDecision)
       throw new MachineShutdownOccurrenceExecutionResultValidationError(
         "unexpected_effect",
       );
