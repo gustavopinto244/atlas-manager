@@ -106,6 +106,37 @@ composition remains mock-first and production activation is gated by ADR-002
 authentication, authorization, confirmation, auditing, deployment, and
 security-review prerequisites.
 
+### Administrative event-history boundary
+
+State-changing power operations use a separate administrative audit boundary:
+
+```text
+application use case
+        ↓
+administrative audit trail
+        ↓
+administrative-event recorder port
+        ↓
+in-memory or explicitly configured file-backed event store
+```
+
+The event-history feature owns immutable event models, strict operation
+details, attempt identifiers, store-assigned sequences, bounded queries, and
+file reconstruction. Power management depends only on its public application
+contracts; it does not import file-store internals, paths, parsers, or mutable
+collections. Preparation progress remains a separate in-memory concern and is
+not used as the persistence format.
+
+Every audited top-level operation records `started` before its first
+state-changing effect and one terminal result afterward. The same application
+timestamp may be used for both events; sequence determines order. The shared
+event-history readiness check is part of shutdown readiness, so an unavailable
+history fails closed before preparation, claims, wake mutation, or shutdown.
+Terminal audit failures preserve completed effects and return focused
+partial-effect errors without rollback or retry. The store is append-only
+within one process instance; cross-process locking and tamper-proof storage are
+not claimed.
+
 ## Feature-first modular organization
 
 Code should be organized primarily around product capabilities instead of

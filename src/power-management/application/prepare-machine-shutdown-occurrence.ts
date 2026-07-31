@@ -30,6 +30,15 @@ import type {
   MachineShutdownPreparationEventRecorder,
   MachineShutdownServicePreparationController,
 } from "./ports/machine-shutdown-preparation-controllers.js";
+import type { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
+import {
+  AdministrativeAuditPartialEffectError,
+  type AdministrativeAuditTrailError,
+} from "../../event-history/application/administrative-audit-trail.js";
+import {
+  DIRECT_POWER_AUDIT_SOURCE,
+  MACHINE_AUDIT_TARGET,
+} from "./administrative-audit-context.js";
 
 const PREPARABLE = new Set([
   "service_running",
@@ -109,6 +118,7 @@ export class PrepareMachineShutdownOccurrence {
   readonly #backup: MachineShutdownBackupCompletionController;
   readonly #filesystem: MachineShutdownFilesystemSynchronizationController;
   readonly #events: MachineShutdownPreparationEventRecorder;
+  readonly #audit: AdministrativeAuditTrail | undefined;
   public constructor(
     clock: PowerManagementClock,
     readiness: EvaluateMachineShutdownReadiness,
@@ -118,6 +128,7 @@ export class PrepareMachineShutdownOccurrence {
       filesystem: MachineShutdownFilesystemSynchronizationController;
       events: MachineShutdownPreparationEventRecorder;
       services?: MachineShutdownServicePreparationController | undefined;
+      audit?: AdministrativeAuditTrail;
     },
   ) {
     this.#clock = clock;
@@ -127,13 +138,62 @@ export class PrepareMachineShutdownOccurrence {
     this.#backup = controllers.backup;
     this.#filesystem = controllers.filesystem;
     this.#events = controllers.events;
+    this.#audit = controllers.audit;
     Object.freeze(this);
   }
   public async execute(
     input: unknown,
   ): Promise<MachineShutdownPreparationReport> {
     const occurrence = createMachineShutdownOccurrence(input);
-    return this.prepareAt(occurrence, this.#clock.now().toISOString());
+    const processedAt = this.#clock.now().toISOString();
+    if (!this.#audit) return this.prepareAt(occurrence, processedAt);
+    const attempt = await this.#audit.begin({
+      occurredAt: processedAt,
+      source: DIRECT_POWER_AUDIT_SOURCE,
+      target: MACHINE_AUDIT_TARGET,
+      operation: "prepare_machine_shutdown_occurrence",
+      details: {
+        scheduledFor: occurrence.scheduledFor,
+        wakeScheduledFor: occurrence.wakeScheduledFor,
+      },
+    });
+    let report: MachineShutdownPreparationReport;
+    try {
+      report = await this.prepareAt(occurrence, processedAt);
+    } catch (error) {
+      try {
+        await this.#audit.complete(attempt, "failed", {
+          failureCode: "preparation_dependency_failed",
+        });
+      } catch {
+        // The primary preparation failure remains authoritative.
+      }
+      throw error;
+    }
+    const status =
+      report.outcome === "not_required" || report.outcome === "prepared"
+        ? ("succeeded" as const)
+        : ("rejected" as const);
+    const details = {
+      preparationOutcome: report.outcome,
+      blockerCodes: report.finalDecision?.blockers.map(
+        (blocker) => blocker.code,
+      ),
+      completedStepCount: report.steps.filter(
+        (step) => step.outcome === "completed",
+      ).length,
+    };
+    try {
+      await this.#audit.complete(attempt, status, details);
+    } catch (error) {
+      if (isAuditError(error) && hasPreparationEffect(report))
+        throw new AdministrativeAuditPartialEffectError(
+          "audit_failed_after_shutdown_preparation",
+          report,
+        );
+      throw error;
+    }
+    return report;
   }
   public async prepareAt(
     input: unknown,
@@ -476,4 +536,23 @@ export class PrepareMachineShutdownOccurrence {
       outcome,
     });
   }
+}
+
+function hasPreparationEffect(
+  report: MachineShutdownPreparationReport,
+): boolean {
+  return report.steps.some(
+    (step) =>
+      (step.kind === "stop_registered_services" ||
+        step.kind === "drain_active_tasks" ||
+        step.kind === "complete_backup" ||
+        step.kind === "synchronize_filesystem") &&
+      step.outcome === "completed",
+  );
+}
+
+function isAuditError(error: unknown): error is AdministrativeAuditTrailError {
+  return (
+    error instanceof Error && error.name === "AdministrativeAuditTrailError"
+  );
 }

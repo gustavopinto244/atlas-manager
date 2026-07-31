@@ -368,18 +368,33 @@ Engine-specific logical database backups remain outside the initial scope.
 
 Provide traceability for administrative and automated operations.
 
-### Planned scope
+### Delivered first slice
 
 - structured administrative events;
-- operation source;
-- target resource;
-- timestamps;
-- safe results and error information;
-- event persistence;
-- event-history queries;
-- filtering and pagination;
-- audit events for privileged operations;
+- trusted operation sources and the exact Atlas machine target;
+- internally generated attempt IDs and contiguous store-assigned sequences;
+- immutable operation-specific results and safe failure details;
+- deterministic in-memory event storage;
+- explicitly configured append-only version-one JSON Lines persistence;
+- strict process reconstruction, file permissions, and fail-closed corruption handling;
+- bounded cursor queries, filters, and immutable pages;
+- before-effect and terminal audit events for the six power operations;
+- event-history readiness integrated with shutdown readiness;
 - separation between event history and application logs.
+
+The default remains in memory and no HTTP event-history endpoint is exposed.
+File persistence is explicit and has fixed line and file bounds. Cross-process
+locking, cryptographic tamper evidence, retention, rotation, authentication,
+authorization, and authenticated actor attribution remain future work. v0.8
+remains active.
+
+### Remaining v0.8 scope
+
+- authenticated actor propagation;
+- authorization-result auditing;
+- protected event-history delivery;
+- operational retention and export design;
+- tamper-evidence and multi-process persistence design when required.
 
 Events must not store credentials, tokens, private keys, or other secrets.
 
