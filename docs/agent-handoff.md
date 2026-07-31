@@ -5,10 +5,10 @@
 The active branch is:
 
 ```text
-feat/secure-linux-power-helper-foundation
+feat/persistent-administrative-event-history
 ```
 
-It starts from the merged Issue #231 baseline commit `8ceb286` and extends
+It starts from the merged Issue #233 baseline commit `3f9b638` and extends
 the isolated `src/power-management/` feature boundary with immutable machine
 operating policies, weekly operating windows, explicit timezone validation,
 deterministic power planning, shutdown occurrences, process-local claims, and
@@ -16,7 +16,10 @@ duplicate-protected explicit execution with file-backed claims, scheduler
 cursors, bounded interval generation, explicit scheduler ticks, and a
 fail-closed safe-shutdown readiness boundary with explicit mock preparation,
 dependency-aware service stopping, idempotent task/backup/filesystem
-boundaries, ordered preparation events, and final readiness reevaluation.
+boundaries, ordered preparation events, final readiness reevaluation, and the
+reviewed Linux helper foundation. The current Issue #234 adds the dedicated
+`src/event-history/` feature and audits state-changing power operations through
+one shared event-history boundary.
 
 The safe default is `always_on`: the machine is expected to operate and no
 automatic shutdown or wake transition is planned. Scheduled policies use the
@@ -44,11 +47,11 @@ Using Node.js 24.18.0 and npm 11.16.0:
 
 ```text
 nvm use                       NOT AVAILABLE — nvm is not installed in the shell
-npm ci                         PASS — lockfile unchanged; npm reported one dev-tree advisory
+npm ci                        PASS — lockfile unchanged; one pending esbuild script warning and one development-tree advisory
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1     PASS — 153 files, 2238 tests
+npm test -- --maxWorkers=1    PASS — 160 files, 2264 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
@@ -132,13 +135,38 @@ real RTC effects, persistence, timers, filesystem writes, privileged
 operations, HTTP exposure, or machine power effects. The helper fixture is
 test-only and performs no RTC or power operation.
 
+Issue #234 adds the first bounded v0.8 event-history and auditing slice:
+
+- immutable administrative-event models with strict source, target, operation,
+  status, and operation-specific detail validation;
+- internally generated UUID attempt IDs and store-assigned contiguous
+  sequences;
+- narrow recorder, reader, and readiness ports with immutable query pages;
+- deterministic in-memory storage and explicitly configured canonical JSON
+  Lines persistence;
+- bounded filters and cursor pagination;
+- safe parent/file permission checks, reconstruction, corruption rejection,
+  capacity limits, and safe error translation;
+- one shared event-history instance for power auditing and readiness;
+- started-before-effect and terminal-after-result semantics for direct and
+  scheduler power operations;
+- preserved partial effects with no audit retry, rollback, or compensation.
+
+Direct operations use `administrative/unattributed-local`; scheduler operations
+use `automated/machine-power-scheduler`. This is not authenticated attribution.
+The event history is separate from logs and preparation events, has no HTTP
+surface, and has no retention, rotation, cross-process lock, or tamper-proof
+claim. Default power behavior remains mock-first and real helper activation
+remains disabled.
+
 ## Next recommended work
 
-Complete the activation prerequisites in ADR-002, in separate reviewed Issues
-before enabling the future external helper: persistent administrative audit,
-authenticated and authorized power operations, documented deployment and
-permission ownership, recovery procedures, supported Linux verification,
-operator-visible failures, and security review of the helper implementation.
+The next recommended prerequisite is a dedicated authentication and
+authorization ADR and mock-first identity boundary. It must add verified actor
+propagation and authorization-result auditing before any real helper
+activation. Deployment ownership, recovery procedures, supported Linux
+verification, operator-visible failures, and helper security review remain
+separate prerequisites.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.

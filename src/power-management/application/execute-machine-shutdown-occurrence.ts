@@ -9,6 +9,16 @@ import { createWakeAlarmMutationResult } from "../domain/wake-alarm-mutation-res
 import { createMachineShutdownResult } from "../domain/machine-shutdown-result.js";
 import type { EvaluateMachineShutdownReadiness } from "./evaluate-machine-shutdown-readiness.js";
 import type { PrepareMachineShutdownOccurrence } from "./prepare-machine-shutdown-occurrence.js";
+import type { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
+import {
+  AdministrativeAuditPartialEffectError,
+  type AdministrativeAuditTrailError,
+} from "../../event-history/application/administrative-audit-trail.js";
+import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
+import {
+  DIRECT_POWER_AUDIT_SOURCE,
+  MACHINE_AUDIT_TARGET,
+} from "./administrative-audit-context.js";
 
 export type MachineShutdownOccurrenceExecutionErrorCode =
   | "claim_failed"
@@ -31,6 +41,7 @@ export class ExecuteMachineShutdownOccurrence {
   readonly #shutdown: MachineShutdownController;
   readonly #readiness: EvaluateMachineShutdownReadiness | undefined;
   readonly #preparation: PrepareMachineShutdownOccurrence | undefined;
+  readonly #audit: AdministrativeAuditTrail | undefined;
   public constructor(
     clock: PowerManagementClock,
     claims: MachineShutdownOccurrenceClaimStore,
@@ -38,6 +49,7 @@ export class ExecuteMachineShutdownOccurrence {
     shutdown: MachineShutdownController,
     readiness?: EvaluateMachineShutdownReadiness,
     preparation?: PrepareMachineShutdownOccurrence,
+    audit?: AdministrativeAuditTrail,
   ) {
     this.#clock = clock;
     this.#claims = claims;
@@ -45,6 +57,7 @@ export class ExecuteMachineShutdownOccurrence {
     this.#shutdown = shutdown;
     this.#readiness = readiness;
     this.#preparation = preparation;
+    this.#audit = audit;
     Object.freeze(this);
   }
   public async execute(
@@ -54,6 +67,66 @@ export class ExecuteMachineShutdownOccurrence {
   > {
     const occurrence = createMachineShutdownOccurrence(input);
     const processedAt = this.#clock.now().toISOString();
+    return this.executeAt(occurrence, processedAt, DIRECT_POWER_AUDIT_SOURCE);
+  }
+
+  public async executeAt(
+    input: unknown,
+    processedAt: string,
+    source: AdministrativeEventSource = DIRECT_POWER_AUDIT_SOURCE,
+  ): Promise<
+    ReturnType<typeof createMachineShutdownOccurrenceExecutionResult>
+  > {
+    const occurrence = createMachineShutdownOccurrence(input);
+    if (!this.#audit) return this.executeCore(occurrence, processedAt);
+    const attempt = await this.#audit.begin({
+      occurredAt: processedAt,
+      source,
+      target: MACHINE_AUDIT_TARGET,
+      operation: "execute_machine_shutdown_occurrence",
+      details: {
+        scheduledFor: occurrence.scheduledFor,
+        wakeScheduledFor: occurrence.wakeScheduledFor,
+      },
+    });
+    let result: ReturnType<
+      typeof createMachineShutdownOccurrenceExecutionResult
+    >;
+    try {
+      result = await this.executeCore(occurrence, processedAt);
+    } catch (error) {
+      try {
+        await this.#audit.complete(attempt, "failed", {
+          failureCode: mapExecutionFailure(error),
+        });
+      } catch {
+        // The primary execution failure remains authoritative.
+      }
+      throw error;
+    }
+    const terminal = mapExecutionAudit(result);
+    try {
+      await this.#audit.complete(attempt, terminal.status, terminal.details);
+    } catch (error) {
+      if (isAuditError(error)) {
+        if (result.outcome === "executed")
+          throw new AdministrativeAuditPartialEffectError(
+            "audit_failed_after_shutdown_execution",
+            result,
+          );
+        throw error;
+      }
+      throw error;
+    }
+    return result;
+  }
+
+  private async executeCore(
+    occurrence: ReturnType<typeof createMachineShutdownOccurrence>,
+    processedAt: string,
+  ): Promise<
+    ReturnType<typeof createMachineShutdownOccurrenceExecutionResult>
+  > {
     const processed = Date.parse(processedAt);
     const scheduled = Date.parse(occurrence.scheduledFor);
     const wakeAt = Date.parse(occurrence.wakeScheduledFor);
@@ -152,4 +225,58 @@ export class ExecuteMachineShutdownOccurrence {
       );
     }
   }
+}
+
+function mapExecutionFailure(
+  error: unknown,
+):
+  | "claim_failed"
+  | "wake_alarm_preparation_failed"
+  | "shutdown_failed_after_wake_scheduled"
+  | "unexpected_execution_failure" {
+  if (error instanceof MachineShutdownOccurrenceExecutionError)
+    return error.code;
+  return "unexpected_execution_failure";
+}
+
+function mapExecutionAudit(
+  result: ReturnType<typeof createMachineShutdownOccurrenceExecutionResult>,
+): {
+  readonly status: "succeeded" | "rejected";
+  readonly details: Record<string, unknown>;
+} {
+  if (result.outcome === "executed")
+    return {
+      status: "succeeded",
+      details: {
+        executionOutcome: result.outcome,
+        ...(result.preparationReport
+          ? { preparationOutcome: result.preparationReport.outcome }
+          : {}),
+        wakeMutationOutcome: result.wakeAlarmMutation.outcome,
+        shutdownAccepted: true,
+      },
+    };
+  return {
+    status: "rejected",
+    details: {
+      executionOutcome: result.outcome,
+      ...(result.outcome === "preparation_incomplete"
+        ? { preparationOutcome: result.preparationReport.outcome }
+        : {}),
+      ...(result.outcome === "rejected"
+        ? {
+            blockerCodes: result.decision.blockers.map(
+              (blocker) => blocker.code,
+            ),
+          }
+        : {}),
+    },
+  };
+}
+
+function isAuditError(error: unknown): error is AdministrativeAuditTrailError {
+  return (
+    error instanceof Error && error.name === "AdministrativeAuditTrailError"
+  );
 }

@@ -633,6 +633,20 @@ Administrative events represent user-relevant or automated operations.
 
 They should remain distinct from low-level diagnostic logs.
 
+The current event-history boundary supports exactly the six state-changing
+power operations and records immutable, structured entries with a generated
+attempt ID, a store-assigned contiguous sequence, a trusted source, the Atlas
+machine target, an application timestamp, a status, and operation-specific
+safe details. Direct calls use `administrative/unattributed-local`; scheduler
+calls use `automated/machine-power-scheduler`. This is not authenticated actor
+attribution.
+
+Each top-level operation records a durable `started` event before its first
+state-changing effect and one terminal `succeeded`, `rejected`, or `failed`
+event afterward. Readiness uses the same recorder/store boundary. If that
+boundary is unavailable, safe shutdown readiness rejects before preparation,
+claim acquisition, wake mutation, or shutdown.
+
 Events may record:
 
 - operation type;
@@ -643,6 +657,18 @@ Events may record:
 - safe error category.
 
 Events must not contain secrets or unrestricted command output.
+
+The in-memory store is the default. Explicit file-backed history uses
+canonical version-one JSON Lines, bounded lines and file size, owner-restricted
+permissions, strict reconstruction, and bounded cursor queries. It is
+append-only through the application contract but does not claim cryptographic
+tamper evidence, cross-process locking, or protection from a compromised host.
+
+If terminal recording fails after an effect, the effect is preserved and a
+focused partial-effect error is returned. There is no retry, rollback, or
+compensation. Persistent administrative auditing is an activation prerequisite
+for future real power effects; authentication, authorization, and public event
+delivery remain separate future work.
 
 Security-sensitive operations should produce events even when rejected, when
 doing so does not create excessive abuse data.

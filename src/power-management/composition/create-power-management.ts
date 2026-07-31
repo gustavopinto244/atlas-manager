@@ -47,7 +47,6 @@ import type {
 } from "../application/ports/machine-shutdown-readiness-readers.js";
 import {
   MockMachineShutdownConfirmationReader,
-  MockMachineShutdownReadinessReader,
   MockMachineShutdownServiceReadinessReader,
 } from "../infrastructure/mock-machine-shutdown-readiness-readers.js";
 import {
@@ -73,6 +72,16 @@ import {
 import { InMemoryMachineShutdownPreparationEventRecorder } from "../infrastructure/in-memory-machine-shutdown-preparation-event-recorder.js";
 import { ServiceManagementMachineShutdownPreparationController } from "../infrastructure/service-management-machine-shutdown-preparation-controller.js";
 import type { OrchestrateRegisteredServicesStopPort } from "../../service-management/application/orchestrate-registered-services-stop.js";
+import {
+  createEventHistory,
+  type EventHistoryCapabilities,
+} from "../../event-history/composition/create-event-history.js";
+import type { AdministrativeEventRecorder } from "../../event-history/application/ports/administrative-event-recorder.js";
+import type { AdministrativeEventHistoryReadinessReader } from "../../event-history/application/ports/administrative-event-history-reader.js";
+import { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
+import type { AdministrativeEventAttemptIdGenerator } from "../../event-history/application/ports/administrative-event-attempt-id-generator.js";
+import { NodeAdministrativeEventAttemptIdGenerator } from "../../event-history/infrastructure/node-administrative-event-attempt-id-generator.js";
+import { AdministrativeEventHistoryMachineShutdownReadinessReader } from "../infrastructure/administrative-event-history-readiness-reader.js";
 
 export interface PowerManagementCapabilities {
   readonly getRtcInformation: GetRtcInformation;
@@ -118,6 +127,8 @@ export interface PowerManagementCompositionOverrides {
   readonly mockMachineShutdownActiveTaskState?: MockActiveTaskConfiguration;
   readonly mockMachineShutdownBackupState?: MockBackupConfiguration;
   readonly mockMachineShutdownFilesystemState?: MockFilesystemConfiguration;
+  readonly administrativeEventHistoryCapabilities?: EventHistoryCapabilities;
+  readonly administrativeEventAttemptIdGenerator?: AdministrativeEventAttemptIdGenerator;
 }
 
 const DEFAULT_MOCK_RTC_INFORMATION = Object.freeze({
@@ -132,6 +143,20 @@ export function createPowerManagement(
   overrides: PowerManagementCompositionOverrides = {},
 ): PowerManagementCapabilities {
   const persistence = validatePersistence(overrides.persistence);
+  const eventHistory =
+    overrides.administrativeEventHistoryCapabilities ?? createEventHistory();
+  const eventRecorder: AdministrativeEventRecorder = {
+    record: (input) => eventHistory.recordAdministrativeEvent.execute(input),
+  };
+  const eventHistoryReadiness: AdministrativeEventHistoryReadinessReader = {
+    check: () =>
+      eventHistory.checkAdministrativeEventHistoryReadiness.execute(),
+  };
+  const audit = new AdministrativeAuditTrail(
+    eventRecorder,
+    overrides.administrativeEventAttemptIdGenerator ??
+      new NodeAdministrativeEventAttemptIdGenerator(),
+  );
   const clock = overrides.clock ?? createSystemClock();
   const wakeAlarmState = new MockWakeAlarmState(overrides.mockWakeAlarmState);
   const wakeAlarmReader =
@@ -204,10 +229,9 @@ export function createPowerManagement(
       defaultFilesystemController,
     eventRecording:
       overrides.machineShutdownEventRecordingReadinessReader ??
-      new MockMachineShutdownReadinessReader({
-        area: "event_recording",
-        state: "ready",
-      }),
+      new AdministrativeEventHistoryMachineShutdownReadinessReader(
+        eventHistoryReadiness,
+      ),
   });
   const preparation = new PrepareMachineShutdownOccurrence(clock, readiness, {
     services:
@@ -220,6 +244,7 @@ export function createPowerManagement(
     tasks: taskPreparationController,
     backup: backupPreparationController,
     filesystem: filesystemPreparationController,
+    audit,
     events:
       overrides.machineShutdownPreparationEventRecorder ??
       new InMemoryMachineShutdownPreparationEventRecorder(),
@@ -231,6 +256,7 @@ export function createPowerManagement(
     machineShutdownController,
     readiness,
     preparation,
+    audit,
   );
   const runMachinePowerSchedulerTick = new RunMachinePowerSchedulerTick(
     clock,
@@ -238,13 +264,14 @@ export function createPowerManagement(
     cursorStore,
     claimStore,
     executeMachineShutdownOccurrence,
+    audit,
   );
 
   const capabilities = {
     getRtcInformation: new GetRtcInformation(clock, rtcInformationReader),
     getNextWakeAlarm: new GetNextWakeAlarm(clock, wakeAlarmReader),
-    scheduleWakeAlarm: new ScheduleWakeAlarm(clock, wakeAlarmController),
-    cancelWakeAlarm: new CancelWakeAlarm(clock, wakeAlarmController),
+    scheduleWakeAlarm: new ScheduleWakeAlarm(clock, wakeAlarmController, audit),
+    cancelWakeAlarm: new CancelWakeAlarm(clock, wakeAlarmController, audit),
     getMachinePowerPlan,
     planNextMachineShutdownOccurrence: new PlanNextMachineShutdownOccurrence(
       getMachinePowerPlan,
@@ -256,6 +283,7 @@ export function createPowerManagement(
     requestMachineShutdown: new RequestMachineShutdown(
       clock,
       machineShutdownController,
+      audit,
     ),
   };
 

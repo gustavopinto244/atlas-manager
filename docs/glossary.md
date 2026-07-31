@@ -22,6 +22,72 @@ Record, the following sources take precedence:
 Not every term described here currently corresponds to an implemented class,
 module, endpoint, or database entity.
 
+## Event-history terms
+
+### Administrative event
+
+An immutable project-owned record of one state-changing administrative or
+automated operation. Version one stores a contiguous sequence, generated audit
+attempt ID, timestamp, trusted source, Atlas machine target, operation, status,
+and a strict safe detail shape.
+
+### Administrative event history
+
+The bounded append-only collection of administrative events. It is distinct
+from diagnostic logs and preparation progress events and can use either the
+default in-memory store or explicitly configured file-backed JSON Lines.
+
+### Audit attempt
+
+The application-owned context shared by the `started` and terminal events of
+one top-level operation. Its canonical lowercase UUID is generated internally;
+callers cannot provide it.
+
+### Event sequence
+
+The positive, contiguous number assigned by an event store. It is the
+authoritative ordering when timestamps are equal, and callers cannot choose it.
+
+### Event source
+
+The trusted classification of an operation origin. The first version supports
+administrative/unattributed-local, automated/machine-power-scheduler, and
+system/atlas-manager. It is selected internally rather than from external
+input.
+
+### Event target
+
+The strict resource addressed by an event. Version one accepts only the Atlas
+machine target `machine/atlas`.
+
+### Terminal event
+
+The single `succeeded`, `rejected`, or `failed` event recorded after a top-level
+operation returns a result or encounters a safe failure.
+
+### Append-only event store
+
+An event-history implementation that assigns the next sequence and appends a
+complete canonical event without rewriting, deleting, rotating, or repairing
+previous entries.
+
+### Event-history readiness
+
+A fail-closed check that confirms the shared event-history boundary can be
+read and used for recording. It performs no repair or file creation.
+
+### Unattributed administrative source
+
+The current direct-operation source `administrative/unattributed-local`. It
+does not represent authenticated identity, authorization, session, or remote
+actor verification.
+
+### Partial-effect audit failure
+
+A safe error returned when an operation effect completed but its terminal
+administrative event could not be recorded. The effect remains applied and is
+not retried, rolled back, or compensated.
+
 ## Product terms
 
 ### Atlas

@@ -11,6 +11,15 @@ import {
 import type { MachinePowerSchedulerResult } from "../domain/machine-power-scheduler-result.js";
 import { createMachineShutdownOccurrencesForInterval } from "../domain/machine-shutdown-occurrence-interval.js";
 import { MachineShutdownOccurrenceExecutionError } from "./execute-machine-shutdown-occurrence.js";
+import type { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
+import {
+  AdministrativeAuditPartialEffectError,
+  type AdministrativeAuditTrailError,
+} from "../../event-history/application/administrative-audit-trail.js";
+import {
+  MACHINE_AUDIT_TARGET,
+  SCHEDULER_POWER_AUDIT_SOURCE,
+} from "./administrative-audit-context.js";
 
 const MAX_INTERVAL = 8 * 24 * 60 * 60 * 1000;
 export class RunMachinePowerSchedulerTick {
@@ -19,22 +28,63 @@ export class RunMachinePowerSchedulerTick {
   readonly #cursorStore: MachinePowerSchedulerCursorStore;
   readonly #claims: MachineShutdownOccurrenceClaimStore;
   readonly #executor: MachineShutdownOccurrenceExecutor;
+  readonly #audit: AdministrativeAuditTrail | undefined;
   public constructor(
     clock: PowerManagementClock,
     policy: MachineOperatingPolicy,
     cursorStore: MachinePowerSchedulerCursorStore,
     claims: MachineShutdownOccurrenceClaimStore,
     executor: MachineShutdownOccurrenceExecutor,
+    audit?: AdministrativeAuditTrail,
   ) {
     this.#clock = clock;
     this.#policy = policy;
     this.#cursorStore = cursorStore;
     this.#claims = claims;
     this.#executor = executor;
+    this.#audit = audit;
     Object.freeze(this);
   }
   public async execute(): Promise<MachinePowerSchedulerResult> {
     const tickedAt = this.#clock.now().toISOString();
+    if (!this.#audit) return this.executeCore(tickedAt);
+    const attempt = await this.#audit.begin({
+      occurredAt: tickedAt,
+      source: SCHEDULER_POWER_AUDIT_SOURCE,
+      target: MACHINE_AUDIT_TARGET,
+      operation: "run_machine_power_scheduler_tick",
+      details: { tickedThrough: tickedAt },
+    });
+    let result: MachinePowerSchedulerResult;
+    try {
+      result = await this.executeCore(tickedAt);
+    } catch (error) {
+      try {
+        await this.#audit.complete(attempt, "failed", {
+          failureCode: "unexpected_execution_failure",
+        });
+      } catch {
+        // The primary scheduler failure remains authoritative.
+      }
+      throw error;
+    }
+    const terminal = mapSchedulerAudit(result, tickedAt);
+    try {
+      await this.#audit.complete(attempt, terminal.status, terminal.details);
+    } catch (error) {
+      if (isAuditError(error) && hasSchedulerEffect(result))
+        throw new AdministrativeAuditPartialEffectError(
+          "audit_failed_after_scheduler_tick",
+          result,
+        );
+      throw error;
+    }
+    return result;
+  }
+
+  private async executeCore(
+    tickedAt: string,
+  ): Promise<MachinePowerSchedulerResult> {
     const ticked = createMachinePowerSchedulerCursor({
       completedThrough: tickedAt,
     });
@@ -82,7 +132,13 @@ export class RunMachinePowerSchedulerTick {
     const items = [];
     for (const occurrence of occurrences) {
       try {
-        const execution = await this.#executor.execute(occurrence);
+        const execution = this.#executor.executeAt
+          ? await this.#executor.executeAt(
+              occurrence,
+              tickedAt,
+              SCHEDULER_POWER_AUDIT_SOURCE,
+            )
+          : await this.#executor.execute(occurrence);
         if (execution.outcome === "rejected")
           items.push({
             kind: "rejected" as const,
@@ -145,6 +201,64 @@ export interface MachineShutdownOccurrenceExecutor {
   execute(
     occurrence: unknown,
   ): Promise<MachineShutdownOccurrenceExecutionResult>;
+  executeAt?(
+    occurrence: unknown,
+    processedAt: string,
+    source: typeof SCHEDULER_POWER_AUDIT_SOURCE,
+  ): Promise<MachineShutdownOccurrenceExecutionResult>;
+}
+
+function mapSchedulerAudit(
+  result: MachinePowerSchedulerResult,
+  tickedAt: string,
+): {
+  readonly status: "succeeded" | "rejected";
+  readonly details: Record<string, unknown>;
+} {
+  if (
+    result.kind === "initialized" ||
+    result.kind === "idle" ||
+    result.kind === "advanced"
+  )
+    return {
+      status: "succeeded",
+      details: {
+        schedulerOutcome: result.kind,
+        tickedThrough: tickedAt,
+        complete: result.kind !== "advanced" || result.report.complete,
+        ...(result.kind === "advanced"
+          ? {
+              completedThrough: result.cursor?.completedThrough ?? tickedAt,
+              occurrenceCount: result.report.occurrenceResults.length,
+            }
+          : {}),
+      },
+    };
+  return {
+    status: "rejected",
+    details: {
+      schedulerOutcome: result.kind,
+      tickedThrough: tickedAt,
+      ...(result.kind === "incomplete" || result.kind === "conflict"
+        ? {
+            ...(result.previousCursor
+              ? { completedThrough: result.previousCursor.completedThrough }
+              : {}),
+            occurrenceCount: result.report.occurrenceResults.length,
+          }
+        : {}),
+    },
+  };
+}
+
+function hasSchedulerEffect(result: MachinePowerSchedulerResult): boolean {
+  return result.kind === "initialized" || result.kind === "advanced";
+}
+
+function isAuditError(error: unknown): error is AdministrativeAuditTrailError {
+  return (
+    error instanceof Error && error.name === "AdministrativeAuditTrailError"
+  );
 }
 function emptyReport(tickedAt: string): MachinePowerSchedulerReport {
   return createMachinePowerSchedulerReport({

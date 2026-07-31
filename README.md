@@ -141,6 +141,31 @@ a later explicit tick can retry after confirmation or readiness changes. No
 service is stopped, task is cancelled, backup is run, filesystem is synced, or
 event is persisted by this slice.
 
+The first v0.8 event-history slice adds project-owned administrative events for
+the six state-changing power operations. Each top-level operation receives an
+internally generated attempt ID and produces a durable `started` event before
+its first effect, followed by one safe terminal event. Events use the strict
+Atlas machine target, trusted internal source vocabulary, operation-specific
+details, contiguous store-assigned sequences, and no raw errors, paths,
+credentials, tokens, or helper diagnostics.
+
+Event history is separate from application logs and preparation progress
+events. The default composition uses one in-memory store. Explicitly supplied
+file history uses version-one canonical JSON Lines, one event per line, 8 KiB
+line and 16 MiB file bounds, owner-restricted `0600` files, safe parent
+directories, append-only writes, reconstruction, and bounded cursor queries
+with filters. Missing files are empty for read-only queries; no implicit path,
+retention, rotation, repair, cross-process locking, or HTTP endpoint exists.
+
+Power readiness reads the same event-history instance used for recording. An
+unavailable or corrupted history rejects shutdown before preparation, claims,
+wake changes, or shutdown requests. If terminal recording fails after an
+effect, the effect remains applied and a safe partial-effect error is returned;
+there is no retry, rollback, or compensation. Direct calls are recorded as
+`administrative/unattributed-local`; scheduler calls use the trusted
+`automated/machine-power-scheduler` source. Authentication and authorization
+are not implemented, so this slice does not enable real power effects.
+
 ## Capability history and planned work
 
 The planned initial release includes:
