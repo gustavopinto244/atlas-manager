@@ -673,6 +673,69 @@ compensation is attempted.
 The claim guarantee that one exact occurrence passes the claim once and later
 attempts are duplicates. It does not guarantee exactly-once machine operation.
 
+### Machine-power scheduler cursor
+
+An immutable canonical UTC timestamp through which machine-power scheduler
+intervals were successfully considered. It records scheduler progress, not
+successful hardware effects or real machine state.
+
+### Machine-power scheduler tick
+
+One explicitly invoked bounded scheduler execution. It captures one timestamp,
+processes one interval, executes generated occurrences sequentially, prunes
+completed claims, and may advance the cursor.
+
+### Machine-power scheduler interval
+
+The interval `(completedThrough, tickedThrough]`. An occurrence at the old
+cursor is excluded and one at the tick timestamp is included. Intervals longer
+than eight days are blocked.
+
+### Scheduler report
+
+An immutable record of every generated occurrence result for one interval. It
+is complete only when all items have terminal results; safe failed items make
+the report incomplete.
+
+### Cursor conflict
+
+A compare-and-set result indicating that the authoritative cursor changed
+since the scheduler read it. The scheduler does not overwrite, retry, or roll
+back the authoritative state.
+
+### Cursor advancement
+
+The forward compare-and-set operation that persists a candidate cursor only
+when its expected cursor still matches the authoritative value.
+
+### Process reconstruction
+
+Creating fresh power-management stores and application objects from the same
+claim and cursor files after a process stops or fails. This preserves
+sequential duplicate protection but does not provide cross-process locking.
+
+### Persistent occurrence claim
+
+A canonical file-backed record of a machine shutdown occurrence identity. It
+survives sequential reconstruction and can later be pruned through a cursor.
+
+### Completed claim pruning
+
+Controlled removal of persisted claims whose shutdown time is at or before the
+old authoritative cursor. Current-interval claims are retained until later
+successful progression.
+
+### Crash window
+
+A process termination point between claim persistence, wake preparation,
+shutdown request, and cursor advancement. The mock-first design favors
+at-most-once attempts and does not infer whether an external effect completed.
+
+### Interval bound
+
+The maximum eight-day duration accepted for one machine-power scheduler tick.
+Oversized intervals are blocked rather than silently skipped.
+
 A hardware or operating-system mechanism used to request that Atlas starts at a
 future time. The current v0.6 slices query and mutate one simulated next alarm
 through project-owned mock data only; real configuration requires a future
