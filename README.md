@@ -26,6 +26,25 @@ The administrative API and dashboard remain future delivery work. Existing
 HTTP endpoints are health-oriented; no unauthenticated administrative Docker
 endpoint has been added.
 
+## v0.6 — Power management (active)
+
+The first power-management vertical slice is mock-first. It provides
+project-owned RTC information with the wake-alarm states `unsupported`,
+`not_scheduled`, and `scheduled`, plus read-only RTC observation and a narrow
+simulated machine-shutdown request. Both capabilities use an injected
+power-management clock and return immutable project-owned results.
+
+The current RTC reader and shutdown controller are deterministic mock adapters.
+They do not access an RTC device, kernel file, system bus, child process,
+privileged executable, filesystem, or real machine power interface. No HTTP
+endpoint, scheduler integration, persistence, wake-alarm mutation, or real
+shutdown exists. Simulated shutdown results mean that a request was accepted by
+the mock; they do not mean that the machine powered off.
+
+Future v0.6 work includes validated wake-alarm scheduling, replacement and
+cancellation, machine schedules, confirmation and authorization design, and a
+separate reviewed privileged adapter.
+
 ## Capability history and planned work
 
 The planned initial release includes:

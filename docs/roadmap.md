@@ -218,6 +218,20 @@ This milestone does not include:
 Provide controlled scheduling and execution of approved Atlas power
 operations.
 
+### Delivered first slice
+
+- project-owned immutable RTC information;
+- `unsupported`, `not_scheduled`, and `scheduled` wake-alarm observations;
+- read-only RTC information use case with an application-owned clock;
+- narrow machine-shutdown request contract;
+- deterministic mock RTC reader;
+- simulated mock shutdown controller;
+- isolated power-management composition and tests.
+
+This slice performs no real RTC inspection, wake-alarm mutation, shutdown,
+restart, suspend, hibernate, child-process execution, privileged operation,
+HTTP administration, scheduler integration, or persistence.
+
 ### Planned scope
 
 - server shutdown requests;

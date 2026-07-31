@@ -586,10 +586,40 @@ capabilities.
 ### Wake alarm
 
 A hardware or operating-system mechanism used to request that Atlas starts at a
-future time.
+future time. The current v0.6 slice only observes this concept through
+project-owned mock data; configuration requires a future reviewed adapter and
+confirmation design.
 
-Atlas Manager may configure a supported RTC wake alarm through a controlled
-adapter.
+### RTC information
+
+The project-owned immutable observation containing the application observation
+timestamp, normalized RTC timestamp, and wake-alarm observation state. It does
+not expose RTC device paths, kernel files, commands, or raw operating-system
+structures.
+
+### Wake-alarm observation
+
+The project-owned state describing whether wake-alarm information is
+`unsupported`, `not_scheduled`, or `scheduled`. A scheduled observation carries
+one canonical `scheduledFor` timestamp; the other states do not fabricate one.
+
+### Simulated shutdown request
+
+An application request accepted by the mock shutdown controller. Its result is
+marked `shutdown` and `simulated`; it does not claim that the operating system
+powered off the machine.
+
+### Mock power adapter
+
+An infrastructure adapter that returns deterministic RTC information or a
+simulated shutdown result without accessing hardware, privileged interfaces,
+child processes, or the real machine.
+
+### Privileged power adapter
+
+A future infrastructure adapter that could interact with operating-system power
+or RTC facilities. It requires an explicit confirmation, authorization, and
+security design before implementation.
 
 ## Dependency terms
 
