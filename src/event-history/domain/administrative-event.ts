@@ -8,6 +8,7 @@ export const ADMINISTRATIVE_EVENT_SOURCES = Object.freeze([
 export const ADMINISTRATIVE_EVENT_TARGET_KIND = "machine" as const;
 export const ADMINISTRATIVE_EVENT_TARGET_ID = "atlas" as const;
 export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
+  "authorize_administrative_operation",
   "schedule_wake_alarm",
   "cancel_wake_alarm",
   "request_machine_shutdown",
@@ -65,6 +66,18 @@ export type AdministrativeEventExecutionOutcome =
   (typeof ADMINISTRATIVE_EVENT_EXECUTION_OUTCOMES)[number];
 export type AdministrativeEventSchedulerOutcome =
   (typeof ADMINISTRATIVE_EVENT_SCHEDULER_OUTCOMES)[number];
+
+export const ADMINISTRATIVE_AUTHORIZATION_REASON_CODES = Object.freeze([
+  "credentials_absent",
+  "credentials_invalid",
+  "identity_provider_unavailable",
+  "principal_unknown",
+  "permission_denied",
+  "role_assignment_unavailable",
+  "authorization_policy_unavailable",
+] as const);
+export type AdministrativeAuthorizationReasonCode =
+  (typeof ADMINISTRATIVE_AUTHORIZATION_REASON_CODES)[number];
 
 export type AdministrativeEventFailureCode =
   | "administrative_audit_failed"
@@ -130,7 +143,12 @@ export type AdministrativeEventFailureCode =
 
 export type AdministrativeEventSource = Readonly<{
   kind: AdministrativeEventSourceKind;
-  actorId: "unattributed-local" | "machine-power-scheduler" | "atlas-manager";
+  actorId:
+    | "unattributed-local"
+    | "unauthenticated"
+    | "machine-power-scheduler"
+    | "atlas-manager"
+    | `administrator:${string}`;
 }>;
 export type AdministrativeEventTarget = Readonly<{
   kind: "machine";
@@ -262,9 +280,17 @@ function createSource(input: unknown): AdministrativeEventSource {
   assertFields(record, ["kind", "actorId"]);
   const kind = record["kind"];
   const actorId = record["actorId"];
+  const verifiedAdministrator =
+    typeof actorId === "string" &&
+    /^administrator:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      actorId,
+    );
   if (
     (kind !== "administrative" && kind !== "automated" && kind !== "system") ||
-    (kind === "administrative" && actorId !== "unattributed-local") ||
+    (kind === "administrative" &&
+      actorId !== "unattributed-local" &&
+      actorId !== "unauthenticated" &&
+      !verifiedAdministrator) ||
     (kind === "automated" && actorId !== "machine-power-scheduler") ||
     (kind === "system" && actorId !== "atlas-manager")
   )
@@ -298,6 +324,74 @@ function createDetails(
     throw new AdministrativeEventValidationError("invalid_details");
   }
   const record = requireRecord(input);
+  if (operation === "authorize_administrative_operation") {
+    if (status !== "succeeded" && status !== "rejected")
+      throw new AdministrativeEventValidationError("invalid_details");
+    assertAllowedKeys(record, [
+      "requestedOperation",
+      "permission",
+      "decision",
+      "reasonCode",
+    ]);
+    const requestedOperation = record["requestedOperation"];
+    const permission = record["permission"];
+    const decision = record["decision"];
+    const validOperation = [
+      "schedule_wake_alarm",
+      "cancel_wake_alarm",
+      "request_machine_shutdown",
+      "prepare_machine_shutdown_occurrence",
+      "execute_machine_shutdown_occurrence",
+      "run_machine_power_scheduler_tick",
+      "read_administrative_event_history",
+    ].includes(requestedOperation as string);
+    const validPermission = [
+      "power.wake.schedule",
+      "power.wake.cancel",
+      "power.shutdown.request",
+      "power.shutdown.prepare",
+      "power.shutdown.execute",
+      "power.scheduler.tick",
+      "event_history.read",
+    ].includes(permission as string);
+    const expected = {
+      schedule_wake_alarm: "power.wake.schedule",
+      cancel_wake_alarm: "power.wake.cancel",
+      request_machine_shutdown: "power.shutdown.request",
+      prepare_machine_shutdown_occurrence: "power.shutdown.prepare",
+      execute_machine_shutdown_occurrence: "power.shutdown.execute",
+      run_machine_power_scheduler_tick: "power.scheduler.tick",
+      read_administrative_event_history: "event_history.read",
+    } as Record<string, string>;
+    if (
+      !validOperation ||
+      !validPermission ||
+      expected[requestedOperation as string] !== permission ||
+      (decision !== "allowed" && decision !== "denied") ||
+      (status === "succeeded" && decision !== "allowed") ||
+      (status === "rejected" && decision !== "denied")
+    )
+      throw new AdministrativeEventValidationError("invalid_details");
+    if (decision === "allowed") {
+      if (Object.hasOwn(record, "reasonCode"))
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ requestedOperation, permission, decision });
+    }
+    const reasonCode = record["reasonCode"];
+    if (
+      typeof reasonCode !== "string" ||
+      !(
+        ADMINISTRATIVE_AUTHORIZATION_REASON_CODES as readonly string[]
+      ).includes(reasonCode)
+    )
+      throw new AdministrativeEventValidationError("invalid_details");
+    return Object.freeze({
+      requestedOperation,
+      permission,
+      decision,
+      reasonCode,
+    });
+  }
   if (operation === "schedule_wake_alarm") {
     if (status === "started") {
       assertAllowedKeys(record, ["scheduledFor"]);

@@ -488,6 +488,34 @@ established.
 
 Infrastructure adapters must not be responsible for user-level authorization.
 
+### Current administrative access-control foundation
+
+ADR-003 defines the current fail-closed chain:
+
+```text
+authentication provider → principal → fixed policy → audited decision
+→ protected operation → controlled adapter
+```
+
+The default provider returns `credentials_absent`; no implicit local
+administrator exists. Principals contain only canonical lowercase UUIDs.
+Exactly four roles and seven permissions are accepted, with a reviewed fixed
+role-permission mapping. Unknown principals, unavailable role data, and policy
+failures deny the operation. Callers cannot choose a principal, role,
+permission, or audit actor.
+
+Authorization events contain only the requested operation, mapped permission,
+allow/deny decision, and safe reason code when denied. Credentials, tokens,
+headers, role collections, provider errors, and unrestricted metadata are never
+persisted. A failed authorization audit prevents the target operation. Explicit
+shutdown confirmation remains a separate safeguard after authorization.
+
+This is not production authentication. It adds no password, token, cookie,
+session, identity-provider integration, HTTP middleware, or public route. Real
+administrative exposure remains blocked until identity verification, protected
+delivery, transport and deployment validation, recovery procedures, and rate-
+limiting decisions are reviewed.
+
 ## Network exposure
 
 Atlas Manager should expose only the required network interfaces and ports.

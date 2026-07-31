@@ -5,7 +5,13 @@
 The active branch is:
 
 ```text
-feat/persistent-administrative-event-history
+feat/mock-administrative-access-control
+```
+
+Issue #236 starts from the authoritative merged PR #235 baseline:
+
+```text
+5e5658d4953d18381e85a101d37308eae867b740
 ```
 
 It starts from the merged Issue #233 baseline commit `3f9b638` and extends
@@ -159,13 +165,47 @@ surface, and has no retention, rotation, cross-process lock, or tamper-proof
 claim. Default power behavior remains mock-first and real helper activation
 remains disabled.
 
+Issue #236 adds the accepted ADR-003 mock-first access-control foundation.
+Principals are immutable canonical lowercase UUIDs. Authentication results are
+`authenticated`, `unauthenticated`, or `unavailable`; the default provider
+returns `credentials_absent`. The fixed roles are `power_operator`,
+`scheduler_operator`, `auditor`, and `administrator`, mapped in reviewed code
+to seven explicit permissions. Unknown principals and unavailable role data
+fail closed. Protected capabilities authenticate once, authorize once, record
+an authorization event, and only then invoke the underlying power or
+event-history capability.
+
+Authenticated audit actors are internally constructed as
+`administrator:<principalId>` and propagate to power started/terminal events.
+Unauthenticated attempts use `administrative/unauthenticated`. Authorization
+does not imply shutdown confirmation. The composition is frozen, has no work
+at construction, and is not HTTP-exposed. No credentials, sessions, tokens,
+production identity provider, role persistence, helper activation, real RTC,
+real shutdown, timer, or background worker was added.
+
+Validation completed on Node `24.18.0` and npm `11.16.0`. `nvm use` was not
+available because nvm is not installed in the shell. `npm ci` completed with
+the existing esbuild install-script approval warning and one development-tree
+advisory; no dependency files changed and no audit-fix command was run.
+
+```text
+npm run format:check       PASS
+npm run lint               PASS — 0 errors, 0 warnings
+npm run typecheck          PASS
+npm test -- --maxWorkers=1 PASS — 161 files, 2272 tests
+npm run build              PASS
+git diff --check            PASS
+npm audit --omit=dev        PASS — 0 vulnerabilities
+```
+
 ## Next recommended work
 
-The next recommended prerequisite is a dedicated authentication and
-authorization ADR and mock-first identity boundary. It must add verified actor
-propagation and authorization-result auditing before any real helper
-activation. Deployment ownership, recovery procedures, supported Linux
-verification, operator-visible failures, and helper security review remain
+The next recommended prerequisite after this issue is selecting and
+implementing the production administrative identity mechanism. It must define
+credential/assertion verification, protected HTTP delivery, transport and
+proxy validation, deployment ownership, recovery procedures, and
+operator-visible failures before any real helper activation. Deployment
+ownership, supported Linux verification, and helper security review remain
 separate prerequisites.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
