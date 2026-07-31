@@ -95,6 +95,31 @@ Future v0.6 work includes persistent claims, process reconstruction, an
 explicit bounded scheduler tick, confirmation and authorization design, and a
 separate reviewed privileged adapter.
 
+The fifth mock-first slice adds an explicitly invoked machine-power scheduler
+tick. A first tick safely initializes an absent cursor without replaying
+history. Later ticks process `(completedThrough, tickedThrough]`, with a
+maximum duration of eight days, generate shutdown occurrences chronologically,
+execute them through the existing occurrence executor, prune only claims
+completed through the old cursor, and advance the cursor with compare-and-set.
+
+Claims and cursors can use versioned file-backed stores. Files are canonical,
+validated, newline-terminated JSON and are written through same-directory
+temporary files with mode `0600`, synchronization, close, and atomic rename.
+Missing files mean empty claims or no cursor. Reconstruction preserves
+duplicate protection, but file-backed stores do not provide cross-process
+locking or exactly-once effects.
+
+Ticks return initialized, idle, blocked, incomplete, advanced, or conflict
+results. Regressions and intervals larger than eight days are blocked; failed
+execution leaves the cursor unchanged; cursor conflicts never overwrite the
+authoritative cursor. Current-interval claims survive cursor failure and can
+suppress replay after reconstruction.
+
+Crash windows remain at-most-once: a persisted claim may prevent a later wake
+or shutdown replay even when the process stopped before the effect began. Mock
+wake-alarm state remains process-local and is not reconstructed from files.
+Equivalent machine policy configuration is assumed during reconstruction.
+
 ## Capability history and planned work
 
 The planned initial release includes:

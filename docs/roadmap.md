@@ -280,6 +280,20 @@ This slice remains mock-first and explicitly invoked. It introduces no automatic
 scheduler, persistence, retry, rollback, compensation, real RTC operation, or
 real shutdown. v0.6 remains active.
 
+### Delivered fifth slice
+
+- file-backed machine shutdown occurrence claims and completed-claim pruning;
+- file-backed machine-power scheduler cursors with compare-and-set progression;
+- bounded `(completedThrough, tickedThrough]` interval generation;
+- explicit scheduler ticks with safe initialization, blocked, incomplete,
+  advanced, and conflict outcomes;
+- process reconstruction and duplicate-protected recovery;
+- documented crash windows and process-local mock wake-state limitations.
+
+This remains an explicit mock-first capability. It adds no automatic loop,
+process lifecycle integration, persistent wake-alarm state, real RTC operation,
+real shutdown, service coordination, confirmation, or privileged adapter.
+
 ## v0.7 — Backup orchestration
 
 ### Objective

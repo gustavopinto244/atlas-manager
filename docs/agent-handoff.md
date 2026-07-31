@@ -5,14 +5,15 @@
 The active branch is:
 
 ```text
-feat/mock-machine-shutdown-occurrence-execution
+feat/file-backed-machine-power-scheduler
 ```
 
-It starts from updated `main` at commit `36b740a` after Pull Request #224 and extends
+It starts from updated `main` at commit `a150a4e` after Pull Request #225 and extends
 the isolated `src/power-management/` feature boundary with immutable machine
 operating policies, weekly operating windows, explicit timezone validation,
 deterministic power planning, shutdown occurrences, process-local claims, and
-duplicate-protected explicit execution.
+duplicate-protected explicit execution with file-backed claims, scheduler
+cursors, bounded interval generation, and explicit scheduler ticks.
 
 The safe default is `always_on`: the machine is expected to operate and no
 automatic shutdown or wake transition is planned. Scheduled policies use the
@@ -23,7 +24,8 @@ No real RTC device, kernel file, system bus, child process, executable,
 filesystem write, privileged interface, HTTP endpoint, timer, automatic
 scheduler, persistence, retry, rollback, compensation, or real machine power
 operation exists in this slice. Execution schedules wake before simulated
-shutdown and leaves claims consumed after dependency failure.
+shutdown and leaves claims consumed after dependency failure. Scheduler ticks
+are explicit, bounded, and have no timer or lifecycle integration.
 
 ## Validation
 
@@ -35,7 +37,7 @@ npm ci                         PASS — lockfile unchanged; one dev-tree advisor
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1     PASS — 130 files, 2124 tests
+npm test -- --maxWorkers=1     PASS — 134 files, 2133 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
@@ -71,6 +73,11 @@ The fourth slice adds machine-shutdown occurrence planning, a narrow in-memory
 claim store, due/stale/duplicate execution outcomes, wake-before-shutdown
 coordination, and explicit partial-effect errors.
 
+The fifth slice adds versioned file-backed occurrence claims, completed-claim
+pruning, in-memory and file-backed scheduler cursors, bounded interval
+generation, compare-and-set cursor progression, process reconstruction, and
+crash-window recovery behavior.
+
 The new slice uses one shared process-local mock wake-alarm state for the
 independent wake-alarm reader, wake-alarm controller, and RTC reader. It has no
 real RTC effects, persistence, timers, child processes, filesystem writes,
@@ -78,12 +85,12 @@ privileged operations, HTTP exposure, or machine power effects.
 
 ## Next recommended work
 
-Implement file-backed machine-power occurrence claims, process reconstruction,
-and an explicit bounded power scheduler tick through reconstructed state.
-Preserve at-most-once claim semantics and document crash windows. Keep service
-schedules and machine schedules separate; real RTC and privileged adapters
-remain deferred until confirmation, authorization, auditing, and least-privilege
-boundaries are explicitly designed.
+Implement machine/service schedule interaction evaluation and the next
+safe-shutdown decision slice: active-task, backup, filesystem synchronization,
+event, confirmation, and rejection ports. Keep service schedules and machine
+schedules separate; real RTC and privileged adapters remain deferred until
+confirmation, authorization, auditing, and least-privilege boundaries are
+explicitly designed.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.

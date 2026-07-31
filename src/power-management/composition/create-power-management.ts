@@ -31,6 +31,11 @@ import {
 } from "../infrastructure/mock-wake-alarm-state.js";
 import { createMachineOperatingPolicy } from "../domain/machine-operating-policy.js";
 import { InMemoryMachineShutdownOccurrenceClaimStore } from "../infrastructure/in-memory-machine-shutdown-occurrence-claim-store.js";
+import { RunMachinePowerSchedulerTick } from "../application/run-machine-power-scheduler-tick.js";
+import type { MachinePowerSchedulerCursorStore } from "../application/ports/machine-power-scheduler-cursor-store.js";
+import { InMemoryMachinePowerSchedulerCursorStore } from "../infrastructure/in-memory-machine-power-scheduler-cursor-store.js";
+import { FileMachinePowerSchedulerCursorStore } from "../infrastructure/file-machine-power-scheduler-cursor-store.js";
+import { FileMachineShutdownOccurrenceClaimStore } from "../infrastructure/file-machine-shutdown-occurrence-claim-store.js";
 
 export interface PowerManagementCapabilities {
   readonly getRtcInformation: GetRtcInformation;
@@ -40,6 +45,7 @@ export interface PowerManagementCapabilities {
   readonly getMachinePowerPlan: GetMachinePowerPlan;
   readonly planNextMachineShutdownOccurrence: PlanNextMachineShutdownOccurrence;
   readonly executeMachineShutdownOccurrence: ExecuteMachineShutdownOccurrence;
+  readonly runMachinePowerSchedulerTick: RunMachinePowerSchedulerTick;
   readonly requestMachineShutdown: RequestMachineShutdown;
 }
 
@@ -56,6 +62,7 @@ export interface PowerManagementCompositionOverrides {
   readonly mockMachineShutdownController?: MockMachineShutdownControllerConfiguration;
   readonly machineOperatingPolicy?: unknown;
   readonly machineShutdownOccurrenceClaimStore?: MachineShutdownOccurrenceClaimStore;
+  readonly persistence?: unknown;
 }
 
 const DEFAULT_MOCK_RTC_INFORMATION = Object.freeze({
@@ -69,6 +76,7 @@ const DEFAULT_MACHINE_OPERATING_POLICY = Object.freeze({
 export function createPowerManagement(
   overrides: PowerManagementCompositionOverrides = {},
 ): PowerManagementCapabilities {
+  const persistence = validatePersistence(overrides.persistence);
   const clock = overrides.clock ?? createSystemClock();
   const wakeAlarmState = new MockWakeAlarmState(overrides.mockWakeAlarmState);
   const wakeAlarmReader =
@@ -98,7 +106,21 @@ export function createPowerManagement(
   );
   const claimStore =
     overrides.machineShutdownOccurrenceClaimStore ??
-    new InMemoryMachineShutdownOccurrenceClaimStore();
+    createClaimStore(persistence);
+  const cursorStore = createCursorStore(persistence);
+  const executeMachineShutdownOccurrence = new ExecuteMachineShutdownOccurrence(
+    clock,
+    claimStore,
+    wakeAlarmController,
+    machineShutdownController,
+  );
+  const runMachinePowerSchedulerTick = new RunMachinePowerSchedulerTick(
+    clock,
+    machineOperatingPolicy,
+    cursorStore,
+    claimStore,
+    executeMachineShutdownOccurrence,
+  );
 
   const capabilities = {
     getRtcInformation: new GetRtcInformation(clock, rtcInformationReader),
@@ -109,12 +131,8 @@ export function createPowerManagement(
     planNextMachineShutdownOccurrence: new PlanNextMachineShutdownOccurrence(
       getMachinePowerPlan,
     ),
-    executeMachineShutdownOccurrence: new ExecuteMachineShutdownOccurrence(
-      clock,
-      claimStore,
-      wakeAlarmController,
-      machineShutdownController,
-    ),
+    executeMachineShutdownOccurrence,
+    runMachinePowerSchedulerTick,
     requestMachineShutdown: new RequestMachineShutdown(
       clock,
       machineShutdownController,
@@ -122,6 +140,75 @@ export function createPowerManagement(
   };
 
   return Object.freeze(capabilities);
+}
+
+function createClaimStore(
+  persistence: PersistenceConfiguration | null,
+): MachineShutdownOccurrenceClaimStore {
+  if (persistence)
+    return new FileMachineShutdownOccurrenceClaimStore(
+      persistence.occurrenceClaimFilePath,
+    );
+  return new InMemoryMachineShutdownOccurrenceClaimStore();
+}
+
+function createCursorStore(
+  persistence: PersistenceConfiguration | null,
+): MachinePowerSchedulerCursorStore {
+  if (persistence)
+    return new FileMachinePowerSchedulerCursorStore(
+      persistence.schedulerCursorFilePath,
+    );
+  return new InMemoryMachinePowerSchedulerCursorStore();
+}
+
+interface PersistenceConfiguration {
+  readonly occurrenceClaimFilePath: string;
+  readonly schedulerCursorFilePath: string;
+}
+class PowerManagementPersistenceConfigurationError extends Error {
+  public override readonly name =
+    "PowerManagementPersistenceConfigurationError";
+  public constructor(public readonly code: "invalid_persistence") {
+    super(`Invalid power-management persistence configuration: ${code}`);
+    Object.freeze(this);
+  }
+}
+function validatePersistence(input: unknown): PersistenceConfiguration | null {
+  if (input === undefined) return null;
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    throw new PowerManagementPersistenceConfigurationError(
+      "invalid_persistence",
+    );
+  const record = input as Record<string, unknown>;
+  if (
+    Reflect.ownKeys(record).length !== 2 ||
+    typeof record["occurrenceClaimFilePath"] !== "string" ||
+    typeof record["schedulerCursorFilePath"] !== "string"
+  )
+    throw new PowerManagementPersistenceConfigurationError(
+      "invalid_persistence",
+    );
+  const claim = record["occurrenceClaimFilePath"];
+  const cursor = record["schedulerCursorFilePath"];
+  if (!isSafePath(claim) || !isSafePath(cursor) || claim === cursor)
+    throw new PowerManagementPersistenceConfigurationError(
+      "invalid_persistence",
+    );
+  return Object.freeze({
+    occurrenceClaimFilePath: claim,
+    schedulerCursorFilePath: cursor,
+  });
+}
+function isSafePath(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.trim() === value &&
+    [...value].every((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code >= 0x20 && code !== 0x7f;
+    })
+  );
 }
 
 function createSystemClock(): PowerManagementClock {
