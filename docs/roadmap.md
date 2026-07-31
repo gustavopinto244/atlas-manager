@@ -19,7 +19,8 @@ dates.
 
 ## Current phase
 
-Atlas Manager is currently implementing v0.5 — Docker management.
+Atlas Manager is beginning v0.6 — Power management after completing the v0.5
+Docker-management milestone.
 
 Completed milestones include:
 
@@ -163,7 +164,7 @@ process-style reconstruction and recovery coverage across all scheduler
 outcomes (idle, advanced, incomplete, conflict, rejected operation) and
 recovery boundaries.
 
-## v0.5 — Docker management (active)
+## v0.5 — Docker management (completed)
 
 ### Objective
 
@@ -183,10 +184,19 @@ Manage approved Docker resources through controlled project-level operations.
 - runtime and Docker/Compose health readiness confirmation;
 - scheduler ordering and file-backed dependency reconstruction coverage.
 
-### Remaining scope
+### Completion status
 
-- Compose profiles;
-- v0.5 hardening, acceptance matrix, and milestone readiness.
+This milestone is completed. The final acceptance audit and focused dependency
+and readiness coverage passed with 105 test files and 1,892 tests. The
+implementation, tests, security boundary, recovery behavior, and documentation
+are reconciled.
+
+Compose profiles are not an accepted v0.5 requirement and were not a milestone
+blocker. They remain a future consideration only. A future profile capability
+requires a concrete registered-service use case, exact configuration ownership,
+strict profile-name validation, fixed command construction, supported status,
+control, logs, and scheduling semantics, a separate security review, and a
+dedicated Issue.
 
 Atlas Manager is not intended to become a generic unrestricted Docker
 administration platform.
@@ -201,7 +211,7 @@ This milestone does not include:
 - schema management;
 - logical database backup or restoration.
 
-## v0.6 — Power management
+## v0.6 — Power management (active)
 
 ### Objective
 
