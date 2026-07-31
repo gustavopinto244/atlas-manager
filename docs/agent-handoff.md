@@ -5,14 +5,14 @@
 The active branch is:
 
 ```text
-feat/mock-first-rtc-and-shutdown-foundation
+feat/mock-wake-alarm-lifecycle
 ```
 
-It starts from the v0.5 acceptance-coverage baseline at commit `4ea9d0b`.
-This branch introduces the isolated `src/power-management/` feature boundary:
-immutable RTC and wake-alarm models, application-owned clock/reader/controller
-ports, read-only RTC and simulated shutdown use cases, deterministic mock
-adapters, composition, and isolated tests.
+It starts from Pull Request #220 at commit `718fb96` and extends the isolated
+`src/power-management/` feature boundary with independent next-alarm queries,
+validated future wake-alarm scheduling, replacement, unchanged scheduling,
+cancellation, immutable mutation results, shared mock state, and synchronized
+RTC observations.
 
 No real RTC device, kernel file, system bus, child process, executable,
 filesystem write, privileged interface, HTTP endpoint, scheduler integration,
@@ -20,22 +20,22 @@ or real machine power operation exists in this slice.
 
 ## Validation
 
-Using Node.js 24.18.0:
+Using Node.js 24.18.0 and npm 11.16.0:
 
 ```text
+nvm use                       PASS — Node.js 24.18.0
 npm ci                        PASS — lockfile unchanged; npm reported one dev-tree advisory
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1    PASS — 113 files, 1962 tests
+npm test -- --maxWorkers=1    PASS — 120 files, 2029 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
 ```
 
-These totals were confirmed after the complete repository validation. The
-development-tree advisory from `npm ci` was not fixed or changed; the
-production audit remains clean.
+No dependency changes were made. The development-tree advisory reported by
+`npm ci` was not fixed or changed; the production audit is clean.
 
 ## Delivered capabilities
 
@@ -50,12 +50,18 @@ The mock-first v0.6 slice provides:
 - frozen `createPowerManagement` capabilities;
 - controlled unit, composition, and integration tests.
 
+The new slice uses one shared process-local mock wake-alarm state for the
+independent wake-alarm reader, wake-alarm controller, and RTC reader. It has no
+real RTC effects, persistence, timers, child processes, filesystem writes,
+privileged operations, HTTP exposure, or machine power effects.
+
 ## Next recommended work
 
-Implement validated wake-alarm scheduling with mock replacement,
-cancellation, and deterministic next-alarm queries. Keep real RTC and
-privileged power adapters deferred until confirmation, authorization, and
-security boundaries are explicitly designed.
+Implement a validated machine operating schedule, deterministic shutdown and
+wake planning, next shutdown and wake selection, and mock-only schedule
+evaluation. Keep service schedules and machine schedules separate; real RTC and
+privileged power adapters remain deferred until confirmation, authorization,
+and security boundaries are explicitly designed.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.

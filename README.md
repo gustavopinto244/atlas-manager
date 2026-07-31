@@ -28,22 +28,36 @@ endpoint has been added.
 
 ## v0.6 — Power management (active)
 
-The first power-management vertical slice is mock-first. It provides
+The first two power-management vertical slices are mock-first. They provide
 project-owned RTC information with the wake-alarm states `unsupported`,
-`not_scheduled`, and `scheduled`, plus read-only RTC observation and a narrow
-simulated machine-shutdown request. Both capabilities use an injected
-power-management clock and return immutable project-owned results.
+`not_scheduled`, and `scheduled`, an independent next-wake-alarm query, a
+validated future-time schedule request, replacement and unchanged outcomes,
+cancellation, and a narrow simulated machine-shutdown request. All
+capabilities use an injected power-management clock and return immutable
+project-owned results.
+
+The default composition starts with no scheduled alarm. A schedule must contain
+only a canonical future `scheduledFor` timestamp. Scheduling with no current
+alarm returns `scheduled`; scheduling a different instant returns `replaced`;
+scheduling the same instant returns `unchanged`. Cancellation returns
+`cancelled` when an alarm exists and `not_scheduled` when repeated or already
+empty. Unsupported alarm mutations are rejected as a project-owned error.
+
+The next-alarm query and RTC information query observe one shared process-local
+mock state, so successful scheduling and cancellation are visible through both
+capabilities. The mock state is deterministic and is recreated with each
+composition; it is not persisted.
 
 The current RTC reader and shutdown controller are deterministic mock adapters.
 They do not access an RTC device, kernel file, system bus, child process,
 privileged executable, filesystem, or real machine power interface. No HTTP
-endpoint, scheduler integration, persistence, wake-alarm mutation, or real
-shutdown exists. Simulated shutdown results mean that a request was accepted by
-the mock; they do not mean that the machine powered off.
+endpoint, scheduler integration, persistence, real RTC mutation, or real
+shutdown exists. Simulated shutdown and wake-alarm results describe mock state;
+they do not mean that the machine powered off or that hardware was configured.
 
-Future v0.6 work includes validated wake-alarm scheduling, replacement and
-cancellation, machine schedules, confirmation and authorization design, and a
-separate reviewed privileged adapter.
+Future v0.6 work includes machine operating schedules, deterministic shutdown
+and wake planning, confirmation and authorization design, and a separate
+reviewed privileged adapter.
 
 ## Capability history and planned work
 

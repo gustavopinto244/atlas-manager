@@ -586,9 +586,46 @@ capabilities.
 ### Wake alarm
 
 A hardware or operating-system mechanism used to request that Atlas starts at a
-future time. The current v0.6 slice only observes this concept through
-project-owned mock data; configuration requires a future reviewed adapter and
-confirmation design.
+future time. The current v0.6 slices query and mutate one simulated next alarm
+through project-owned mock data only; real configuration requires a future
+reviewed adapter and confirmation design.
+
+### Next wake alarm
+
+The one wake alarm currently represented by Atlas Manager. A next-alarm query
+returns an immutable observation containing `unsupported`, `not_scheduled`, or
+`scheduled` with one canonical `scheduledFor` instant.
+
+### Wake-alarm schedule request
+
+An application request containing only a canonical `scheduledFor` timestamp.
+The timestamp must represent an instant strictly later than the application
+request instant. The request contains no device, command, executable, or RTC
+target information.
+
+### Wake-alarm replacement
+
+A successful schedule operation that changes an existing next alarm to a
+different instant. Its immutable mutation result has outcome `replaced` and
+contains both the previous and current scheduled states.
+
+### Unchanged wake-alarm request
+
+A successful schedule operation whose requested instant is equal to the
+currently represented next alarm. Its outcome is `unchanged` and it does not
+fabricate a replacement.
+
+### Wake-alarm cancellation
+
+An approved operation that removes the currently represented next alarm. It
+returns `cancelled` when an alarm existed and `not_scheduled` for a successful
+empty-state no-op.
+
+### Mock wake-alarm state
+
+A deterministic process-local infrastructure state shared by the mock
+wake-alarm reader, controller, and RTC information reader. It is recreated for
+each composition and has no timer, persistence, hardware, or machine effect.
 
 ### RTC information
 

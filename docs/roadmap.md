@@ -228,7 +228,16 @@ operations.
 - simulated mock shutdown controller;
 - isolated power-management composition and tests.
 
-This slice performs no real RTC inspection, wake-alarm mutation, shutdown,
+### Delivered second slice
+
+- independent deterministic next-wake-alarm queries;
+- canonical schedule-input validation and strict future-time validation;
+- mock initial scheduling, replacement, unchanged scheduling, and cancellation;
+- immutable schedule and cancellation mutation results;
+- one shared process-local mock wake-alarm state for RTC and alarm queries;
+- integration coverage proving RTC observation synchronization.
+
+Both slices perform no real RTC inspection, wake-alarm mutation, shutdown,
 restart, suspend, hibernate, child-process execution, privileged operation,
 HTTP administration, scheduler integration, or persistence.
 
@@ -236,9 +245,10 @@ HTTP administration, scheduler integration, or persistence.
 
 - server shutdown requests;
 - scheduled shutdown;
-- RTC wake-alarm configuration;
-- wake-schedule validation;
-- cancellation or replacement of scheduled operations;
+- real RTC wake-alarm configuration;
+- machine operating schedules;
+- deterministic shutdown and wake planning;
+- cancellation or replacement through a reviewed privileged adapter;
 - safe confirmation and rejection behavior;
 - administrative event recording;
 - controlled privileged adapter.
