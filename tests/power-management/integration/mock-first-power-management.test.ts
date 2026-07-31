@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, vi } from "vitest";
 
 import { createPowerManagement } from "../../../src/power-management/composition/create-power-management.js";
+import type { MachineShutdownController } from "../../../src/power-management/application/ports/machine-shutdown-controller.js";
 import { createSequenceClock } from "../../test-helpers/controlled-time.js";
 
 describe("mock-first power-management integration", () => {
@@ -168,5 +170,110 @@ describe("mock-first power-management integration", () => {
         wakeAlarm: { state: "scheduled", scheduledFor: t1 },
       }),
     );
+  });
+
+  it("plans a weekly machine schedule without executing power operations", async () => {
+    const clock = createSequenceClock([
+      new Date("2026-08-03T10:00:00.000Z"),
+      new Date("2026-08-03T10:00:00.000Z"),
+      new Date("2026-08-03T11:00:00.000Z"),
+      new Date("2026-08-03T15:00:00.000Z"),
+      new Date("2026-08-03T21:00:00.000Z"),
+      new Date("2026-08-04T21:00:00.000Z"),
+      new Date("2026-08-04T21:00:00.000Z"),
+    ]);
+    const shutdownController: MachineShutdownController = {
+      requestShutdown: vi.fn(),
+    };
+    const capabilities = createPowerManagement({
+      clock,
+      machineShutdownController: shutdownController,
+      machineOperatingPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        weeklySchedule: {
+          windows: [
+            { dayOfWeek: "monday", start: "08:00", end: "12:00" },
+            { dayOfWeek: "monday", start: "12:00", end: "18:00" },
+            { dayOfWeek: "tuesday", start: "09:00", end: "17:00" },
+          ],
+        },
+      },
+    });
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
+
+    const wakeBefore = await capabilities.getNextWakeAlarm.execute();
+    const beforeStart = capabilities.getMachinePowerPlan.execute();
+    const atStart = capabilities.getMachinePowerPlan.execute();
+    const atAdjacentBoundary = capabilities.getMachinePowerPlan.execute();
+    const atEnd = capabilities.getMachinePowerPlan.execute();
+    const afterFinalWindow = capabilities.getMachinePowerPlan.execute();
+    const wakeAfter = await capabilities.getNextWakeAlarm.execute();
+
+    expect(beforeStart).toMatchObject({
+      expectation: "offline",
+      nextWake: {
+        state: "planned",
+        scheduledFor: "2026-08-03T11:00:00.000Z",
+      },
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-03T21:00:00.000Z",
+      },
+    });
+    expect(atStart).toMatchObject({
+      expectation: "operating",
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-03T21:00:00.000Z",
+      },
+      nextWake: {
+        state: "planned",
+        scheduledFor: "2026-08-04T12:00:00.000Z",
+      },
+    });
+    expect(atAdjacentBoundary).toEqual(
+      expect.objectContaining({
+        expectation: "operating",
+        nextShutdown: {
+          state: "planned",
+          scheduledFor: "2026-08-03T21:00:00.000Z",
+        },
+      }),
+    );
+    expect(atEnd).toMatchObject({
+      expectation: "offline",
+      nextWake: {
+        state: "planned",
+        scheduledFor: "2026-08-04T12:00:00.000Z",
+      },
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-04T20:00:00.000Z",
+      },
+    });
+    expect(afterFinalWindow).toMatchObject({
+      expectation: "offline",
+      nextWake: {
+        state: "planned",
+        scheduledFor: "2026-08-10T11:00:00.000Z",
+      },
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-10T21:00:00.000Z",
+      },
+    });
+    expect(Object.isFrozen(beforeStart)).toBe(true);
+    expect(Object.isFrozen(beforeStart.nextShutdown)).toBe(true);
+    expect(Object.isFrozen(beforeStart.nextWake)).toBe(true);
+    expect(wakeAfter.wakeAlarm).toEqual(wakeBefore.wakeAlarm);
+    expect(shutdownController.requestShutdown).not.toHaveBeenCalled();
+    expect(timeoutSpy).not.toHaveBeenCalled();
+    expect(intervalSpy).not.toHaveBeenCalled();
+    expect(clock.calls).toBe(7);
+
+    timeoutSpy.mockRestore();
+    intervalSpy.mockRestore();
   });
 });

@@ -28,7 +28,7 @@ endpoint has been added.
 
 ## v0.6 — Power management (active)
 
-The first two power-management vertical slices are mock-first. They provide
+The first three power-management vertical slices are mock-first. They provide
 project-owned RTC information with the wake-alarm states `unsupported`,
 `not_scheduled`, and `scheduled`, an independent next-wake-alarm query, a
 validated future-time schedule request, replacement and unchanged outcomes,
@@ -55,8 +55,32 @@ endpoint, scheduler integration, persistence, real RTC mutation, or real
 shutdown exists. Simulated shutdown and wake-alarm results describe mock state;
 they do not mean that the machine powered off or that hardware was configured.
 
-Future v0.6 work includes machine operating schedules, deterministic shutdown
-and wake planning, confirmation and authorization design, and a separate
+The third mock-first slice adds a project-owned machine operating policy with
+the modes `always_on`, `scheduled`, and `manual`. Scheduled policies require
+the exact explicit timezone `America/Sao_Paulo` and an immutable weekly
+schedule containing one to 64 lowercase weekday windows. Machine windows use
+canonical minute-precision `HH:mm` values and half-open `[start, end)`
+semantics: the start is operating and the end is offline. Zero-length,
+reversed, overnight, duplicate, and overlapping windows are rejected.
+Adjacent windows are accepted and remain one continuous operating period for
+planning; they do not create a synthetic transition.
+
+The machine schedule evaluator returns the schedule expectation `operating`,
+`offline`, or `manual`, together with immutable next-shutdown and next-wake
+plans. It evaluates an explicit instant using the Node.js runtime timezone
+database, searches across weekly boundaries with a bounded interval, and
+returns canonical UTC timestamps. The default policy is `always_on`, which
+expects the machine to be operating and plans no transitions.
+
+This capability describes schedule intent only. It does not inspect real
+machine state, configure RTC hardware, schedule a wake alarm, request
+shutdown, create timers, persist data, or coordinate with registered-service
+schedules. Machine and service schedules remain separate domains; their
+interaction before a future power operation still requires a dedicated
+design.
+
+Future v0.6 work includes machine-power occurrences, duplicate-protected mock
+transition execution, confirmation and authorization design, and a separate
 reviewed privileged adapter.
 
 ## Capability history and planned work

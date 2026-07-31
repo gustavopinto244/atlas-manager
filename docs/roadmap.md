@@ -237,17 +237,27 @@ operations.
 - one shared process-local mock wake-alarm state for RTC and alarm queries;
 - integration coverage proving RTC observation synchronization.
 
-Both slices perform no real RTC inspection, wake-alarm mutation, shutdown,
+### Delivered third slice
+
+- project-owned `always_on`, `scheduled`, and `manual` machine operating policies;
+- exact explicit `America/Sao_Paulo` timezone validation;
+- immutable weekly machine operating windows with canonical ordering;
+- deterministic half-open schedule evaluation through the runtime timezone database;
+- immutable next-shutdown and next-wake planning with weekly wraparound;
+- `getMachinePowerPlan` in the frozen power-management composition;
+- complete domain, application, composition, and mock-first integration coverage.
+
+All three slices perform no real RTC inspection, wake-alarm mutation, shutdown,
 restart, suspend, hibernate, child-process execution, privileged operation,
 HTTP administration, scheduler integration, or persistence.
 
 ### Planned scope
 
 - server shutdown requests;
-- scheduled shutdown;
+- mock machine-power occurrences and duplicate-protected transition execution;
+- coordination between approved mock wake scheduling and simulated shutdown;
+- scheduled shutdown execution after explicit failure and confirmation design;
 - real RTC wake-alarm configuration;
-- machine operating schedules;
-- deterministic shutdown and wake planning;
 - cancellation or replacement through a reviewed privileged adapter;
 - safe confirmation and rejection behavior;
 - administrative event recording;

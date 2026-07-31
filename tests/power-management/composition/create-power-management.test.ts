@@ -34,12 +34,14 @@ describe("createPowerManagement", () => {
     const getNextWakeAlarm = capabilities.getNextWakeAlarm;
     const scheduleWakeAlarm = capabilities.scheduleWakeAlarm;
     const cancelWakeAlarm = capabilities.cancelWakeAlarm;
+    const getMachinePowerPlan = capabilities.getMachinePowerPlan;
     const requestMachineShutdown = capabilities.requestMachineShutdown;
     expect(Object.isFrozen(capabilities)).toBe(true);
     expect(capabilities.getRtcInformation).toBe(getRtcInformation);
     expect(capabilities.getNextWakeAlarm).toBe(getNextWakeAlarm);
     expect(capabilities.scheduleWakeAlarm).toBe(scheduleWakeAlarm);
     expect(capabilities.cancelWakeAlarm).toBe(cancelWakeAlarm);
+    expect(capabilities.getMachinePowerPlan).toBe(getMachinePowerPlan);
     expect(capabilities.requestMachineShutdown).toBe(requestMachineShutdown);
     expect(reader.read).not.toHaveBeenCalled();
     expect(controller.requestShutdown).not.toHaveBeenCalled();
@@ -186,5 +188,85 @@ describe("createPowerManagement", () => {
     expect(nextScheduled.wakeAlarm).toEqual(rtcScheduled.wakeAlarm);
     expect(rtcAfter.wakeAlarm).toEqual({ state: "not_scheduled" });
     expect(nextAfter.wakeAlarm).toEqual({ state: "not_scheduled" });
+  });
+
+  it("exposes an always-on plan by default", () => {
+    const capabilities = createPowerManagement({ clock: createClock() });
+
+    expect(capabilities.getMachinePowerPlan.execute()).toEqual({
+      evaluatedAt: NOW,
+      expectation: "operating",
+      nextShutdown: { state: "not_planned" },
+      nextWake: { state: "not_planned" },
+    });
+  });
+
+  it("accepts scheduled policies and retains a frozen policy snapshot", () => {
+    const policy = {
+      mode: "scheduled" as const,
+      timezone: "America/Sao_Paulo",
+      weeklySchedule: {
+        windows: [{ dayOfWeek: "monday", start: "08:00", end: "18:00" }],
+      },
+    };
+    const capabilities = createPowerManagement({
+      clock: {
+        now: vi.fn(() => new Date("2026-08-03T12:00:00.000Z")),
+      },
+      machineOperatingPolicy: policy,
+    });
+    policy.weeklySchedule.windows[0]!.start = "12:00";
+
+    expect(capabilities.getMachinePowerPlan.execute()).toMatchObject({
+      expectation: "operating",
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-03T21:00:00.000Z",
+      },
+    });
+    expect(Object.isFrozen(capabilities.getMachinePowerPlan)).toBe(true);
+  });
+
+  it("accepts manual mode and rejects malformed policy configuration", () => {
+    const manual = createPowerManagement({
+      clock: createClock(),
+      machineOperatingPolicy: { mode: "manual" },
+    });
+    expect(manual.getMachinePowerPlan.execute().expectation).toBe("manual");
+
+    expect(() =>
+      createPowerManagement({
+        clock: createClock(),
+        machineOperatingPolicy: { mode: "scheduled" },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: "MachineOperatingPolicyValidationError",
+      }),
+    );
+  });
+
+  it("does not invoke power mutations or change wake-alarm state while planning", async () => {
+    const shutdownController: MachineShutdownController = {
+      requestShutdown: vi.fn(),
+    };
+    const capabilities = createPowerManagement({
+      clock: createClock(),
+      machineShutdownController: shutdownController,
+      mockWakeAlarmState: {
+        initialWakeAlarm: {
+          state: "scheduled",
+          scheduledFor: "2026-08-01T06:00:00.000Z",
+        },
+      },
+    });
+
+    const before = await capabilities.getNextWakeAlarm.execute();
+    const plan = capabilities.getMachinePowerPlan.execute();
+    const after = await capabilities.getNextWakeAlarm.execute();
+
+    expect(plan.expectation).toBe("operating");
+    expect(after).toEqual(before);
+    expect(shutdownController.requestShutdown).not.toHaveBeenCalled();
   });
 });
