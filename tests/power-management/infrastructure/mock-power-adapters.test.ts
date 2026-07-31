@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MockMachineShutdownController } from "../../../src/power-management/infrastructure/mock-machine-shutdown-controller.js";
 import { MockRtcInformationReader } from "../../../src/power-management/infrastructure/mock-rtc-information-reader.js";
+import { MockWakeAlarmState } from "../../../src/power-management/infrastructure/mock-wake-alarm-state.js";
 
 const OBSERVED_AT = "2026-07-31T12:00:00.000Z";
 const RTC_TIME = "2026-07-31T09:00:00.000Z";
@@ -17,10 +18,12 @@ describe("MockRtcInformationReader", () => {
   ] as const)(
     "returns deterministic simulated %s information",
     async (wakeAlarm, state) => {
-      const reader = new MockRtcInformationReader({
-        rtcTime: RTC_TIME,
-        wakeAlarm,
-      });
+      const reader = new MockRtcInformationReader(
+        {
+          rtcTime: RTC_TIME,
+        },
+        new MockWakeAlarmState({ initialWakeAlarm: wakeAlarm }),
+      );
 
       const result = await reader.read(OBSERVED_AT);
 
@@ -40,10 +43,10 @@ describe("MockRtcInformationReader", () => {
       state: "scheduled",
       scheduledFor: "2026-08-01T06:00:00.000Z",
     };
-    const reader = new MockRtcInformationReader({
-      rtcTime: RTC_TIME,
-      wakeAlarm,
-    });
+    const reader = new MockRtcInformationReader(
+      { rtcTime: RTC_TIME },
+      new MockWakeAlarmState({ initialWakeAlarm: wakeAlarm }),
+    );
     wakeAlarm.scheduledFor = "2027-01-01T00:00:00.000Z";
 
     const first = await reader.read(OBSERVED_AT);
@@ -60,11 +63,13 @@ describe("MockRtcInformationReader", () => {
 
   it("preserves a controlled rejection", async () => {
     const failure = new Error("simulated-rtc-failure");
-    const reader = new MockRtcInformationReader({
-      rtcTime: RTC_TIME,
-      wakeAlarm: { state: "unsupported" },
-      failure,
-    });
+    const reader = new MockRtcInformationReader(
+      {
+        rtcTime: RTC_TIME,
+        failure,
+      },
+      new MockWakeAlarmState({ initialWakeAlarm: { state: "unsupported" } }),
+    );
 
     await expect(reader.read(OBSERVED_AT)).rejects.toBe(failure);
   });
