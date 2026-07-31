@@ -79,9 +79,21 @@ schedules. Machine and service schedules remain separate domains; their
 interaction before a future power operation still requires a dedicated
 design.
 
-Future v0.6 work includes machine-power occurrences, duplicate-protected mock
-transition execution, confirmation and authorization design, and a separate
-reviewed privileged adapter.
+The fourth mock-first slice adds immutable machine-shutdown occurrences with
+tuple identity `(operation, scheduledFor, wakeScheduledFor)`. Explicit callers
+can execute due occurrences; future, stale, and duplicate attempts produce
+read-only outcomes. Claims are process-local and permanent for the composition
+lifetime, providing at-most-once attempts rather than exactly-once effects.
+
+Execution schedules the exact next wake alarm before simulated shutdown, using
+one application timestamp for both. Wake failure prevents shutdown but consumes
+the claim. Shutdown failure leaves the wake alarm scheduled; there is no retry,
+rollback, compensation, automatic scheduler, timer, persistence, real RTC
+operation, or real shutdown.
+
+Future v0.6 work includes persistent claims, process reconstruction, an
+explicit bounded scheduler tick, confirmation and authorization design, and a
+separate reviewed privileged adapter.
 
 ## Capability history and planned work
 

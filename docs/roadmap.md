@@ -253,9 +253,8 @@ HTTP administration, scheduler integration, or persistence.
 
 ### Planned scope
 
-- server shutdown requests;
-- mock machine-power occurrences and duplicate-protected transition execution;
-- coordination between approved mock wake scheduling and simulated shutdown;
+- persistent machine-power occurrence claims and process reconstruction;
+- an explicit bounded machine-power scheduler tick;
 - scheduled shutdown execution after explicit failure and confirmation design;
 - real RTC wake-alarm configuration;
 - cancellation or replacement through a reviewed privileged adapter;
@@ -267,6 +266,19 @@ The Node.js application must not run as root.
 
 Power operations must not be implemented through unrestricted commands received
 from HTTP input.
+
+### Delivered fourth slice
+
+- project-owned machine-shutdown occurrences with deterministic tuple identity;
+- process-local permanent claims with `claimed` and `duplicate` outcomes;
+- explicit `not_due`, `stale`, `duplicate`, and `executed` results;
+- wake-alarm preparation before simulated shutdown;
+- explicit wake-failure and shutdown-after-wake partial-effect behavior;
+- frozen composition capabilities for occurrence planning and execution.
+
+This slice remains mock-first and explicitly invoked. It introduces no automatic
+scheduler, persistence, retry, rollback, compensation, real RTC operation, or
+real shutdown. v0.6 remains active.
 
 ## v0.7 — Backup orchestration
 

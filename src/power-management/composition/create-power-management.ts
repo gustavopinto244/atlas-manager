@@ -4,6 +4,9 @@ import { GetNextWakeAlarm } from "../application/get-next-wake-alarm.js";
 import { GetRtcInformation } from "../application/get-rtc-information.js";
 import { RequestMachineShutdown } from "../application/request-machine-shutdown.js";
 import { ScheduleWakeAlarm } from "../application/schedule-wake-alarm.js";
+import { PlanNextMachineShutdownOccurrence } from "../application/plan-next-machine-shutdown-occurrence.js";
+import { ExecuteMachineShutdownOccurrence } from "../application/execute-machine-shutdown-occurrence.js";
+import type { MachineShutdownOccurrenceClaimStore } from "../application/ports/machine-shutdown-occurrence-claim-store.js";
 import type { MachineShutdownController } from "../application/ports/machine-shutdown-controller.js";
 import type { PowerManagementClock } from "../application/ports/power-management-clock.js";
 import type { RtcInformationReader } from "../application/ports/rtc-information-reader.js";
@@ -27,6 +30,7 @@ import {
   type MockWakeAlarmStateConfiguration,
 } from "../infrastructure/mock-wake-alarm-state.js";
 import { createMachineOperatingPolicy } from "../domain/machine-operating-policy.js";
+import { InMemoryMachineShutdownOccurrenceClaimStore } from "../infrastructure/in-memory-machine-shutdown-occurrence-claim-store.js";
 
 export interface PowerManagementCapabilities {
   readonly getRtcInformation: GetRtcInformation;
@@ -34,6 +38,8 @@ export interface PowerManagementCapabilities {
   readonly scheduleWakeAlarm: ScheduleWakeAlarm;
   readonly cancelWakeAlarm: CancelWakeAlarm;
   readonly getMachinePowerPlan: GetMachinePowerPlan;
+  readonly planNextMachineShutdownOccurrence: PlanNextMachineShutdownOccurrence;
+  readonly executeMachineShutdownOccurrence: ExecuteMachineShutdownOccurrence;
   readonly requestMachineShutdown: RequestMachineShutdown;
 }
 
@@ -49,6 +55,7 @@ export interface PowerManagementCompositionOverrides {
   readonly mockWakeAlarmController?: MockWakeAlarmControllerConfiguration;
   readonly mockMachineShutdownController?: MockMachineShutdownControllerConfiguration;
   readonly machineOperatingPolicy?: unknown;
+  readonly machineShutdownOccurrenceClaimStore?: MachineShutdownOccurrenceClaimStore;
 }
 
 const DEFAULT_MOCK_RTC_INFORMATION = Object.freeze({
@@ -85,13 +92,29 @@ export function createPowerManagement(
   const machineOperatingPolicy = createMachineOperatingPolicy(
     overrides.machineOperatingPolicy ?? DEFAULT_MACHINE_OPERATING_POLICY,
   );
+  const getMachinePowerPlan = new GetMachinePowerPlan(
+    clock,
+    machineOperatingPolicy,
+  );
+  const claimStore =
+    overrides.machineShutdownOccurrenceClaimStore ??
+    new InMemoryMachineShutdownOccurrenceClaimStore();
 
   const capabilities = {
     getRtcInformation: new GetRtcInformation(clock, rtcInformationReader),
     getNextWakeAlarm: new GetNextWakeAlarm(clock, wakeAlarmReader),
     scheduleWakeAlarm: new ScheduleWakeAlarm(clock, wakeAlarmController),
     cancelWakeAlarm: new CancelWakeAlarm(clock, wakeAlarmController),
-    getMachinePowerPlan: new GetMachinePowerPlan(clock, machineOperatingPolicy),
+    getMachinePowerPlan,
+    planNextMachineShutdownOccurrence: new PlanNextMachineShutdownOccurrence(
+      getMachinePowerPlan,
+    ),
+    executeMachineShutdownOccurrence: new ExecuteMachineShutdownOccurrence(
+      clock,
+      claimStore,
+      wakeAlarmController,
+      machineShutdownController,
+    ),
     requestMachineShutdown: new RequestMachineShutdown(
       clock,
       machineShutdownController,
