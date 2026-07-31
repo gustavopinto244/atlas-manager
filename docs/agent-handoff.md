@@ -5,10 +5,10 @@
 The active branch is:
 
 ```text
-feat/mock-safe-machine-shutdown-preparation
+feat/secure-linux-power-helper-foundation
 ```
 
-It starts from the merged Issue #229 baseline commit `3f18b3a` and extends
+It starts from the merged Issue #231 baseline commit `8ceb286` and extends
 the isolated `src/power-management/` feature boundary with immutable machine
 operating policies, weekly operating windows, explicit timezone validation,
 deterministic power planning, shutdown occurrences, process-local claims, and
@@ -23,10 +23,11 @@ automatic shutdown or wake transition is planned. Scheduled policies use the
 explicit `America/Sao_Paulo` timezone and the Node.js runtime timezone
 database. The new result is schedule intent only.
 
-No real RTC device, kernel file, system bus, child process, executable,
-filesystem write, privileged interface, HTTP endpoint, timer, automatic
-scheduler, persistence, retry, rollback, compensation, or real machine power
-operation exists in this slice. Readiness is evaluated before claims and
+No real RTC device, kernel file, system bus, installed helper, filesystem
+write, privileged interface, HTTP endpoint, automatic scheduler, persistence,
+retry, rollback, compensation, or real machine power operation exists. The
+secure transport can invoke only the fixed helper when explicitly supplied;
+default composition performs no helper work. Readiness is evaluated before claims and
 effects; rejected occurrences remain unclaimed and retryable. Approved
 execution schedules wake before simulated shutdown and leaves claims consumed
 after dependency failure. Scheduler ticks are explicit, bounded, and have no
@@ -43,11 +44,11 @@ Using Node.js 24.18.0 and npm 11.16.0:
 
 ```text
 nvm use                       NOT AVAILABLE — nvm is not installed in the shell
-npm ci                         PASS — lockfile unchanged; one dev-tree advisory reported
+npm ci                         PASS — lockfile unchanged; npm reported one dev-tree advisory
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1     PASS — 147 files, 2204 tests
+npm test -- --maxWorkers=1     PASS — 153 files, 2238 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
@@ -105,24 +106,39 @@ Issue #230 adds the explicit mock safe-shutdown preparation boundary:
 - preparation-incomplete execution and scheduler results that remain retryable;
 - preserved partial effects with no rollback or compensation.
 
-The baseline is `3f18b3a`. Validation for this working tree is currently
-passing with 147 test files and 2,204 tests. The new dedicated coverage spans
-preparation plans, events, mocks, service stopping, occurrence execution,
-composition, scheduler retry, and complete integration scenarios. No
-dependency changes were made.
+Issue #232 starts from baseline `8ceb286` and adds the accepted ADR-002
+security boundary for a future Linux power helper:
 
-The new slice uses one shared process-local mock wake-alarm state for the
+- fixed executable `/usr/local/libexec/atlas-manager-power-helper`;
+- protocol version `1` with five allowlisted operations;
+- immutable strict requests/responses and canonical newline JSON;
+- Linux-only root-owned installation inspection;
+- no-shell transport with empty arguments, fixed `/` cwd, minimal environment,
+  five-second timeout, and 16 KiB/4 KiB output bounds;
+- serialized same-instance transport operations;
+- helper-backed RTC, wake-alarm, and machine-shutdown adapters;
+- frozen shared adapter bundle, deterministic fake transport, and test fixture.
+
+The baseline is `8ceb286`. Final validation passed with 153 test files and
+2,238 tests. The dedicated coverage now spans protocol models,
+canonical serialization, installation inspection, no-shell transport,
+adapters, fake transport, composition overrides, preparation plans, events,
+mocks, service stopping, occurrence execution, scheduler retry, and complete
+integration scenarios. No dependency changes are intended.
+
+The mock slice uses one shared process-local mock wake-alarm state for the
 independent wake-alarm reader, wake-alarm controller, and RTC reader. It has no
-real RTC effects, persistence, timers, child processes, filesystem writes,
-privileged operations, HTTP exposure, or machine power effects.
+real RTC effects, persistence, timers, filesystem writes, privileged
+operations, HTTP exposure, or machine power effects. The helper fixture is
+test-only and performs no RTC or power operation.
 
 ## Next recommended work
 
-Define the remaining mock-first v0.6 infrastructure boundary for reviewed RTC,
-wake-alarm, and shutdown adapters. This should include a security ADR covering
-fixed command construction, least privilege, bounded output, timeouts,
-confirmation, authorization, auditing, supported operating systems, and
-failure/recovery behavior before any real machine effect is enabled.
+Complete the activation prerequisites in ADR-002, in separate reviewed Issues
+before enabling the future external helper: persistent administrative audit,
+authenticated and authorized power operations, documented deployment and
+permission ownership, recovery procedures, supported Linux verification,
+operator-visible failures, and security review of the helper implementation.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.

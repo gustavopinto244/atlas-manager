@@ -79,6 +79,33 @@ The dependency direction points toward application and domain rules.
 Infrastructure code may depend on application-defined interfaces, but
 application code must not depend directly on infrastructure implementations.
 
+### Privileged Linux power boundary
+
+Future real power effects are isolated behind a power-management-only helper
+boundary:
+
+```text
+application use case
+        ↓
+power-management port
+        ↓
+helper-backed adapter
+        ↓
+strict process transport
+        ↓
+external privileged helper
+```
+
+The application-side foundation validates immutable protocol requests and
+responses, inspects the fixed root-owned helper installation, and uses a
+bounded no-shell process transport. The only accepted executable path is
+`/usr/local/libexec/atlas-manager-power-helper`; callers cannot supply a path,
+arguments, environment, working directory, timeout, or output limit. The
+external helper is not implemented in this slice. Default power-management
+composition remains mock-first and production activation is gated by ADR-002
+authentication, authorization, confirmation, auditing, deployment, and
+security-review prerequisites.
+
 ## Feature-first modular organization
 
 Code should be organized primarily around product capabilities instead of

@@ -1251,3 +1251,58 @@ effects are preserved, with no rollback or compensation.
 
 An explicit later attempt that reads current authoritative state and reports
 already-complete effects without repeating them unnecessarily.
+
+### Power helper
+
+A future narrowly scoped privileged executable responsible for approved Linux
+RTC, wake-alarm, and shutdown operations. It is separate from the unprivileged
+Node.js process.
+
+### Helper protocol
+
+The versioned project-owned request and response vocabulary used between Atlas
+Manager and the fixed power helper. Version 1 supports only five allowlisted
+operations and rejects unknown fields and values.
+
+### Fixed helper executable
+
+The only executable accepted by the Linux power transport:
+`/usr/local/libexec/atlas-manager-power-helper`. The path is a reviewed code
+and deployment contract, not caller-provided input or a PATH lookup.
+
+### Helper installation contract
+
+The pre-execution checks requiring Linux, a root-owned regular non-symlink
+executable, safe file permissions, and a non-writable real parent directory.
+Inspection never modifies the installation.
+
+### No-shell process transport
+
+A power-management transport that invokes the fixed executable directly with
+an empty argument list and `shell: false`. It does not accept arbitrary
+commands, paths, environments, or working directories.
+
+### Bounded output
+
+The transport rule that limits helper stdout to 16 KiB and stderr to 4 KiB
+while streams are read. An exceeded bound terminates the process and exposes
+no partial output.
+
+### Adapter bundle
+
+The frozen collection of helper-backed RTC, wake-alarm reader/controller, and
+machine-shutdown adapters sharing one serialized transport.
+
+### Production activation gate
+
+The set of reviewed prerequisites that must exist before real power effects
+are enabled: authenticated and authorized administration, destructive
+confirmation, persistent audit events, deployment and permission validation,
+recovery procedures, supported Linux verification, operator-visible failures,
+and helper security review.
+
+### Helper-backed adapter
+
+An infrastructure adapter that translates one existing power-management port
+into a strict helper protocol operation and maps only validated responses into
+existing project-owned domain results. It performs no fallback to mock behavior.
