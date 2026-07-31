@@ -5,41 +5,46 @@
 The active branch is:
 
 ```text
-feature/registered-service-dependency-graphs-and-readiness-orchestration
+test/add-v0.5-dependency-and-readiness-acceptance-coverage
 ```
 
-This branch starts from Pull Request #213 (`098cbdc`). The Issue #214 changes
-are intentionally uncommitted; the current working tree is authoritative.
+It contains the v0.5 readiness audit documentation and focused acceptance
+coverage for dependency and readiness contracts. Production source and
+dependency files remain unchanged.
 
-The implementation adds registered-service dependencies, catalog graph
-validation, deterministic graph traversal, runtime and Docker/Compose health
-readiness, readiness waiting, dependency-aware orchestration, scheduler
-occurrence ordering, and documentation reconciliation. No dependency or
-persistence schema was changed, and no HTTP endpoint was added.
+The audit confirms that Docker containers, whole-project Docker Compose,
+bounded logs, availability scheduling, dependency graphs, runtime and
+Docker/Compose health readiness, deterministic orchestration, and file-backed
+reconstruction are implemented and focused acceptance-tested. Compose profiles
+are not an accepted v0.5 requirement and remain a future consideration rather
+than a blocker.
 
 ## Validation
 
-Using the repository's Node.js 24.18.0 installation:
+Using Node.js 24.18.0:
 
 ```text
-npm ci                         PASS after approved escalation (Node 26 emitted an engine warning)
-npm run format:check           PASS
-npm run lint                   PASS
-npm run typecheck              PASS
-npm test -- --maxWorkers=1     PASS — 105 files, 1795 tests
-npm run build                  PASS
-git diff --check               PASS
-npm audit --omit=dev           PASS — 0 vulnerabilities
+npm ci                        PASS — lockfile unchanged; npm reported one dev-tree advisory
+npm run format:check          PASS
+npm run lint                  PASS — 0 errors, 0 warnings
+npm run typecheck             PASS
+npm test -- --maxWorkers=1    PASS — 105 files, 1892 tests
+npm run build                 PASS
+git diff --check              PASS
+npm audit --omit=dev          PASS — 0 production vulnerabilities
 ```
 
-The earlier `npm ci` output included npm's local audit-summary warning, but the
-subsequent production audit completed successfully with zero vulnerabilities.
-No automatic audit fix was run.
+## Audit conclusion
 
-## Safe next steps
+**Ready.** The focused tests close the dependency-validation, graph-ordering,
+readiness-policy, Docker health, Compose aggregate health, failure-propagation,
+dispatcher-routing, no-fallback, immutability, and controlled-timer evidence
+gaps identified by Issue #216. The v0.5 milestone is completed and v0.6 Power
+management is now active.
 
-1. Confirm the final test matrix and documentation with the project owner.
-2. Commit with a Conventional Commit only after explicit review.
+Intentional limitations remain: no Compose profiles, custom readiness probes,
+parallel orchestration, automatic retry/rollback/compensation, or globally
+exactly-once execution.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.

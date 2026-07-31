@@ -5,7 +5,7 @@
 - Status: Draft
 - Version: 0.1
 - Author: Gustavo Pinto
-- Last updated: 2026-07-18
+- Last updated: 2026-07-31
 
 ## 1. Purpose
 
@@ -217,7 +217,7 @@ healthy before starting its dependent API.
 When stopping the same group, it shall stop the API before stopping the
 database container.
 
-### 3.6 Power management
+### 3.5 Power management
 
 #### FR-022 — RTC information
 
@@ -266,7 +266,7 @@ Service schedules and machine power schedules shall remain independent.
 
 The system shall evaluate their interaction before powering off the machine.
 
-### 3.7 Backup management
+### 3.6 Backup management
 
 #### FR-028 — Registered backup sources
 
@@ -305,7 +305,7 @@ Priority: Should
 
 The system should support configurable backup retention policies.
 
-### 3.8 Events and history
+### 3.7 Events and history
 
 #### FR-033 — Operational event history
 
@@ -329,7 +329,7 @@ Priority: Must
 
 The system shall record the result and duration of scheduled tasks.
 
-### 3.9 Administration
+### 3.8 Administration
 
 #### FR-035 — Administrative API
 
@@ -572,6 +572,9 @@ The following capabilities may be considered after the first stable release:
 - mobile-oriented administration.
 - logical database backup and restoration;
 - database-engine-specific administration;
+- Docker Compose profile support, only after a concrete deployment use case,
+  explicit configuration ownership, strict validation, safe fixed command
+  construction, complete lifecycle semantics, and a separate security review.
 
 Future-scope items are not requirements for version `1.0.0` unless they are
 explicitly promoted into the roadmap.

@@ -225,6 +225,42 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     expect(Object.isFrozen(services[1]?.dependencies)).toBe(true);
   });
 
+  it("constructs a valid acyclic catalog without mutating configured input", async () => {
+    const originalDependencies = ["atlas-postgres", "atlas-redis"];
+    const configuredServices = [
+      createConfiguredService(0, { id: "atlas-postgres" }),
+      createConfiguredService(1, { id: "atlas-redis" }),
+      createConfiguredService(2, {
+        id: "atlas-api",
+        dependencies: originalDependencies,
+      }),
+      createConfiguredService(3, {
+        id: "atlas-worker",
+        dependencies: ["atlas-api"],
+      }),
+    ];
+
+    const catalog = createRegisteredServiceCatalogFromEnvironment(
+      createEnvironment(configuredServices),
+    );
+    originalDependencies.reverse();
+
+    const services = await catalog.list();
+    expect(services.map((service) => service.id)).toEqual([
+      "atlas-postgres",
+      "atlas-redis",
+      "atlas-api",
+      "atlas-worker",
+    ]);
+    expect(services[2]?.dependencies).toEqual([
+      "atlas-postgres",
+      "atlas-redis",
+    ]);
+    expect(
+      services.every((service) => Object.isFrozen(service.dependencies)),
+    ).toBe(true);
+  });
+
   it.each([
     [
       "unknown dependency",
@@ -239,6 +275,107 @@ describe("createRegisteredServiceCatalogFromEnvironment", () => {
     ],
   ] as const)("rejects %s after catalog construction", (_label, entries) => {
     expectConfigurationError(entries, "registered_services_dependency_invalid");
+  });
+
+  it("rejects an indirect cycle and a cycle in a disconnected component", () => {
+    expectConfigurationError(
+      [
+        createConfiguredService(0, {
+          id: "atlas-api",
+          dependencies: ["atlas-worker"],
+        }),
+        createConfiguredService(1, {
+          id: "atlas-worker",
+          dependencies: ["atlas-queue"],
+        }),
+        createConfiguredService(2, {
+          id: "atlas-queue",
+          dependencies: ["atlas-api"],
+        }),
+      ],
+      "registered_services_dependency_invalid",
+    );
+
+    expectConfigurationError(
+      [
+        createConfiguredService(0, { id: "atlas-postgres" }),
+        createConfiguredService(1, {
+          id: "atlas-api",
+          dependencies: ["atlas-postgres"],
+        }),
+        createConfiguredService(2, {
+          id: "service-a",
+          dependencies: ["service-b"],
+        }),
+        createConfiguredService(3, {
+          id: "service-b",
+          dependencies: ["service-a"],
+        }),
+      ],
+      "registered_services_dependency_invalid",
+    );
+  });
+
+  it("translates self and duplicate dependencies through the domain boundary", () => {
+    expectConfigurationError(
+      [
+        createConfiguredService(0, {
+          id: "atlas-api",
+          dependencies: ["atlas-api"],
+        }),
+      ],
+      "registered_service_invalid",
+    );
+    expectConfigurationError(
+      [
+        createConfiguredService(0, {
+          dependencies: ["atlas-postgres", "atlas-postgres"],
+        }),
+      ],
+      "registered_service_invalid",
+    );
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "atlas-postgres"],
+    ["an array containing a number", [42]],
+  ])(
+    "translates dependency shape %s as a service validation error",
+    (_label, dependencies) => {
+      expectConfigurationError(
+        [createConfiguredService(0, { dependencies })],
+        "registered_service_invalid",
+      );
+    },
+  );
+
+  it("does not expose dependency values or configured JSON in startup errors", () => {
+    const configuredValue = JSON.stringify([
+      createConfiguredService(0, {
+        id: "private-service-id",
+        externalResourceId: "private-docker-target",
+        dependencies: ["private-missing-dependency"],
+      }),
+    ]);
+
+    try {
+      createRegisteredServiceCatalogFromEnvironment({
+        REGISTERED_SERVICES_JSON: configuredValue,
+      });
+      expect.unreachable("Expected dependency validation failure");
+    } catch (error) {
+      expect(error).toEqual(
+        expect.objectContaining({
+          name: "RegisteredServiceConfigurationError",
+          code: "registered_services_dependency_invalid",
+        }),
+      );
+      const exposedError = `${String(error)} ${JSON.stringify(error)}`;
+      expect(exposedError).not.toContain(configuredValue);
+      expect(exposedError).not.toContain("private-missing-dependency");
+      expect(exposedError).not.toContain("private-docker-target");
+    }
   });
 
   it.each([

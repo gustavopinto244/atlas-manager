@@ -9,27 +9,24 @@ deployment through practical implementation.
 
 ## Project status
 
-Atlas Manager is currently implementing the server-health and registered-
-service foundations.
+The repository has completed the functional scope of `v0.5 — Docker
+management` on `main` through Pull Request #215. It now includes registered
+service status and direct control, Docker containers, whole-project Docker
+Compose management, bounded controlled logs, availability scheduling with
+file-backed recovery, dependency graphs, runtime and Docker/Compose health
+readiness, deterministic dependency-aware orchestration, and scheduler
+integration.
 
-The repository currently includes:
+The canonical acceptance matrix below is the source of truth for the final
+v0.5 readiness audit. The older capability narrative later in this document
+contains historical design detail; statements about an earlier milestone do
+not override the current implementation or matrix.
 
-- product vision and initial requirements;
-- the architectural decision to use Express.js;
-- Node.js and TypeScript configuration;
-- ESLint and Prettier configuration;
-- coding-agent instructions;
-- an initial Express application with liveness and server-health endpoints;
-- host uptime, memory, CPU, temperature, and disk monitoring;
-- a validated registered-service model and controlled in-memory catalog;
-- deterministic mock and read-only PM2 service-status adapters;
-- HTTP integration testing with Vitest and Supertest.
+The administrative API and dashboard remain future delivery work. Existing
+HTTP endpoints are health-oriented; no unauthenticated administrative Docker
+endpoint has been added.
 
-Service control and the administrative API have not been implemented yet. The
-current health endpoints do not report Docker, PM2, systemd, database, or
-managed-service health.
-
-## Planned capabilities
+## Capability history and planned work
 
 The planned initial release includes:
 
@@ -169,8 +166,8 @@ removal failures are retained in frozen per-service results without preventing
 later services from being processed, while results expose no override contents.
 Persisted entries for unregistered service IDs are not inspected.
 
-The pruning use case is not yet integrated into scheduler execution, startup,
-HTTP delivery, or any background cleanup. It introduces no logging or metrics.
+The pruning use case is integrated into the scheduler cycle; it introduces no
+separate cleanup endpoint, cadence, logging, or metrics.
 For the file-backed store, compare-and-remove remains coordinated only within
 one adapter instance and provides no cross-process guarantee.
 
@@ -183,8 +180,7 @@ does not retrieve actual service status or execute a service operation, and is
 exposed through service-management composition. It shares the same catalog,
 private override store, and clock used by the existing capabilities, so set,
 cancel, and query observe one consistent override state. Independent composition
-instances remain isolated. No active-override data query, scheduler, automatic
-service operation, or HTTP override endpoint exists yet.
+instances remain isolated. There is no public HTTP override endpoint.
 
 A pure reconciliation decision model compares an effective availability
 expectation with an observed runtime state. Only `available + stopped` selects
@@ -192,7 +188,7 @@ expectation with an observed runtime state. Only `available + stopped` selects
 states, `manual`, `disabled`, `failed`, and `unknown` produce an explicit
 no-operation decision; reconciliation never selects `restart`. The model
 retrieves no status and executes no control. Scheduler execution and duplicate
-execution prevention are not implemented yet.
+execution prevention are provided by the occurrence and scheduler use cases.
 
 A read-only application use case plans availability reconciliation for one
 catalog-owned service. It reads the stored override and current runtime state,
@@ -845,10 +841,9 @@ conditional removal is atomic only for operations coordinated through one
 adapter instance. Scheduler integration adds no cross-process locking or
 distributed cleanup guarantee.
 
-Implicit current-time acquisition, environment or registered-service
-configuration integration, automatic reconciliation, default policies, scheduler
-execution, override execution, and automatic service control are not implemented
-yet.
+The historical planning examples above intentionally describe pure planning
+boundaries. Current composition integrates configuration, scheduler execution,
+override execution, and controlled service operations through those boundaries.
 
 ### Docker-managed registered containers
 
@@ -1034,10 +1029,6 @@ command arguments containing infrastructure targets.
 The Docker vertical slice is container-focused and does not claim:
 
 - generic Docker administration
-- Docker Compose project management
-- dependency graph orchestration
-- readiness waiting for dependent services
-- limited Docker logs
 - container creation
 - container deletion
 - image pulls
@@ -1047,6 +1038,7 @@ The Docker vertical slice is container-focused and does not claim:
 - network management
 - registry management
 - secret management
+- parallel orchestration
 - distributed Docker coordination
 - globally exactly-once control
 - transactional Docker operation and scheduler persistence
@@ -1107,9 +1099,14 @@ The Compose vertical slice does not claim:
 - scaling individual Compose services
 - resource creation or deletion
 - image management
-- Compose profiles
 - Docker contexts
-- cross-service dependency orchestration
+- profile selection or profile discovery
+
+Registered-service dependency orchestration is supported above the adapter
+boundary. Compose profiles remain a future consideration only: they require a
+concrete deployment use case, exact configuration ownership and validation,
+fixed command construction, supported status/control/log/scheduling semantics,
+a separate security review, and a dedicated Issue before implementation.
 
 ### Controlled service logs
 
@@ -1633,7 +1630,84 @@ Detailed project context is available in:
 - [Architecture Decision Records](docs/adr/)
 - [Coding-agent instructions](AGENTS.md)
 
-## v0.4 Milestone Readiness Audit
+## v0.5 Milestone Readiness Audit
+
+### Acceptance Matrix
+
+The matrix maps the v0.5 contract to production boundaries and inspected test
+assertions. `Evidence gap` means the implementation exists but Issue #216's
+required focused assertion is not present; it is not silently treated as a
+passing guarantee.
+
+| Area                            | Contract or guarantee                                                                                                                                                                     | Primary implementation boundary                                                                                                                    | Test evidence                                                                                                                                                                                                                       | Result    | Notes or limitation                                                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| Registered Docker configuration | `docker` adapter, registered-service identity, catalog-owned target, allowlisted operations, optional logs/dependencies/readiness, strict environment limits and sanitized startup errors | `src/service-management/domain/registered-service.ts`; `src/service-management/infrastructure/environment-registered-service-catalog.ts`           | `tests/service-management/domain/registered-service.test.ts`; `tests/service-management/infrastructure/environment-registered-service-catalog.test.ts`                                                                              | ✅ Tested | Dependency-free legacy entries remain valid.                                                                         |
+| Docker status                   | Fixed inspect call, strict JSON parsing, runtime/health separation, running/stopped/failed/unknown mapping, infrastructure failures remain errors                                         | `src/service-management/infrastructure/docker-container-inspect-executor.ts`; `docker-inspect-output-parser.ts`; `docker-service-status-reader.ts` | `tests/service-management/infrastructure/docker-inspect-output-parser.test.ts`; `docker-service-status-reader.test.ts`; `node-docker-container-inspect-executor.test.ts`                                                            | ✅ Tested | Results expose generic registered-service status only.                                                               |
+| Docker details                  | Controlled timestamps, uptime, image, health and validated resource fields; stopped resources unavailable; raw inspect/stats data excluded                                                | `src/service-management/infrastructure/docker-container-details-reader.ts`; `src/service-management/domain/docker-container-details.ts`            | `tests/service-management/infrastructure/docker-inspect-output-parser.test.ts`; `docker-stats-output-parser.test.ts`; `tests/service-management/domain/docker-container-details.test.ts`; `docker-container-resource-usage.test.ts` | ✅ Tested | No environment, labels, mounts, commands or daemon details.                                                          |
+| Docker control                  | One fixed start/stop/restart call; configured target as one argument; no retry, substitution or compensation                                                                              | `src/service-management/infrastructure/docker-service-controller.ts`; `node-docker-container-control-executor.ts`                                  | `tests/service-management/infrastructure/docker-service-controller.test.ts`; `node-docker-container-control-executor.test.ts`                                                                                                       | ✅ Tested | Restart remains one Docker operation.                                                                                |
+| Compose configuration           | Exact `composeFile`/`projectDirectory` shape, absolute contained POSIX paths, no filesystem or Docker work during parsing                                                                 | `src/service-management/domain/management-configuration.ts`; `environment-registered-service-catalog.ts`                                           | `tests/service-management/domain/management-configuration.test.ts`; `tests/service-management/infrastructure/environment-registered-service-catalog.test.ts`                                                                        | ✅ Tested | Compose project identity is configuration-owned.                                                                     |
+| Compose status and details      | Fixed `compose ps` JSON, strict service summaries, aggregate runtime/health, immutable approved fields, malformed output rejection                                                        | `src/service-management/infrastructure/compose-status-parser.ts`; `compose-service-status-reader.ts`                                               | `tests/service-management/infrastructure/compose-status-parser.test.ts`; `compose-service-reader-controller.test.ts`; `tests/service-management/composition/compose-and-logs-vertical-slice.test.ts`                                | ✅ Tested | Raw Compose output, paths and container metadata are excluded.                                                       |
+| Compose control                 | Whole-project start/stop/restart only; no `up`, `down`, build, pull, scaling, service selection or fallback                                                                               | `src/service-management/infrastructure/compose-service-controller.ts`; `node-docker-compose-executors.ts`                                          | `tests/service-management/infrastructure/node-docker-compose-executors.test.ts`; `compose-service-reader-controller.test.ts`                                                                                                        | ✅ Tested | Profiles are intentionally not implemented.                                                                          |
+| Controlled logs                 | Explicit `readLogs`, bounded tail, normalized LF/CRLF/CR/ANSI/control output, immutable stdout/stderr batch and truncation                                                                | `src/service-management/application/get-registered-service-logs.ts`; `src/service-management/infrastructure/service-log-readers.ts`                | `tests/service-management/infrastructure/service-log-readers.test.ts`; `tests/service-management/application/get-registered-service-logs.test.ts`; `node-docker-compose-executors.test.ts`                                          | ✅ Tested | No follow/streaming/HTTP endpoint; arbitrary application secrets are not guaranteed redacted.                        |
+| Executor safety                 | `docker`, `shell:false`, UTF-8, finite timeout and bounded buffer; separate fixed arguments; safe error mapping                                                                           | `src/service-management/infrastructure/node-docker-*.ts`; `node-docker-compose-executors.ts`                                                       | `tests/service-management/infrastructure/node-docker-compose-executors.test.ts`; `node-docker-container-control-executor.test.ts`; `node-docker-container-inspect-executor.test.ts`                                                 | ✅ Tested | No unrestricted command runner or socket API.                                                                        |
+| Dispatching                     | Explicit mock/PM2/Docker/Compose status, control, log and readiness mappings; invalid adapters and missing implementations reject; no fallback                                            | `src/service-management/infrastructure/dispatching-service-*.ts`; `readiness-infrastructure.ts`; `service-log-readers.ts`                          | `tests/service-management/infrastructure/dispatching-service-status-reader.test.ts`; `dispatching-service-controller.test.ts`; `service-log-readers.test.ts`; `readiness-infrastructure.test.ts`                                    | ✅ Tested | Dispatchers snapshot only narrow supplied ports.                                                                     |
+| Composition                     | Stable frozen capabilities, shared clock/catalog/graph, narrow seams, no commands/status/readiness/timers during construction                                                             | `src/service-management/composition/create-service-management.ts`                                                                                  | `tests/service-management/composition/create-service-management.test.ts`; `create-service-management-readiness.test.ts`; `compose-and-logs-vertical-slice.test.ts`                                                                  | ✅ Tested | Readiness timer is created only when waiting is invoked.                                                             |
+| Dependency graph                | Optional canonical IDs, immutable graph, unknown/duplicate/self/cycle rejection, closures, deterministic topological and reverse order, shared-node deduplication                         | `src/service-management/domain/dependency-graph.ts`; `registered-service.ts`; `environment-registered-service-catalog.ts`                          | `tests/service-management/domain/registered-service.test.ts`; `tests/service-management/domain/dependency-graph.test.ts`; `tests/service-management/infrastructure/environment-registered-service-catalog.test.ts`                  | ✅ Tested | Invalid shapes, identifier boundaries, direct-dependency limit, disconnected cycles and input isolation are covered. |
+| Readiness policy                | Optional runtime/health policy, defaults, bounded safe timeout/interval, typed validation categories, unknown-field rejection and adapter compatibility                                   | `src/service-management/domain/readiness-policy.ts`; `registered-service.ts`                                                                       | `tests/service-management/domain/readiness-policy.test.ts`; `tests/service-management/domain/registered-service.test.ts`; `tests/service-management/application/wait-for-registered-service-readiness.test.ts`                      | ✅ Tested | Exact boundary, numeric-type, non-finite and adapter-policy cases are covered.                                       |
+| Readiness infrastructure        | Runtime, Docker health and Compose aggregate health mapping; injected clock; immutable results; infrastructure failures remain errors; no fallback                                        | `src/service-management/infrastructure/readiness-infrastructure.ts`                                                                                | `tests/service-management/infrastructure/readiness-infrastructure.test.ts`; `tests/service-management/infrastructure/compose-status-parser.test.ts`; Docker parser tests                                                            | ✅ Tested | Unknown Compose is documented as a domain-only empty aggregate; parser empty output rejects.                         |
+| Readiness waiting               | Immediate success, controlled polling/deadline, typed timeout, no extra read/timer after success                                                                                          | `src/service-management/application/wait-for-registered-service-readiness.ts`                                                                      | `tests/service-management/application/wait-for-registered-service-readiness.test.ts`; `tests/service-management/composition/create-service-management-readiness.test.ts`                                                            | ✅ Tested | No real-time waiting in tests.                                                                                       |
+| Start orchestration             | Transitive dependencies first, readiness before dependent, shared dependency once, deterministic immutable result                                                                         | `src/service-management/application/plan-registered-service-orchestration.ts`; `orchestrate-registered-service-control.ts`                         | `tests/service-management/application/plan-registered-service-orchestration.test.ts`; `orchestrate-registered-service-control.test.ts`; `tests/service-management/integration/dependency-aware-orchestration.test.ts`               | ✅ Tested | Sequential execution only.                                                                                           |
+| Stop orchestration              | Transitive dependents first, stopped services skipped, no dependency starts, fail-fast                                                                                                    | Same orchestration boundaries                                                                                                                      | `orchestrate-registered-service-control.test.ts`; `dependency-aware-orchestration.test.ts`                                                                                                                                          | ✅ Tested | No automatic compensation.                                                                                           |
+| Restart orchestration           | Active dependents stop, target restarts once, target readiness gates restoration, previously stopped dependents stay stopped                                                              | Same orchestration boundaries                                                                                                                      | `plan-registered-service-orchestration.test.ts`; `orchestrate-registered-service-control.test.ts`; `dependency-aware-orchestration.test.ts`                                                                                         | ✅ Tested | Dependencies remain running.                                                                                         |
+| Orchestration failure contract  | Sequential, fail-fast, non-transactional; completed effects remain; no retry/rollback/compensation; safe IDs/results only                                                                 | `src/service-management/application/orchestrate-registered-service-control.ts`; `orchestration-plan.ts`                                            | `tests/service-management/application/orchestrate-registered-service-control.test.ts`; `dependency-aware-orchestration.test.ts`                                                                                                     | ✅ Tested | Partial effects are intentional and documented.                                                                      |
+| Availability scheduling         | Existing always/scheduled/manual/disabled policies, overrides, dependency availability and readiness, deterministic graph ordering                                                        | `src/service-management/application/run-service-availability-reconciliation-tick.ts`; occurrence execution                                         | `tests/service-management/application/run-service-availability-reconciliation-tick.test.ts`; `tests/service-management/integration/dependency-aware-orchestration.test.ts`; `file-backed-docker-compose-scheduling.test.ts`         | ✅ Tested | One failed occurrence does not corrupt unrelated reports.                                                            |
+| Occurrence claims               | Target claim before orchestration; child steps create no synthetic claims; duplicate target suppresses replay                                                                             | `src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.ts`; claim store                             | `tests/service-management/application/execute-registered-service-availability-reconciliation-occurrence.test.ts`; `dependency-aware-orchestration.test.ts`; scheduler recovery integrations                                         | ✅ Tested | At-most-once-oriented, not globally exactly-once.                                                                    |
+| File-backed reconstruction      | Fresh override/claim/cursor stores and fresh catalog/graph/composition reconstruct state; atomic files, pruning, cursor conflicts preserved                                               | `src/service-management/infrastructure/file-service-*.ts`; composition                                                                             | `tests/service-management/integration/dependency-aware-orchestration.test.ts`; file-backed scheduler recovery suite                                                                                                                 | ✅ Tested | No in-memory graph reuse or fallback after configured file failure.                                                  |
+| Scheduler result model          | `idle`, `advanced`, `incomplete`, `conflict` and rejection behavior remain unchanged and immutable                                                                                        | `src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.ts`                                                    | `tests/service-management/application/run-service-availability-reconciliation-scheduler-cycle.test.ts`; file-backed recovery suite                                                                                                  | ✅ Tested | Dependency/readiness failures use existing occurrence/reconciliation reports.                                        |
+| Startup and lifecycle           | Invalid graph rejects before serving; construction performs no privileged operation; graceful scheduler/HTTP shutdown remains predictable                                                 | `src/main.ts`; `src/service-management/composition/create-service-management.ts`; lifecycle modules                                                | `tests/main.test.ts`; `tests/lifecycle/*.test.ts`; composition tests                                                                                                                                                                | ✅ Tested | No automatic Docker, Compose, PM2 or readiness operation at startup.                                                 |
+| Test isolation                  | No Docker daemon, Compose project, PM2 process, network, production path or real readiness wait required                                                                                  | Test seams and controlled adapters                                                                                                                 | 105 test files; service-management integration suite uses mocks and test-owned temporary directories                                                                                                                                | ✅ Tested | Full suite ran without managed infrastructure.                                                                       |
+| Security boundary               | Caller supplies IDs/bounded values; catalog owns targets; plans contain IDs/operations; adapters execute fixed no-shell commands                                                          | Configuration, catalog, orchestration and Node executors                                                                                           | Executor, parser, dispatcher, catalog, orchestration and log tests listed above                                                                                                                                                     | ✅ Tested | No arbitrary command, target, profile, probe, exec, up/down or public admin endpoint.                                |
+
+### Milestone-readiness conclusion
+
+**Outcome: Ready**
+
+The focused dependency and readiness evidence now covers the validation
+permutations identified by Issue #216. The complete regression suite passes,
+no production defect was discovered, and no documented guarantee exceeds the
+implementation or test evidence.
+
+Validation on Node.js 24.18.0 completed with `npm ci`, format check, lint,
+typecheck, 105 test files and 1,892 tests, build, diff check, and production
+audit all passing. The production audit reported zero vulnerabilities; the
+install command reported one development-tree advisory, which was not fixed or
+changed in this test-only delivery.
+
+Compose profiles have no accepted requirement or concrete deployment use case;
+they remain outside v0.5 as a future consideration requiring a separate product
+decision and Issue.
+
+### Intentional limitations
+
+V0.5 remains intentionally bounded: no unrestricted Docker administration,
+Docker socket API, Compose resource creation, `up`, `down`, service-level
+control, scaling, image pull/build, log streaming, guaranteed secret redaction,
+runtime graph mutation, custom/HTTP/TCP readiness probes, parallel
+orchestration, retry, rollback, compensation, cross-service transactions,
+globally exactly-once execution, distributed coordination, multi-host Docker,
+authentication, authorization, or public administrative Docker endpoint.
+
+The scheduler claims the target occurrence before orchestration. If a later
+dependency or target step fails, completed external effects remain committed;
+reconstruction sees the duplicate target claim and does not replay the entire
+orchestration automatically.
+
+## Historical v0.4 Milestone Readiness Snapshots
+
+The repeated v0.4 audit tables below are retained as historical records from
+earlier delivery reviews. They are not the current project status and their
+old test totals must not be used as v0.5 evidence. The canonical v0.5 audit
+matrix and conclusion are recorded in the next section.
 
 ### Acceptance Matrix
 
@@ -1733,111 +1807,11 @@ git diff --check      PASS
 npm audit --omit=dev  PASS — 0 vulnerabilities
 ```
 
-The v0.4 milestone is ready to close. The implementation and tests are internally consistent, all documented guarantees have concrete test evidence, and the remaining limitations are intentional and explicitly documented.
+The historical v0.4 snapshot reported that milestone ready at the time. This
+text is retained for audit history; the current project conclusion is the v0.5
+matrix above.
 
-## v0.4 Milestone Readiness Audit
-
-### Acceptance Matrix
-
-| Area                                  | Contract/Guarantee                                  | Implementation Boundary                                                                                                      | Test Evidence                                                                                                        | Result    | Notes/Limitation                       |
-| ------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------- |
-| **Registered-Service Configuration**  |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Service parsing                       | Canonical service identifiers, providers, schedules | `src/service-management/infrastructure/environment-registered-service-catalog.ts`                                            | `tests/service-management/infrastructure/environment-registered-service-catalog.test.ts`                             | ✅ Tested | Supports `mock` and `pm2` adapters     |
-| Invalid config                        | Rejection of malformed configuration                | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Empty string, invalid JSON rejected    |
-| Deterministic listing                 | Consistent service enumeration                      | `src/service-management/application/list-registered-services.ts`                                                             | `tests/service-management/application/list-registered-services.test.ts`                                              | ✅ Tested | Catalog order preserved                |
-| **Availability Scheduling**           |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Schedule parsing                      | Canonical weekly schedule with timezone             | `src/service-scheduling/domain/weekly-availability-schedule.ts`                                                              | `tests/service-scheduling/domain/weekly-availability-schedule.test.ts`                                               | ✅ Tested | Half-open `[start, end)` semantics     |
-| Occurrence generation                 | Distinct canonical occurrences per interval         | `src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.ts`                  | `tests/service-management/application/generate-registered-service-availability-reconciliation-occurrences.test.ts`   | ✅ Tested | No replay of earlier intervals         |
-| Interval boundaries                   | `(fromExclusive, toInclusive]` semantics            | `src/service-scheduling/domain/service-availability-policy-transition-calculator.ts`                                         | `tests/service-scheduling/domain/service-availability-policy-transition-calculator.test.ts`                          | ✅ Tested | 8-day maximum per cycle                |
-| **Availability Override Persistence** |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Override persistence                  | File-backed storage with atomic replacement         | `src/service-management/infrastructure/file-service-availability-override-store.ts`                                          | `tests/service-management/infrastructure/file-service-availability-override-store.test.ts`                           | ✅ Tested | Version-1 JSON schema                  |
-| Override reconstruction               | Persisted state survives restart                    | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Missing file = no overrides            |
-| Conditional removal                   | Atomic compare-and-remove by value                  | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `removed` or `not_removed`     |
-| Override pruning                      | Expired override removal                            | `src/service-management/application/prune-expired-registered-service-availability-overrides.ts`                              | `tests/service-management/application/prune-expired-registered-service-availability-overrides.test.ts`               | ✅ Tested | Per-service results                    |
-| **Occurrence Execution**              |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Successful execution                  | Controlled service operation completes              | `src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.ts`                    | `tests/service-management/application/execute-registered-service-availability-reconciliation-occurrence.test.ts`     | ✅ Tested | Returns `executed` result              |
-| Failed execution                      | Operation failure after claim acquisition           | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `failed` result                |
-| Duplicate detection                   | Existing claim prevents replay                      | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `duplicate` result             |
-| **Occurrence Claim Persistence**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Claim acquisition                     | Atomic claim operation                              | `src/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.ts`                   | `tests/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.test.ts`    | ✅ Tested | Returns `claimed` or `duplicate`       |
-| Claim reconstruction                  | Persisted claims survive restart                    | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Ordered by scheduled instant           |
-| Completed claim pruning               | Claims at/before cursor removed                     | `src/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.ts`                | `tests/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.test.ts` | ✅ Tested | Returns `pruned` or `unchanged`        |
-| Claim protection                      | Claims after cursor preserved                       | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Candidate cursor not used as boundary  |
-| **Scheduler Cursor Persistence**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Initial cursor                        | `null` state represents empty                       | `src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.ts`                   | `tests/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.test.ts`    | ✅ Tested | Missing file = empty state             |
-| Cursor reconstruction                 | Persisted cursor survives restart                   | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Version-1 JSON schema                  |
-| Compare-and-set                       | Atomic cursor advancement                           | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `advanced` or `conflict`       |
-| Stale conflict                        | Competing advancement wins                          | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `conflict` with current cursor |
-| **Scheduler Results**                 |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Idle result                           | No work when cursor equals target                   | `src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.ts`                              | `tests/service-management/application/run-service-availability-reconciliation-scheduler-cycle.test.ts`               | ✅ Tested | No maintenance executed                |
-| Advanced result                       | Successful completion                               | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Frozen result with all reports         |
-| Incomplete result                     | Reconciliation or maintenance failure               | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Cursor not advanced                    |
-| Conflict result                       | Competing cursor wins race                          | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Successful maintenance committed       |
-| **Recovery Scenarios**                |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Incomplete reconciliation             | Failed occurrence after claim                       | `tests/service-management/integration/file-backed-service-availability-scheduler-incomplete-reconciliation-recovery.test.ts` | Integration test                                                                                                     | ✅ Tested | Duplicate protection prevents replay   |
-| Override pruning failure              | Conditional removal fails                           | `tests/service-management/integration/file-backed-service-availability-scheduler-override-pruning-failure-recovery.test.ts`  | Integration test                                                                                                     | ✅ Tested | Claim pruning skipped                  |
-| Claim pruning rejection               | Pruning operation rejects                           | `tests/service-management/integration/file-backed-service-availability-scheduler-claim-pruning-failure-recovery.test.ts`     | Integration test                                                                                                     | ✅ Tested | Cycle rejects, no result               |
-| Cursor advancement rejection          | Cursor store rejects                                | `tests/service-management/integration/file-backed-post-advance-cursor-advancement-failure-recovery.test.ts`                  | Integration test                                                                                                     | ✅ Tested | Maintenance committed                  |
-| Cursor conflict                       | Competing process wins                              | `tests/service-management/integration/file-backed-post-advance-cursor-conflict-recovery.test.ts`                             | Integration test                                                                                                     | ✅ Tested | Same-target = idle                     |
-| Post-conflict continuation            | Later target continues                              | `tests/service-management/integration/file-backed-post-conflict-next-interval-continuation.test.ts`                          | Integration test                                                                                                     | ✅ Tested | Processes only next interval           |
-| Post-conflict incomplete recovery     | Failed occurrence post-conflict                     | `tests/service-management/integration/file-backed-post-conflict-next-interval-incomplete-reconciliation-recovery.test.ts`    | Integration test                                                                                                     | ✅ Tested | Duplicate protection works             |
-| Post-conflict override failure        | Override pruning fails post-conflict                | `tests/service-management/integration/file-backed-post-conflict-next-interval-override-pruning-failure-recovery.test.ts`     | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
-| Post-conflict claim failure           | Claim pruning rejects post-conflict                 | `tests/service-management/integration/file-backed-post-conflict-next-interval-claim-pruning-failure-recovery.test.ts`        | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
-| Post-conflict cursor rejection        | Cursor advancement rejects post-conflict            | `tests/service-management/integration/file-backed-post-conflict-next-interval-cursor-advancement-failure-recovery.test.ts`   | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
-| Post-conflict second conflict         | Two consecutive conflicts                           | `tests/service-management/integration/file-backed-post-conflict-next-interval-cursor-conflict-recovery.test.ts`              | Integration test                                                                                                     | ✅ Tested | Same-target = idle                     |
-| Post-consecutive continuation         | Future progress after two conflicts                 | `tests/service-management/integration/file-backed-post-consecutive-conflict-next-interval-continuation.test.ts`              | Integration test                                                                                                     | ✅ Tested | Processes T3→T4                        |
-| **Process-Style Reconstruction**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Store reconstruction                  | Fresh adapters from persisted files                 | All integration tests                                                                                                        | 19 integration tests                                                                                                 | ✅ Tested | No in-memory state reuse               |
-| Composition reconstruction            | Fresh use cases and dependencies                    | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | Complete process restart               |
-| **Result Immutability**               |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Frozen results                        | `Object.isFrozen()` assertions                      | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | All result kinds frozen                |
-| **Error Preservation**                |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Exact error identity                  | `rejects.toBe(sentinelError)`                       | Claim pruning and cursor advancement rejection tests                                                                         | Integration tests                                                                                                    | ✅ Tested | No error wrapping                      |
-| **Security and Isolation**            |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
-| Temporary directories                 | Test-owned `mkdtemp()` cleanup                      | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No production paths                    |
-| Controlled clocks                     | Injected `Clock` interface                          | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No real timers                         |
-| No external effects                   | Mock/controlled dependencies                        | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No real PM2/shell/network              |
-
-### Intentional Limitations
-
-1. **At-most-once claim semantics**: Occurrence claims are persisted before service control. A crash after claim persistence but before control completion can suppress a later retry. This is at-most-once claiming, not exactly-once execution.
-
-2. **No cross-store transactions**: The scheduler cycle is not one transaction spanning service effects, occurrence claims, availability overrides, completed claim cleanup, and scheduler cursor persistence. Successful earlier stages may remain committed when a later stage fails or conflicts.
-
-3. **No distributed coordination**: File-backed stores provide no cross-process locking or distributed guarantees. Two adapter instances writing the same file may race. Deployments must retain one scheduler-owning process.
-
-4. **No automatic replay**: After claim acquisition, if the controlled operation fails or becomes uncertain, reconstruction sees the duplicate claim and does not automatically replay the operation. This prevents duplicate effects but may leave an occurrence without a confirmed successful external result.
-
-5. **No automatic compensation**: The scheduler does not provide automatic compensation for partial external effects. Failed operations may have left partial state in external systems.
-
-### Milestone Readiness Conclusion
-
-**Outcome: Ready**
-
-**Evidence:**
-
-- 81 test files, 1563 tests passing
-- All acceptance matrix rows have concrete test evidence
-- Full validation passes: format, lint, typecheck, test, build, audit
-- No production defects discovered
-- No unsupported guarantees in documentation
-- All required behaviors represented by implemented tests
-
-**Validation Results:**
-
-```
-npm run format:check  PASS
-npm run lint          PASS
-npm run typecheck     PASS
-npm test              PASS — 81 files, 1563 tests
-npm run build         PASS
-git diff --check      PASS
-npm audit --omit=dev  PASS — 0 vulnerabilities
-```
-
-The v0.4 milestone is ready to close. The implementation and tests are internally consistent, all documented guarantees have concrete test evidence, and the remaining limitations are intentional and explicitly documented.
-
-## v0.4 Milestone Readiness Audit
+## Historical v0.4 Milestone Readiness Snapshot (continued)
 
 ### Acceptance Matrix
 
@@ -1937,9 +1911,11 @@ git diff --check      PASS
 npm audit --omit=dev  PASS — 0 vulnerabilities
 ```
 
-The v0.4 milestone is ready to close. The implementation and tests are internally consistent, all documented guarantees have concrete test evidence, and the remaining limitations are intentional and explicitly documented.
+The historical v0.4 snapshot reported that milestone ready at the time. This
+text is retained for audit history; the current project conclusion is the v0.5
+matrix above.
 
-## v0.4 Milestone Readiness Audit
+## Historical v0.4 Milestone Readiness Snapshot (continued)
 
 ### Acceptance Matrix
 
@@ -2039,7 +2015,113 @@ git diff --check      PASS
 npm audit --omit=dev  PASS — 0 vulnerabilities
 ```
 
-The v0.4 milestone is ready to close. The implementation and tests are internally consistent, all documented guarantees have concrete test evidence, and the remaining limitations are intentional and explicitly documented.
+The historical v0.4 snapshot reported that milestone ready at the time. This
+text is retained for audit history; the current project conclusion is the v0.5
+matrix above.
+
+## Historical v0.4 Milestone Readiness Snapshot (continued)
+
+### Acceptance Matrix
+
+| Area                                  | Contract/Guarantee                                  | Implementation Boundary                                                                                                      | Test Evidence                                                                                                        | Result    | Notes/Limitation                       |
+| ------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------- |
+| **Registered-Service Configuration**  |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Service parsing                       | Canonical service identifiers, providers, schedules | `src/service-management/infrastructure/environment-registered-service-catalog.ts`                                            | `tests/service-management/infrastructure/environment-registered-service-catalog.test.ts`                             | ✅ Tested | Supports `mock` and `pm2` adapters     |
+| Invalid config                        | Rejection of malformed configuration                | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Empty string, invalid JSON rejected    |
+| Deterministic listing                 | Consistent service enumeration                      | `src/service-management/application/list-registered-services.ts`                                                             | `tests/service-management/application/list-registered-services.test.ts`                                              | ✅ Tested | Catalog order preserved                |
+| **Availability Scheduling**           |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Schedule parsing                      | Canonical weekly schedule with timezone             | `src/service-scheduling/domain/weekly-availability-schedule.ts`                                                              | `tests/service-scheduling/domain/weekly-availability-schedule.test.ts`                                               | ✅ Tested | Half-open `[start, end)` semantics     |
+| Occurrence generation                 | Distinct canonical occurrences per interval         | `src/service-management/application/generate-registered-service-availability-reconciliation-occurrences.ts`                  | `tests/service-management/application/generate-registered-service-availability-reconciliation-occurrences.test.ts`   | ✅ Tested | No replay of earlier intervals         |
+| Interval boundaries                   | `(fromExclusive, toInclusive]` semantics            | `src/service-scheduling/domain/service-availability-policy-transition-calculator.ts`                                         | `tests/service-scheduling/domain/service-availability-policy-transition-calculator.test.ts`                          | ✅ Tested | 8-day maximum per cycle                |
+| **Availability Override Persistence** |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Override persistence                  | File-backed storage with atomic replacement         | `src/service-management/infrastructure/file-service-availability-override-store.ts`                                          | `tests/service-management/infrastructure/file-service-availability-override-store.test.ts`                           | ✅ Tested | Version-1 JSON schema                  |
+| Override reconstruction               | Persisted state survives restart                    | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Missing file = no overrides            |
+| Conditional removal                   | Atomic compare-and-remove by value                  | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `removed` or `not_removed`     |
+| Override pruning                      | Expired override removal                            | `src/service-management/application/prune-expired-registered-service-availability-overrides.ts`                              | `tests/service-management/application/prune-expired-registered-service-availability-overrides.test.ts`               | ✅ Tested | Per-service results                    |
+| **Occurrence Execution**              |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Successful execution                  | Controlled service operation completes              | `src/service-management/application/execute-registered-service-availability-reconciliation-occurrence.ts`                    | `tests/service-management/application/execute-registered-service-availability-reconciliation-occurrence.test.ts`     | ✅ Tested | Returns `executed` result              |
+| Failed execution                      | Operation failure after claim acquisition           | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `failed` result                |
+| Duplicate detection                   | Existing claim prevents replay                      | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `duplicate` result             |
+| **Occurrence Claim Persistence**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Claim acquisition                     | Atomic claim operation                              | `src/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.ts`                   | `tests/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.test.ts`    | ✅ Tested | Returns `claimed` or `duplicate`       |
+| Claim reconstruction                  | Persisted claims survive restart                    | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Ordered by scheduled instant           |
+| Completed claim pruning               | Claims at/before cursor removed                     | `src/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.ts`                | `tests/service-management/application/prune-completed-service-availability-reconciliation-occurrence-claims.test.ts` | ✅ Tested | Returns `pruned` or `unchanged`        |
+| Claim protection                      | Claims after cursor preserved                       | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Candidate cursor not used as boundary  |
+| **Scheduler Cursor Persistence**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Initial cursor                        | `null` state represents empty                       | `src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.ts`                   | `tests/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.test.ts`    | ✅ Tested | Missing file = empty state             |
+| Cursor reconstruction                 | Persisted cursor survives restart                   | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Version-1 JSON schema                  |
+| Compare-and-set                       | Atomic cursor advancement                           | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `advanced` or `conflict`       |
+| Stale conflict                        | Competing advancement wins                          | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Returns `conflict` with current cursor |
+| **Scheduler Results**                 |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Idle result                           | No work when cursor equals target                   | `src/service-management/application/run-service-availability-reconciliation-scheduler-cycle.ts`                              | `tests/service-management/application/run-service-availability-reconciliation-scheduler-cycle.test.ts`               | ✅ Tested | No maintenance executed                |
+| Advanced result                       | Successful completion                               | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Frozen result with all reports         |
+| Incomplete result                     | Reconciliation or maintenance failure               | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Cursor not advanced                    |
+| Conflict result                       | Competing cursor wins race                          | Same as above                                                                                                                | Same as above                                                                                                        | ✅ Tested | Successful maintenance committed       |
+| **Recovery Scenarios**                |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Incomplete reconciliation             | Failed occurrence after claim                       | `tests/service-management/integration/file-backed-service-availability-scheduler-incomplete-reconciliation-recovery.test.ts` | Integration test                                                                                                     | ✅ Tested | Duplicate protection prevents replay   |
+| Override pruning failure              | Conditional removal fails                           | `tests/service-management/integration/file-backed-service-availability-scheduler-override-pruning-failure-recovery.test.ts`  | Integration test                                                                                                     | ✅ Tested | Claim pruning skipped                  |
+| Claim pruning rejection               | Pruning operation rejects                           | `tests/service-management/integration/file-backed-service-availability-scheduler-claim-pruning-failure-recovery.test.ts`     | Integration test                                                                                                     | ✅ Tested | Cycle rejects, no result               |
+| Cursor advancement rejection          | Cursor store rejects                                | `tests/service-management/integration/file-backed-post-advance-cursor-advancement-failure-recovery.test.ts`                  | Integration test                                                                                                     | ✅ Tested | Maintenance committed                  |
+| Cursor conflict                       | Competing process wins                              | `tests/service-management/integration/file-backed-post-advance-cursor-conflict-recovery.test.ts`                             | Integration test                                                                                                     | ✅ Tested | Same-target = idle                     |
+| Post-conflict continuation            | Later target continues                              | `tests/service-management/integration/file-backed-post-conflict-next-interval-continuation.test.ts`                          | Integration test                                                                                                     | ✅ Tested | Processes only next interval           |
+| Post-conflict incomplete recovery     | Failed occurrence post-conflict                     | `tests/service-management/integration/file-backed-post-conflict-next-interval-incomplete-reconciliation-recovery.test.ts`    | Integration test                                                                                                     | ✅ Tested | Duplicate protection works             |
+| Post-conflict override failure        | Override pruning fails post-conflict                | `tests/service-management/integration/file-backed-post-conflict-next-interval-override-pruning-failure-recovery.test.ts`     | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
+| Post-conflict claim failure           | Claim pruning rejects post-conflict                 | `tests/service-management/integration/file-backed-post-conflict-next-interval-claim-pruning-failure-recovery.test.ts`        | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
+| Post-conflict cursor rejection        | Cursor advancement rejects post-conflict            | `tests/service-management/integration/file-backed-post-conflict-next-interval-cursor-advancement-failure-recovery.test.ts`   | Integration test                                                                                                     | ✅ Tested | Retry succeeds                         |
+| Post-conflict second conflict         | Two consecutive conflicts                           | `tests/service-management/integration/file-backed-post-conflict-next-interval-cursor-conflict-recovery.test.ts`              | Integration test                                                                                                     | ✅ Tested | Same-target = idle                     |
+| Post-consecutive continuation         | Future progress after two conflicts                 | `tests/service-management/integration/file-backed-post-consecutive-conflict-next-interval-continuation.test.ts`              | Integration test                                                                                                     | ✅ Tested | Processes T3→T4                        |
+| **Process-Style Reconstruction**      |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Store reconstruction                  | Fresh adapters from persisted files                 | All integration tests                                                                                                        | 19 integration tests                                                                                                 | ✅ Tested | No in-memory state reuse               |
+| Composition reconstruction            | Fresh use cases and dependencies                    | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | Complete process restart               |
+| **Result Immutability**               |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Frozen results                        | `Object.isFrozen()` assertions                      | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | All result kinds frozen                |
+| **Error Preservation**                |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Exact error identity                  | `rejects.toBe(sentinelError)`                       | Claim pruning and cursor advancement rejection tests                                                                         | Integration tests                                                                                                    | ✅ Tested | No error wrapping                      |
+| **Security and Isolation**            |                                                     |                                                                                                                              |                                                                                                                      |           |                                        |
+| Temporary directories                 | Test-owned `mkdtemp()` cleanup                      | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No production paths                    |
+| Controlled clocks                     | Injected `Clock` interface                          | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No real timers                         |
+| No external effects                   | Mock/controlled dependencies                        | All integration tests                                                                                                        | Same as above                                                                                                        | ✅ Tested | No real PM2/shell/network              |
+
+### Intentional Limitations
+
+1. **At-most-once claim semantics**: Occurrence claims are persisted before service control. A crash after claim persistence but before control completion can suppress a later retry. This is at-most-once claiming, not exactly-once execution.
+
+2. **No cross-store transactions**: The scheduler cycle is not one transaction spanning service effects, occurrence claims, availability overrides, completed claim cleanup, and scheduler cursor persistence. Successful earlier stages may remain committed when a later stage fails or conflicts.
+
+3. **No distributed coordination**: File-backed stores provide no cross-process locking or distributed guarantees. Two adapter instances writing the same file may race. Deployments must retain one scheduler-owning process.
+
+4. **No automatic replay**: After claim acquisition, if the controlled operation fails or becomes uncertain, reconstruction sees the duplicate claim and does not automatically replay the operation. This prevents duplicate effects but may leave an occurrence without a confirmed successful external result.
+
+5. **No automatic compensation**: The scheduler does not provide automatic compensation for partial external effects. Failed operations may have left partial state in external systems.
+
+### Milestone Readiness Conclusion
+
+**Outcome: Ready**
+
+**Evidence:**
+
+- 81 test files, 1563 tests passing
+- All acceptance matrix rows have concrete test evidence
+- Full validation passes: format, lint, typecheck, test, build, audit
+- No production defects discovered
+- No unsupported guarantees in documentation
+- All required behaviors represented by implemented tests
+
+**Validation Results:**
+
+```
+npm run format:check  PASS
+npm run lint          PASS
+npm run typecheck     PASS
+npm test              PASS — 81 files, 1563 tests
+npm run build         PASS
+git diff --check      PASS
+npm audit --omit=dev  PASS — 0 vulnerabilities
+```
+
+The historical v0.4 snapshot reported that milestone ready at the time. This
+text is retained for audit history; the current project conclusion is the v0.5
+matrix above.
 
 ## Development workflow
 

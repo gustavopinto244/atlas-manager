@@ -651,6 +651,14 @@ stopped before the service they require.
 The unique set of transitive dependencies or dependents reachable from a target
 service.
 
+### At-most-once occurrence protection
+
+The scheduler's persisted target-occurrence claim rule. A target occurrence is
+claimed before its dependency orchestration runs; a duplicate claim suppresses
+the complete replay after reconstruction. This prevents automatic duplicate
+replay but does not provide globally exactly-once execution, atomic
+cross-service effects, rollback, or compensation.
+
 ### Topological order
 
 An ordering in which every dependency appears before its dependent. Atlas

@@ -74,6 +74,142 @@ describe("RegisteredService", () => {
     expect(service.supportedOperations).toEqual(["readStatus"]);
   });
 
+  it("accepts empty dependencies and keeps the canonical collection immutable", () => {
+    const service = RegisteredService.create(
+      createValidInput({ dependencies: [] }),
+    );
+
+    expect(service.dependencies).toEqual([]);
+    expect(Object.isFrozen(service.dependencies)).toBe(true);
+  });
+
+  it("preserves one and multiple canonical dependencies without caller ownership", () => {
+    const dependencies = ["atlas-postgres", "atlas-redis"];
+    const service = RegisteredService.create(
+      createValidInput({ dependencies }),
+    );
+
+    dependencies.reverse();
+
+    expect(service.dependencies).toEqual(["atlas-postgres", "atlas-redis"]);
+    expect(service.dependencies).not.toBe(dependencies);
+    expect(Object.isFrozen(service.dependencies)).toBe(true);
+  });
+
+  it("accepts the direct-dependency limit and rejects one more dependency", () => {
+    const dependencies = Array.from(
+      { length: 16 },
+      (_, index) => `dependency-${index}`,
+    );
+
+    const service = RegisteredService.create(
+      createValidInput({ dependencies }),
+    );
+
+    expect(service.dependencies).toHaveLength(16);
+    expect(Object.isFrozen(service.dependencies)).toBe(true);
+    expectValidationError(
+      createValidInput({ dependencies: [...dependencies, "dependency-16"] }),
+      "invalid_dependencies",
+    );
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "atlas-postgres"],
+    ["a number", 42],
+    ["a boolean", true],
+    ["a plain object", {}],
+    ["a function", () => "atlas-postgres"],
+    ["an array containing a number", [42]],
+    ["an array containing null", [null]],
+    ["an array containing an object", [{}]],
+  ])(
+    "rejects %s as an invalid dependency collection",
+    (_label, dependencies) => {
+      expectValidationError(
+        createValidInput({ dependencies }),
+        "invalid_dependencies",
+      );
+    },
+  );
+
+  it.each([
+    ["an empty identifier", ""],
+    ["surrounding whitespace", " atlas-postgres"],
+    ["uppercase characters", "Atlas-postgres"],
+    ["embedded whitespace", "atlas postgres"],
+    ["a leading hyphen", "-atlas-postgres"],
+    ["a trailing hyphen", "atlas-postgres-"],
+    ["consecutive hyphens", "atlas--postgres"],
+    ["unsupported punctuation", "atlas_postgres"],
+    ["an identifier longer than 64 characters", "a".repeat(65)],
+    ["control-character content", "atlas-\u0000postgres"],
+  ])("rejects %s in a dependency identifier", (_label, dependency) => {
+    expectValidationError(
+      createValidInput({ dependencies: [dependency] }),
+      "invalid_dependencies",
+    );
+  });
+
+  it("accepts dependency identifiers at lengths one and 64", () => {
+    const service = RegisteredService.create(
+      createValidInput({ dependencies: ["a", "b".repeat(64)] }),
+    );
+
+    expect(service.dependencies).toEqual(["a", "b".repeat(64)]);
+  });
+
+  it("rejects self-dependency and duplicate direct dependencies", () => {
+    expectValidationError(
+      createValidInput({ id: "atlas-api", dependencies: ["atlas-api"] }),
+      "invalid_dependencies",
+    );
+    expectValidationError(
+      createValidInput({
+        dependencies: ["atlas-postgres", "atlas-postgres"],
+      }),
+      "invalid_dependencies",
+    );
+  });
+
+  it.each(["mock", "pm2"] as const)(
+    "rejects health readiness for %s",
+    (managementAdapter) => {
+      expectValidationError(
+        createValidInput({
+          managementAdapter,
+          readinessPolicy: { mode: "health" },
+        }),
+        "invalid_readiness_policy",
+      );
+    },
+  );
+
+  it("accepts health readiness for Docker and Compose services", () => {
+    expect(
+      RegisteredService.create(
+        createValidInput({
+          managementAdapter: "docker",
+          readinessPolicy: { mode: "health" },
+        }),
+      ).readinessPolicy.mode,
+    ).toBe("health");
+
+    expect(
+      RegisteredService.create(
+        createValidInput({
+          managementAdapter: "docker-compose",
+          readinessPolicy: { mode: "health" },
+          managementConfiguration: {
+            composeFile: "/srv/atlas/compose.yaml",
+            projectDirectory: "/srv/atlas",
+          },
+        }),
+      ).readinessPolicy.mode,
+    ).toBe("health");
+  });
+
   it.each(["always", "manual", "disabled"] as const)(
     "associates a canonical frozen %s availability policy",
     (mode) => {
