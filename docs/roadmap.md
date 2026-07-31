@@ -439,3 +439,12 @@ Update this roadmap when:
 Do not use this roadmap as a substitute for acceptance criteria.
 
 Every implementation task must still be represented by a scoped GitHub Issue.
+
+### v0.6 preparation slice
+
+The mock safe-shutdown preparation boundary is delivered: supported blockers
+can be prepared explicitly through dependency-aware service stopping, task
+draining, backup completion, filesystem synchronization, ordered in-memory
+events, and fresh final readiness. Preparation remains retryable until the
+shutdown occurrence is claimed. Real machine effects, event persistence, and
+automatic lifecycle scheduling remain deferred. v0.6 remains active.

@@ -2300,3 +2300,37 @@ paths, commands, shell probes, HTTP endpoints, TCP probes, or custom scripts.
 The implementation intentionally does not discover dependencies from Compose
 files or labels, start services in parallel, mutate the graph at runtime, or
 provide a new HTTP endpoint.
+
+### Mock safe-shutdown preparation
+
+Before a due machine shutdown occurrence is claimed, Atlas can explicitly run
+a mock preparation pipeline for supported blockers. Running registered
+services are stopped in dependent-first order, active tasks can be drained,
+an in-progress backup can be completed, and required filesystem synchronization
+can be represented as complete. These operations use narrow mock boundaries;
+they do not stop real services, cancel real tasks, run backups, or invoke the
+operating-system `sync` command.
+
+The canonical preparation order is recording the start, stopping services,
+draining tasks, completing the backup, synchronizing the filesystem, recording
+completion, reevaluating readiness, and recording final readiness. Only steps
+required by the initial blockers are included. Events use sequence numbers
+starting at one for each explicit attempt.
+
+Preparation records immutable, sequence-numbered in-memory events. A partial
+failure preserves completed effects and leaves the occurrence unclaimed, so a
+later explicit attempt can observe idempotent states such as
+`already_stopped`, `already_drained`, `not_running`, and
+`already_synchronized`. There is no rollback, compensation, or automatic
+retry.
+
+Non-preparable blockers, including service schedule conflicts, failed or
+unknown service state, unknown readiness, and missing confirmation, fail closed
+without preparation effects. When preparation mutates state, final readiness
+uses a fresh explicit confirmation and the readiness evaluator remains
+authoritative. Only final approval allows the existing claim, mock wake-alarm,
+and simulated-shutdown chain to continue.
+
+The preparation capability is explicitly invoked and has no timer, background
+worker, scheduler loop, persistence journal, real RTC effect, real shutdown,
+or administrative event history.

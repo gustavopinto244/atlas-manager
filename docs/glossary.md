@@ -1196,3 +1196,58 @@ main.
 An automated coding assistant used to analyze or modify the repository.
 
 Coding agents must follow AGENTS.md and remain subject to human review.
+
+### Shutdown preparation
+
+An explicit mock-first pipeline that resolves supported shutdown blockers
+before an occurrence may be claimed.
+
+### Preparation plan
+
+The immutable, canonical list of preparation steps required by one initial
+readiness decision.
+
+### Preparation step
+
+One validated operation or readiness transition in a preparation plan.
+
+### Preparation event
+
+An immutable, narrow in-memory record of preparation progress, ordered by a
+per-attempt sequence number.
+
+### Preparable blocker
+
+A blocker that has a bounded mock preparation operation, such as a running
+service, active task, backup in progress, or filesystem synchronization need.
+
+### Non-preparable blocker
+
+A blocker that must fail closed and prevent preparation effects, such as a
+service required during the offline interval or unknown readiness.
+
+### Preparation report
+
+An immutable record of the initial decision, ordered preparation steps/events,
+final readiness, and whether preparation was not required, blocked, prepared,
+or incomplete.
+
+### Final readiness
+
+The authoritative readiness decision reevaluated after preparation effects and
+before the occurrence claim.
+
+### Evaluation-scoped confirmation
+
+An explicit confirmation read that authorizes only the current readiness
+evaluation. Preparation mutations require a fresh confirmation read.
+
+### Partial preparation
+
+Preparation in which earlier mock effects completed but a later step failed;
+effects are preserved, with no rollback or compensation.
+
+### Idempotent preparation retry
+
+An explicit later attempt that reads current authoritative state and reports
+already-complete effects without repeating them unnecessarily.

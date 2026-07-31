@@ -85,6 +85,10 @@ import type { ServiceReadinessReader } from "../application/ports/service-readin
 
 import type { ServiceController } from "../application/ports/service-controller.js";
 import { GetRegisteredServiceAvailabilityForInterval } from "../application/get-registered-service-availability-for-interval.js";
+import {
+  OrchestrateRegisteredServicesStop,
+  type OrchestrateRegisteredServicesStopPort,
+} from "../application/orchestrate-registered-services-stop.js";
 
 export interface ServiceManagementCapabilities {
   readonly listRegisteredServices: ListRegisteredServices;
@@ -96,6 +100,7 @@ export interface ServiceManagementCapabilities {
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly getRegisteredServiceAvailabilityForInterval: GetRegisteredServiceAvailabilityForInterval;
+  readonly orchestrateRegisteredServicesStop: OrchestrateRegisteredServicesStopPort;
   readonly pruneExpiredRegisteredServiceAvailabilityOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides;
   readonly pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims;
   readonly planRegisteredServiceAvailabilityReconciliation: PlanRegisteredServiceAvailabilityReconciliation;
@@ -127,6 +132,7 @@ export interface ServiceManagementCompositionOverrides {
   readonly serviceReadinessReader?: ServiceReadinessReader;
   readonly serviceController?: ServiceController;
   readonly orchestrateRegisteredServiceControl?: OrchestrateRegisteredServiceControlPort;
+  readonly orchestrateRegisteredServicesStop?: OrchestrateRegisteredServicesStopPort;
 }
 
 export function createServiceManagement(
@@ -240,6 +246,16 @@ export function createServiceManagement(
     );
   const getGraph = (): Promise<RegisteredServiceDependencyGraph> =>
     graphPromise;
+
+  const orchestrateRegisteredServicesStop =
+    overrides?.orchestrateRegisteredServicesStop ??
+    new OrchestrateRegisteredServicesStop(
+      catalog,
+      statusReader,
+      controller,
+      getGraph,
+      clock,
+    );
 
   const runtimeReadinessReader = new RuntimeReadinessReader(
     statusReader,
@@ -359,6 +375,7 @@ export function createServiceManagement(
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
     getRegisteredServiceEffectiveAvailability,
     getRegisteredServiceAvailabilityForInterval,
+    orchestrateRegisteredServicesStop,
     pruneExpiredRegisteredServiceAvailabilityOverrides,
     pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,
     planRegisteredServiceAvailabilityReconciliation,

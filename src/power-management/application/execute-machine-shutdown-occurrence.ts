@@ -8,6 +8,7 @@ import { createMachineShutdownOccurrenceExecutionResult } from "../domain/machin
 import { createWakeAlarmMutationResult } from "../domain/wake-alarm-mutation-result.js";
 import { createMachineShutdownResult } from "../domain/machine-shutdown-result.js";
 import type { EvaluateMachineShutdownReadiness } from "./evaluate-machine-shutdown-readiness.js";
+import type { PrepareMachineShutdownOccurrence } from "./prepare-machine-shutdown-occurrence.js";
 
 export type MachineShutdownOccurrenceExecutionErrorCode =
   | "claim_failed"
@@ -29,18 +30,21 @@ export class ExecuteMachineShutdownOccurrence {
   readonly #wake: WakeAlarmController;
   readonly #shutdown: MachineShutdownController;
   readonly #readiness: EvaluateMachineShutdownReadiness | undefined;
+  readonly #preparation: PrepareMachineShutdownOccurrence | undefined;
   public constructor(
     clock: PowerManagementClock,
     claims: MachineShutdownOccurrenceClaimStore,
     wake: WakeAlarmController,
     shutdown: MachineShutdownController,
     readiness?: EvaluateMachineShutdownReadiness,
+    preparation?: PrepareMachineShutdownOccurrence,
   ) {
     this.#clock = clock;
     this.#claims = claims;
     this.#wake = wake;
     this.#shutdown = shutdown;
     this.#readiness = readiness;
+    this.#preparation = preparation;
     Object.freeze(this);
   }
   public async execute(
@@ -65,17 +69,38 @@ export class ExecuteMachineShutdownOccurrence {
         processedAt,
         outcome: "stale",
       });
+    let decision;
     if (this.#readiness) {
-      const decision = await this.#readiness.evaluateAt(
-        occurrence,
-        processedAt,
-      );
-      if (decision.outcome === "rejected")
+      decision = await this.#readiness.evaluateAt(occurrence, processedAt);
+      if (!this.#preparation && decision.outcome === "rejected")
         return createMachineShutdownOccurrenceExecutionResult({
           occurrence,
           processedAt,
           outcome: "rejected",
           decision,
+        });
+    }
+    let preparationReport;
+    if (this.#preparation && decision) {
+      preparationReport = await this.#preparation.prepareAt(
+        occurrence,
+        processedAt,
+        decision,
+      );
+      if (preparationReport.outcome === "blocked")
+        return createMachineShutdownOccurrenceExecutionResult({
+          occurrence,
+          processedAt,
+          outcome: "rejected",
+          decision,
+          preparationReport,
+        });
+      if (preparationReport.outcome === "incomplete")
+        return createMachineShutdownOccurrenceExecutionResult({
+          occurrence,
+          processedAt,
+          outcome: "preparation_incomplete",
+          preparationReport,
         });
     }
     let claim;
@@ -117,6 +142,7 @@ export class ExecuteMachineShutdownOccurrence {
         occurrence,
         processedAt,
         outcome: "executed",
+        ...(preparationReport ? { preparationReport } : {}),
         wakeAlarmMutation: wake,
         shutdownResult: shutdown,
       });
