@@ -7,7 +7,8 @@ Issue #254 adds a separate release/build boundary around the helper:
 ```text
 explicit build inputs
         ↓
-reproducible linux/amd64 bundle
+reproducible `GOOS=linux`, `GOARCH=amd64`, `GOAMD64=v1` bundle with
+`CGO_ENABLED=0`
         ↓
 operator-run installer
         ↓
@@ -926,3 +927,17 @@ The bus address, destination, object, interface, method, argument, and
 deadline are constants. No D-Bus work occurs after lock rejection, and the
 requester performs no RTC access. The production Node.js composition remains
 mock-first and does not construct or invoke this helper backend.
+
+### Linux host qualification
+
+Issue #256 adds a separate root-run but read-only host qualification utility
+with exactly three actions: `qualify`, `verify-disabled-installation`, and
+`verify-removed`. Its report uses closed structs, fixed check ordering,
+bounded JSON, and only safe OS, kernel, architecture, and hashed-boot facts.
+
+Qualification reads fixed resources, reuses the 300-second RTC alignment rule,
+checks the root-owned system-bus socket, and performs only the private
+two-second D-Bus checks `NameHasOwner`, introspection, and `CanPowerOff`.
+It never creates locks, writes sysfs, invokes the helper, calls `PowerOff`,
+changes groups, or changes installation state. A passing report approves only
+a disabled installation with an empty helper group.

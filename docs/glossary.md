@@ -1700,3 +1700,16 @@ already powered off.
 The internal state after the PowerOff request may have been transmitted but no
 reply was received. It maps to `operation_failed` and is never retried or
 compensated.
+
+### Host qualification
+
+Issue #256's read-only capability inspection of one Linux host. A passing
+result approves only a disabled helper installation at the time of inspection;
+it is not distribution-wide, firmware, hardware, application-enrollment, or
+production-effect certification.
+
+### Disabled installation drill
+
+The explicit operator sequence of qualification, installation, disabled-state
+verification, reboot verification, uninstall, and removed-state verification.
+The `atlas-manager-power` group remains empty throughout the drill.

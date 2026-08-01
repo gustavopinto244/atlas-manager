@@ -108,7 +108,8 @@ The helper remains uninstalled and Atlas Manager remains mock-first.
 
 Issue #254 adds a reproducible, operator-controlled `linux/amd64` installation
 bundle. The build requires an explicit package version, source commit, and
-`SOURCE_DATE_EPOCH`; it uses `CGO_ENABLED=0`, `-trimpath`, and
+`SOURCE_DATE_EPOCH`; it uses `CGO_ENABLED=0`, `GOOS=linux`, `GOARCH=amd64`,
+`GOAMD64=v1`, `-trimpath`, and
 `-buildvcs=false`. The archive contains the helper, a separate installer,
 strict manifest, checksums, licenses, and the installation runbook. Checksums
 verify integrity but do not prove authenticity.
@@ -2567,3 +2568,15 @@ deadline after transmission is treated as uncertain internally and maps to the
 existing safe `operation_failed` response. The helper remains uninstalled,
 unsetuid, and unwired, so Atlas Manager's HTTP and shutdown workflows remain
 mock-first and simulated.
+
+### Host qualification and disabled installation
+
+Issue #256 adds the separate
+`atlas-manager-power-helper-host-qualification` executable. It supports only
+`qualify`, `verify-disabled-installation`, and `verify-removed`, requires
+effective root, and remains read-only. It inspects fixed Linux, RTC, group,
+installation-parent, runtime-lock, and system-bus resources and emits a
+bounded canonical report. It never installs or executes the helper, changes
+RTC state, calls `PowerOff`, modifies groups, or activates Atlas Manager.
+Firmware wake behavior, application-user enrollment, and production wiring
+remain separate gates.

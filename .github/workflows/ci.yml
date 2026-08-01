@@ -48,19 +48,23 @@ jobs:
 
       - name: Build Linux power helper
         working-directory: power-helper
-        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper ./cmd/atlas-manager-power-helper
+        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper ./cmd/atlas-manager-power-helper
 
       - name: Build deterministic helper compatibility fixture
         working-directory: power-helper
-        run: mkdir -p ../dist/power-helper-test && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper-test/atlas-manager-power-helper-fixture ./cmd/atlas-manager-power-helper-fixture
+        run: mkdir -p ../dist/power-helper-test && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper-test/atlas-manager-power-helper-fixture ./cmd/atlas-manager-power-helper-fixture
 
       - name: Build installation bundle tooling
         working-directory: power-helper
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper-bundle-builder ./cmd/atlas-manager-power-helper-bundle
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper-bundle-builder ./cmd/atlas-manager-power-helper-bundle
 
       - name: Build operator installer
         working-directory: power-helper
-        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper-installer ./cmd/atlas-manager-power-helper-installer
+        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper-installer ./cmd/atlas-manager-power-helper-installer
+
+      - name: Build host qualification utility
+        working-directory: power-helper
+        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper-host-qualification ./cmd/atlas-manager-power-helper-host-qualification
 
       - name: Build reproducible installation bundle
         run: |

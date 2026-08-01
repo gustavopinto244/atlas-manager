@@ -1090,3 +1090,23 @@ A successful reply means logind accepted the request, not that power-off is
 complete. Uncertain acceptance is never retried or compensated and is exposed
 only as the existing `operation_failed` protocol category. The helper source is
 not installed or wired into Atlas Manager.
+
+## Read-only host qualification
+
+Issue #256 adds a separate effective-root qualification command. Root provides
+identity parity with the future helper, not mutation authority: the command
+has no installer calls, repair mode, child process execution, sysfs writes,
+group updates, helper execution, or power operation. It accepts only three
+exact actions and fixed host resources.
+
+Reports exclude names, addresses, usernames, raw boot IDs, credentials,
+filesystem details, and D-Bus diagnostics. The boot identifier is hashed with
+a project-owned domain separator. The fixed system bus is inspected and a
+two-second private EXTERNAL-authenticated connection performs only read-only
+logind checks; `PowerOff` is never called. The required empty helper group
+deliberately separates disabled installation from application enrollment and
+real-effect activation.
+
+The qualification and bundle target is fixed to `GOOS=linux`, `GOARCH=amd64`,
+`GOAMD64=v1`, and `CGO_ENABLED=0`; a host CPU model is evidence only and is
+never used as an allowlist.

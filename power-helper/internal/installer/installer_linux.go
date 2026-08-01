@@ -207,6 +207,70 @@ func (installer Installer) Verify() (Status, error) {
 	return StatusValid, nil
 }
 
+// InspectManaged performs the same managed-state checks as Verify without
+// creating or acquiring the installer lock. Host qualification is strictly
+// read-only and must not create the lock file as a side effect.
+func (installer Installer) InspectManaged() (Status, error) {
+	if installer.goos != "linux" || installer.goarch != "amd64" {
+		return StatusInstallationInvalid, ErrUnsupportedPlatform
+	}
+	if _, err := installer.validateBundle(); err != nil {
+		return StatusBundleInvalid, ErrBundleInvalid
+	}
+	group, err := installer.validateGroup(true)
+	if err != nil {
+		if errors.Is(err, ErrGroupNotEmpty) {
+			return StatusGroupNotEmpty, err
+		}
+		return StatusGroupUnavailable, ErrGroupUnavailable
+	}
+	helperInfo, helperErr := os.Lstat(installer.paths.HelperPath)
+	if errors.Is(helperErr, os.ErrNotExist) {
+		if _, stateErr := os.Lstat(installer.paths.StateFile); errors.Is(stateErr, os.ErrNotExist) {
+			return StatusNotInstalled, nil
+		}
+		return StatusStateRecheck, ErrStateRecheck
+	}
+	if helperErr != nil || !helperInfo.Mode().IsRegular() || helperInfo.Mode()&os.ModeSymlink != 0 {
+		return StatusInstallationInvalid, ErrInstallationInvalid
+	}
+	if err := installer.validateStateAndHelper(); err != nil {
+		return StatusStateRecheck, err
+	}
+	if err := installer.validateTargetGroup(group.GID); err != nil {
+		return StatusInstallationInvalid, ErrInstallationInvalid
+	}
+	return StatusValid, nil
+}
+
+// InspectRemoved verifies the fixed removal state without taking or creating
+// an installer lock. It is used by the read-only host qualification command.
+func (installer Installer) InspectRemoved() (Status, error) {
+	if installer.goos != "linux" || installer.goarch != "amd64" {
+		return StatusInstallationInvalid, ErrUnsupportedPlatform
+	}
+	if _, err := installer.validateBundle(); err != nil {
+		return StatusBundleInvalid, ErrBundleInvalid
+	}
+	if _, err := installer.validateGroup(true); err != nil {
+		if errors.Is(err, ErrGroupNotEmpty) {
+			return StatusGroupNotEmpty, err
+		}
+		return StatusGroupUnavailable, ErrGroupUnavailable
+	}
+	if _, err := os.Lstat(installer.paths.HelperPath); err == nil {
+		return StatusInstallationInvalid, ErrInstallationInvalid
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return StatusInstallationInvalid, ErrInstallationInvalid
+	}
+	if _, err := os.Lstat(installer.paths.StateFile); err == nil {
+		return StatusStateRecheck, ErrStateRecheck
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return StatusInstallationInvalid, ErrInstallationInvalid
+	}
+	return StatusNotInstalled, nil
+}
+
 func (installer Installer) install() (Status, error) {
 	if _, err := installer.validateBundle(); err != nil {
 		return StatusBundleInvalid, ErrBundleInvalid

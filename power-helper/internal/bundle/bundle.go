@@ -22,6 +22,7 @@ const (
 	Name                 = "atlas-manager-power-helper"
 	TargetOS             = "linux"
 	TargetArch           = "amd64"
+	TargetGOAMD64        = "v1"
 	InstallPath          = "/usr/local/libexec/atlas-manager-power-helper"
 	InstallOwner         = "root"
 	InstallGroup         = "atlas-manager-power"
@@ -59,6 +60,7 @@ type Manifest struct {
 	GoVersion                 string   `json:"goVersion"`
 	GOOS                      string   `json:"goos"`
 	GOARCH                    string   `json:"goarch"`
+	GOAMD64                   string   `json:"goamd64"`
 	CGOEnabled                bool     `json:"cgoEnabled"`
 	InstallPath               string   `json:"installPath"`
 	Owner                     string   `json:"owner"`
@@ -69,6 +71,7 @@ type Manifest struct {
 	ApplicationUserEnrollment bool     `json:"applicationUserEnrollment"`
 	HelperSHA256              string   `json:"helperSha256"`
 	InstallerSHA256           string   `json:"installerSha256"`
+	QualificationSHA256       string   `json:"qualificationSha256"`
 	DirectGoModules           []string `json:"directGoModules"`
 	TransitiveGoModules       []string `json:"transitiveGoModules"`
 }
@@ -100,12 +103,12 @@ func ParseSourceDateEpoch(value string) (uint64, error) {
 func ValidateManifest(manifest Manifest) error {
 	if manifest.SchemaVersion != SchemaVersion || manifest.Name != Name || manifest.ProtocolVersion != ProtocolVersion ||
 		manifest.GoVersion == "" || manifest.GOOS != TargetOS || manifest.GOARCH != TargetArch || manifest.CGOEnabled ||
-		manifest.InstallPath != InstallPath || manifest.Owner != InstallOwner || manifest.Group != InstallGroup || manifest.Mode != InstallMode ||
+		manifest.InstallPath != InstallPath || manifest.Owner != InstallOwner || manifest.Group != InstallGroup || manifest.Mode != InstallMode || manifest.GOAMD64 != TargetGOAMD64 ||
 		manifest.AutomaticInstallation || manifest.ProductionActivation || manifest.ApplicationUserEnrollment {
 		return ErrInvalidManifest
 	}
 	if err := ValidatePackageVersion(manifest.PackageVersion); err != nil || !hex40Pattern.MatchString(manifest.SourceCommit) ||
-		!hex64Pattern.MatchString(manifest.HelperSHA256) || !hex64Pattern.MatchString(manifest.InstallerSHA256) {
+		!hex64Pattern.MatchString(manifest.HelperSHA256) || !hex64Pattern.MatchString(manifest.InstallerSHA256) || !hex64Pattern.MatchString(manifest.QualificationSHA256) {
 		return ErrInvalidManifest
 	}
 	if len(manifest.DirectGoModules) != 1 || manifest.DirectGoModules[0] != "github.com/godbus/dbus/v5 v5.2.2" ||
@@ -175,6 +178,7 @@ type BundleFiles struct {
 var expectedFiles = []string{
 	"bin/atlas-manager-power-helper",
 	"bin/atlas-manager-power-helper-installer",
+	"bin/atlas-manager-power-helper-host-qualification",
 	"manifest.json",
 	"SHA256SUMS",
 	"README-installation.md",
@@ -184,27 +188,27 @@ var expectedFiles = []string{
 
 func ExpectedFiles() []string { return append([]string(nil), expectedFiles...) }
 
-func BuildManifest(packageVersion, sourceCommit, goVersion string, sourceDateEpoch uint64, helper, installer []byte) Manifest {
+func BuildManifest(packageVersion, sourceCommit, goVersion string, sourceDateEpoch uint64, helper, installer, qualification []byte) Manifest {
 	return Manifest{
 		SchemaVersion: SchemaVersion, Name: Name, PackageVersion: packageVersion, ProtocolVersion: ProtocolVersion,
 		SourceCommit: sourceCommit, SourceDateEpoch: sourceDateEpoch, GoVersion: goVersion,
-		GOOS: TargetOS, GOARCH: TargetArch, CGOEnabled: false, InstallPath: InstallPath,
+		GOOS: TargetOS, GOARCH: TargetArch, GOAMD64: TargetGOAMD64, CGOEnabled: false, InstallPath: InstallPath,
 		Owner: InstallOwner, Group: InstallGroup, Mode: InstallMode, AutomaticInstallation: false,
 		ProductionActivation: false, ApplicationUserEnrollment: false, HelperSHA256: HashBytes(helper),
-		InstallerSHA256: HashBytes(installer), DirectGoModules: []string{"github.com/godbus/dbus/v5 v5.2.2"},
+		InstallerSHA256: HashBytes(installer), QualificationSHA256: HashBytes(qualification), DirectGoModules: []string{"github.com/godbus/dbus/v5 v5.2.2"},
 		TransitiveGoModules: []string{"golang.org/x/sys v0.27.0"},
 	}
 }
 
 func CanonicalChecksums(manifest Manifest) []byte {
-	return []byte(manifest.HelperSHA256 + "  bin/atlas-manager-power-helper\n" + manifest.InstallerSHA256 + "  bin/atlas-manager-power-helper-installer\n")
+	return []byte(manifest.HelperSHA256 + "  bin/atlas-manager-power-helper\n" + manifest.InstallerSHA256 + "  bin/atlas-manager-power-helper-installer\n" + manifest.QualificationSHA256 + "  bin/atlas-manager-power-helper-host-qualification\n")
 }
 
-func CreateDirectoryBundle(root string, manifest Manifest, helper, installer, installationDoc []byte) error {
+func CreateDirectoryBundle(root string, manifest Manifest, helper, installer, qualification, installationDoc []byte) error {
 	if err := ValidateManifest(manifest); err != nil {
 		return err
 	}
-	if HashBytes(helper) != manifest.HelperSHA256 || HashBytes(installer) != manifest.InstallerSHA256 {
+	if HashBytes(helper) != manifest.HelperSHA256 || HashBytes(installer) != manifest.InstallerSHA256 || HashBytes(qualification) != manifest.QualificationSHA256 {
 		return ErrInvalidManifest
 	}
 	for _, directory := range []string{root, filepath.Join(root, "bin"), filepath.Join(root, "LICENSES")} {
@@ -213,19 +217,22 @@ func CreateDirectoryBundle(root string, manifest Manifest, helper, installer, in
 		}
 	}
 	files := map[string][]byte{
-		"bin/atlas-manager-power-helper":           helper,
-		"bin/atlas-manager-power-helper-installer": installer,
-		"manifest.json":                            mustCanonicalManifest(manifest),
-		"SHA256SUMS":                               CanonicalChecksums(manifest),
-		"README-installation.md":                   installationDoc,
-		"LICENSES/github.com-godbus-dbus-v5.txt":   []byte(GodbusLicense),
-		"LICENSES/golang.org-x-sys.txt":            []byte(XSysLicense),
+		"bin/atlas-manager-power-helper":                    helper,
+		"bin/atlas-manager-power-helper-installer":          installer,
+		"bin/atlas-manager-power-helper-host-qualification": qualification,
+		"manifest.json":                          mustCanonicalManifest(manifest),
+		"SHA256SUMS":                             CanonicalChecksums(manifest),
+		"README-installation.md":                 installationDoc,
+		"LICENSES/github.com-godbus-dbus-v5.txt": []byte(GodbusLicense),
+		"LICENSES/golang.org-x-sys.txt":          []byte(XSysLicense),
 	}
 	for name, data := range files {
 		mode := os.FileMode(0644)
 		if name == "bin/atlas-manager-power-helper" {
 			mode = 0750
 		} else if name == "bin/atlas-manager-power-helper-installer" {
+			mode = 0755
+		} else if name == "bin/atlas-manager-power-helper-host-qualification" {
 			mode = 0755
 		}
 		path := filepath.Join(root, filepath.FromSlash(name))
@@ -279,6 +286,7 @@ func CreateArchive(bundleRoot, archivePath string, sourceDateEpoch uint64) error
 		{top, 0755}, {top + "/bin", 0755}, {top + "/LICENSES", 0755},
 		{top + "/bin/atlas-manager-power-helper", 0750},
 		{top + "/bin/atlas-manager-power-helper-installer", 0755},
+		{top + "/bin/atlas-manager-power-helper-host-qualification", 0755},
 		{top + "/LICENSES/github.com-godbus-dbus-v5.txt", 0644},
 		{top + "/LICENSES/golang.org-x-sys.txt", 0644},
 		{top + "/README-installation.md", 0644}, {top + "/SHA256SUMS", 0644}, {top + "/manifest.json", 0644},
@@ -372,7 +380,7 @@ func ValidateBundleDirectory(root string, manifest Manifest) error {
 		want := os.FileMode(0644)
 		if name == "bin/atlas-manager-power-helper" {
 			want = 0750
-		} else if name == "bin/atlas-manager-power-helper-installer" {
+		} else if name == "bin/atlas-manager-power-helper-installer" || name == "bin/atlas-manager-power-helper-host-qualification" {
 			want = 0755
 		}
 		if info.Mode().Perm() != want {
@@ -395,12 +403,12 @@ func ValidateBundleDirectory(root string, manifest Manifest) error {
 	if err != nil || string(checksums) != string(CanonicalChecksums(manifest)) {
 		return ErrInvalidChecksums
 	}
-	for _, executable := range []string{"bin/atlas-manager-power-helper", "bin/atlas-manager-power-helper-installer"} {
+	for _, executable := range []string{"bin/atlas-manager-power-helper", "bin/atlas-manager-power-helper-installer", "bin/atlas-manager-power-helper-host-qualification"} {
 		hash, err := HashFile(filepath.Join(root, filepath.FromSlash(executable)))
 		if err != nil {
 			return ErrBundleStructure
 		}
-		if (executable == "bin/atlas-manager-power-helper" && hash != manifest.HelperSHA256) || (executable == "bin/atlas-manager-power-helper-installer" && hash != manifest.InstallerSHA256) {
+		if (executable == "bin/atlas-manager-power-helper" && hash != manifest.HelperSHA256) || (executable == "bin/atlas-manager-power-helper-installer" && hash != manifest.InstallerSHA256) || (executable == "bin/atlas-manager-power-helper-host-qualification" && hash != manifest.QualificationSHA256) {
 			return ErrInvalidChecksums
 		}
 	}

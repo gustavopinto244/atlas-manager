@@ -35,14 +35,33 @@ func TestManifestAndVersionAreStrict(t *testing.T) {
 	}
 }
 
+func TestManifestPinsGOAMD64V1(t *testing.T) {
+	manifest := BuildManifest("0.1.0", testCommit, "1.23.0", 0, []byte("helper"), []byte("installer"), []byte("qualification"))
+	if manifest.GOAMD64 != TargetGOAMD64 || TargetGOAMD64 != "v1" {
+		t.Fatalf("unexpected GOAMD64 baseline: %q", manifest.GOAMD64)
+	}
+	for _, value := range []string{"", "v2", "v3", "v4", "V1", "amd64.v1"} {
+		invalid := manifest
+		invalid.GOAMD64 = value
+		if err := ValidateManifest(invalid); err == nil {
+			t.Fatalf("accepted invalid GOAMD64 value %q", value)
+		}
+	}
+	canonical, err := CanonicalManifest(manifest)
+	if err != nil || !bytes.Contains(canonical, []byte(`"goamd64":"v1"`)) {
+		t.Fatalf("manifest does not serialize GOAMD64=v1: %s", canonical)
+	}
+}
+
 func TestBundleIsCanonicalAndReproducible(t *testing.T) {
 	helper := []byte("helper payload")
 	installer := []byte("installer payload")
-	manifest := BuildManifest("0.1.0", testCommit, "1.23.0", 0, helper, installer)
+	qualification := []byte("qualification payload")
+	manifest := BuildManifest("0.1.0", testCommit, "1.23.0", 0, helper, installer, qualification)
 	first := filepath.Join(t.TempDir(), "atlas-manager-power-helper_0.1.0_linux_amd64")
 	second := filepath.Join(t.TempDir(), "atlas-manager-power-helper_0.1.0_linux_amd64")
 	for _, root := range []string{first, second} {
-		if err := CreateDirectoryBundle(root, manifest, helper, installer, []byte("runbook\n")); err != nil {
+		if err := CreateDirectoryBundle(root, manifest, helper, installer, qualification, []byte("runbook\n")); err != nil {
 			t.Fatal(err)
 		}
 		archivePath := root + ".tar.gz"
@@ -85,16 +104,16 @@ func TestBundleIsCanonicalAndReproducible(t *testing.T) {
 			t.Fatalf("noncanonical archive metadata: %#v", header)
 		}
 	}
-	if len(names) != 10 || names[0] != "atlas-manager-power-helper_0.1.0_linux_amd64" {
+	if len(names) != 11 || names[0] != "atlas-manager-power-helper_0.1.0_linux_amd64" {
 		t.Fatalf("unexpected archive entries: %v", names)
 	}
 }
 
 func TestUnexpectedBundleFilesReject(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "bundle")
-	helper, installer := []byte("h"), []byte("i")
-	manifest := BuildManifest("0.1.0", testCommit, "1.23.0", 0, helper, installer)
-	if err := CreateDirectoryBundle(root, manifest, helper, installer, nil); err != nil {
+	helper, installer, qualification := []byte("h"), []byte("i"), []byte("q")
+	manifest := BuildManifest("0.1.0", testCommit, "1.23.0", 0, helper, installer, qualification)
+	if err := CreateDirectoryBundle(root, manifest, helper, installer, qualification, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "bin", "extra"), []byte("x"), 0750); err != nil {

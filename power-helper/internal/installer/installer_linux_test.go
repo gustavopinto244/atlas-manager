@@ -27,9 +27,9 @@ func TestSandboxInstallVerifyUninstallDoesNotUseProductionPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	bundleRoot := filepath.Join(root, "bundle", "atlas-manager-power-helper_0.1.0_linux_amd64")
-	helper, installerPayload := []byte("helper payload"), []byte("installer payload")
-	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload)
-	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installerPayload, []byte("runbook\n")); err != nil {
+	helper, installerPayload, qualification := []byte("helper payload"), []byte("installer payload"), []byte("qualification payload")
+	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload, qualification)
+	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installerPayload, qualification, []byte("runbook\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.Libexec, 0755); err != nil {
@@ -93,8 +93,9 @@ func TestInstallerRejectsExactActionAndGroupState(t *testing.T) {
 	}
 	validBundle := filepath.Join(root, "bundle")
 	helper, installerPayload := []byte("helper"), []byte("installer")
-	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload)
-	if err := bundle.CreateDirectoryBundle(validBundle, manifest, helper, installerPayload, nil); err != nil {
+	qualification := []byte("qualification")
+	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload, qualification)
+	if err := bundle.CreateDirectoryBundle(validBundle, manifest, helper, installerPayload, qualification, nil); err != nil {
 		t.Fatal(err)
 	}
 	instance = NewSandbox(paths, validBundle)
@@ -126,8 +127,9 @@ func TestUnsafeExistingTargetIsNotAdopted(t *testing.T) {
 	}
 	bundleRoot := filepath.Join(root, "bundle")
 	helper, installerPayload := []byte("helper"), []byte("installer")
-	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload)
-	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installerPayload, nil); err != nil {
+	qualification := []byte("qualification")
+	manifest := bundle.BuildManifest("0.1.0", "df23dc5ecdeb1ea65f020331c6281cb3776d8d34", "1.23.0", 0, helper, installerPayload, qualification)
+	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installerPayload, qualification, nil); err != nil {
 		t.Fatal(err)
 	}
 	if status, err := NewSandbox(paths, bundleRoot).Run("install"); err == nil || status != StatusInstallationInvalid {

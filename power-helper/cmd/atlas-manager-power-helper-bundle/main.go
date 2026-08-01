@@ -77,9 +77,11 @@ func build(version, sourceCommit, sourceDate, sourceRoot, outputDir, goVersion s
 	defer os.RemoveAll(buildDir)
 	helperPath := filepath.Join(buildDir, "atlas-manager-power-helper")
 	installerPath := filepath.Join(buildDir, "atlas-manager-power-helper-installer")
+	qualificationPath := filepath.Join(buildDir, "atlas-manager-power-helper-host-qualification")
 	for _, target := range []struct{ output, packagePath string }{
 		{helperPath, "./cmd/atlas-manager-power-helper"},
 		{installerPath, "./cmd/atlas-manager-power-helper-installer"},
+		{qualificationPath, "./cmd/atlas-manager-power-helper-host-qualification"},
 	} {
 		if err := runGoBuild(moduleRoot, target.output, target.packagePath, epoch); err != nil {
 			return err
@@ -93,7 +95,11 @@ func build(version, sourceCommit, sourceDate, sourceRoot, outputDir, goVersion s
 	if err != nil {
 		return err
 	}
-	manifest := bundle.BuildManifest(version, sourceCommit, goVersion, epoch, helper, installer)
+	qualification, err := os.ReadFile(qualificationPath)
+	if err != nil {
+		return err
+	}
+	manifest := bundle.BuildManifest(version, sourceCommit, goVersion, epoch, helper, installer, qualification)
 	if err := os.MkdirAll(bundleRoot, 0755); err != nil {
 		return err
 	}
@@ -101,7 +107,7 @@ func build(version, sourceCommit, sourceDate, sourceRoot, outputDir, goVersion s
 	if err != nil {
 		return err
 	}
-	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installer, documentation); err != nil {
+	if err := bundle.CreateDirectoryBundle(bundleRoot, manifest, helper, installer, qualification, documentation); err != nil {
 		return err
 	}
 	return bundle.CreateArchive(bundleRoot, archivePath, epoch)
@@ -117,11 +123,11 @@ func runGoBuild(moduleRoot, output, packagePath string, epoch uint64) error {
 func fixedBuildEnvironment(epoch uint64) []string {
 	result := make([]string, 0, len(os.Environ())+4)
 	for _, value := range os.Environ() {
-		if strings.HasPrefix(value, "CGO_ENABLED=") || strings.HasPrefix(value, "GOOS=") || strings.HasPrefix(value, "GOARCH=") || strings.HasPrefix(value, "SOURCE_DATE_EPOCH=") {
+		if strings.HasPrefix(value, "CGO_ENABLED=") || strings.HasPrefix(value, "GOOS=") || strings.HasPrefix(value, "GOARCH=") || strings.HasPrefix(value, "GOAMD64=") || strings.HasPrefix(value, "SOURCE_DATE_EPOCH=") {
 			continue
 		}
 		result = append(result, value)
 	}
-	result = append(result, "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64", fmt.Sprintf("SOURCE_DATE_EPOCH=%d", epoch))
+	result = append(result, "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64", "GOAMD64=v1", fmt.Sprintf("SOURCE_DATE_EPOCH=%d", epoch))
 	return result
 }
