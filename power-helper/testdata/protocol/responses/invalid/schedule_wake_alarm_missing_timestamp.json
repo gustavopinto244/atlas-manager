@@ -1,0 +1,1 @@
+{"version":1,"operation":"schedule_wake_alarm","outcome":"success","result":{"before":{"state":"not_scheduled"},"after":{"state":"scheduled"},"outcome":"scheduled"}}

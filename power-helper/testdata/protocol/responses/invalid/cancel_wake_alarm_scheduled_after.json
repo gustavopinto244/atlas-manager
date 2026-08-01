@@ -1,0 +1,1 @@
+{"version":1,"operation":"cancel_wake_alarm","outcome":"success","result":{"before":{"state":"scheduled","scheduledFor":"2026-08-02T09:00:00.000Z"},"after":{"state":"scheduled","scheduledFor":"2026-08-02T09:00:00.000Z"},"outcome":"cancelled"}}

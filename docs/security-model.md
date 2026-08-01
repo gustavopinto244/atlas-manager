@@ -1031,3 +1031,23 @@ The production helper remains uninstalled and the Atlas Manager composition
 remains mock-first. A deterministic, separately named fixture is used for
 cross-language tests; it is not selectable by the production executable and
 does not require RTC hardware in CI.
+
+## Wake-alarm mutation boundary
+
+ADR-007 permits only absolute epoch writes to the fixed
+`/sys/class/rtc/rtc0/wakealarm` attribute. Cancellation writes exactly `0\n`;
+relative syntax, caller-selected paths, commands, shells, subprocesses,
+systemd, D-Bus, and network access remain prohibited. Payloads are bounded to
+32 bytes and must be fully accepted by one write operation.
+
+Every read uses a shared lock and every mutation uses an exclusive, fail-fast
+lock at `/run/atlas-manager-power-helper.lock`. The lock must be a root-owned
+regular file with exact mode `0600`, one link, and no final-component symlink.
+Validation and RTC-to-system alignment occur before writing. Every write is
+followed by exact state verification. Replacement is deliberately non-atomic:
+if cancellation succeeds but scheduling or verification fails, the state is
+preserved and reported as failed without retry, rollback, or compensation.
+
+The helper remains uninstalled and the application remains mock-first. Shutdown
+continues to be unsupported, and tests inject narrow lock/filesystem ports
+instead of writing real sysfs.

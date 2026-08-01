@@ -1629,3 +1629,22 @@ system clock captured around the read before representing it as canonical UTC.
 
 The Issue #248 Go backend that observes fixed Linux RTC sysfs state and keeps
 all wake and shutdown mutation operations unsupported.
+
+### Wake-alarm mutation transaction
+
+A bounded helper operation that captures the current fixed RTC wake state,
+writes one absolute value, and verifies the resulting state while holding the
+required lock.
+
+### Wake-alarm operation lock
+
+The fixed nonblocking advisory lock at
+`/run/atlas-manager-power-helper.lock`. Reads acquire it shared; scheduling
+and cancellation acquire it exclusively. Busy or unsafe lock state fails
+closed.
+
+### Partial wake replacement
+
+The intentional state in which replacement successfully cancels the old alarm
+but fails before verifying the new alarm. The helper does not retry or restore
+the old value; a later authoritative read is required.

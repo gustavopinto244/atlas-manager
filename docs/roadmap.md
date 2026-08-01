@@ -551,3 +551,12 @@ bounded attributes, sysfs verification, canonical epoch parsing, and fixed
 RTC-to-system-clock alignment validation. Wake and shutdown mutations remain
 unsupported. The helper is not installed or wired into the application, and
 CI uses deterministic fixtures instead of host RTC hardware.
+
+## Issue #250 delivery notes
+
+Issue #250 advances v0.6 without completing it. ADR-007 adds fixed Linux
+wake-alarm scheduling and cancellation source code with nonblocking
+cross-process coordination, absolute epoch-only writes, read-before-write and
+read-after-write validation, idempotent outcomes, and explicit partial-effect
+failures. The helper is not installed or wired into Atlas Manager; shutdown
+and all HTTP behavior remain unchanged.

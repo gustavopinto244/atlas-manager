@@ -84,6 +84,19 @@ shutdown remain unsupported; the helper is not installed, setuid-enabled, or
 invoked by Atlas Manager. CI uses a separately named deterministic fixture and
 does not require RTC hardware.
 
+Issue #250 adds real wake-alarm scheduling and cancellation to the standalone
+helper source. It writes only absolute epoch values to the fixed
+`/sys/class/rtc/rtc0/wakealarm` attribute, uses `0\n` for cancellation, and
+performs RTC validation, read-before-write capture, bounded writes, and
+read-after-write verification under a fixed nonblocking lock at
+`/run/atlas-manager-power-helper.lock`. Replacements cancel before scheduling
+the new value and are intentionally non-atomic; failures preserve the actual
+state without retry or rollback. `request_shutdown` remains unsupported.
+
+The helper is still not installed, setuid-enabled, or connected to Atlas
+Manager. Existing HTTP routes remain mock-first and unchanged; CI uses
+deterministic lock/filesystem fixtures and never mutates host RTC hardware.
+
 ## v0.6 — Power management (active)
 
 The first three power-management vertical slices are mock-first. They provide

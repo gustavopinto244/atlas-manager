@@ -13,6 +13,7 @@ import (
 const (
 	MaxAttributeBytes = 128
 	MaxRTCClockSkew   = 300 * time.Second
+	MaxWriteBytes     = 32
 )
 
 var (
@@ -20,12 +21,15 @@ var (
 	ErrStateUnavailable  = errors.New("rtc state unavailable")
 	ErrWakeAlarmAbsent   = errors.New("rtc wake alarm absent")
 	ErrAttributeTooLarge = errors.New("rtc attribute too large")
+	ErrOperationRejected = errors.New("rtc operation rejected")
+	ErrOperationFailed   = errors.New("rtc operation failed")
 )
 
 type FileSystem interface {
 	CheckSysfs() error
 	ReadSinceEpoch() ([]byte, error)
 	ReadWakeAlarm() ([]byte, error)
+	WriteWakeAlarm([]byte) error
 }
 
 type Clock interface {
@@ -58,11 +62,7 @@ func NewReader(fileSystem FileSystem, clock Clock) Reader {
 }
 
 func (reader Reader) ReadRTCInformation() (Information, error) {
-	rtcTime, err := reader.readRTC()
-	if err != nil {
-		return Information{}, err
-	}
-	wakeAlarm, err := reader.readWakeAlarm()
+	rtcTime, wakeAlarm, err := reader.readRTCAndWakeAlarm()
 	if err != nil {
 		return Information{}, err
 	}
@@ -74,6 +74,131 @@ func (reader Reader) ReadWakeAlarm() (WakeAlarm, error) {
 		return WakeAlarm{}, err
 	}
 	return reader.readWakeAlarm()
+}
+
+func (reader Reader) readRTCAndWakeAlarm() (string, WakeAlarm, error) {
+	rtcTime, err := reader.readRTC()
+	if err != nil {
+		return "", WakeAlarm{}, err
+	}
+	wakeAlarm, err := reader.readWakeAlarm()
+	if err != nil {
+		return "", WakeAlarm{}, err
+	}
+	return rtcTime, wakeAlarm, nil
+}
+
+type Mutator struct {
+	reader Reader
+}
+
+func NewMutator(fileSystem FileSystem, clock Clock) Mutator {
+	return Mutator{reader: NewReader(fileSystem, clock)}
+}
+
+type Mutation struct {
+	Before  WakeAlarm
+	After   WakeAlarm
+	Outcome string
+}
+
+func (mutator Mutator) Schedule(scheduledFor string) (Mutation, error) {
+	rtcTime, err := mutator.reader.readRTC()
+	if err != nil {
+		return Mutation{}, err
+	}
+	requested, ok := parseCanonicalTimestamp(scheduledFor)
+	if !ok || !requested.After(parseRequiredTimestamp(rtcTime)) {
+		return Mutation{}, ErrOperationRejected
+	}
+	before, err := mutator.reader.readWakeAlarm()
+	if err != nil {
+		return Mutation{}, err
+	}
+	if before.State == protocol.WakeAlarmUnsupported {
+		return Mutation{}, ErrUnsupported
+	}
+	after := WakeAlarm{State: protocol.WakeAlarmScheduled, ScheduledFor: scheduledFor}
+	if before.State == protocol.WakeAlarmScheduled && before.ScheduledFor == scheduledFor {
+		return Mutation{Before: before, After: before, Outcome: "unchanged"}, nil
+	}
+	if before.State == protocol.WakeAlarmNotScheduled {
+		if err := mutator.writeAndVerify(after); err != nil {
+			return Mutation{}, err
+		}
+		return Mutation{Before: before, After: after, Outcome: "scheduled"}, nil
+	}
+	if err := mutator.writeAndVerify(WakeAlarm{State: protocol.WakeAlarmNotScheduled}); err != nil {
+		return Mutation{}, err
+	}
+	if err := mutator.writeAndVerify(after); err != nil {
+		return Mutation{}, err
+	}
+	return Mutation{Before: before, After: after, Outcome: "replaced"}, nil
+}
+
+func (mutator Mutator) Cancel() (Mutation, error) {
+	if _, err := mutator.reader.readRTC(); err != nil {
+		return Mutation{}, err
+	}
+	before, err := mutator.reader.readWakeAlarm()
+	if err != nil {
+		return Mutation{}, err
+	}
+	if before.State == protocol.WakeAlarmUnsupported {
+		return Mutation{}, ErrUnsupported
+	}
+	if before.State == protocol.WakeAlarmNotScheduled {
+		return Mutation{Before: before, After: before, Outcome: "not_scheduled"}, nil
+	}
+	if err := mutator.writeAndVerify(WakeAlarm{State: protocol.WakeAlarmNotScheduled}); err != nil {
+		return Mutation{}, err
+	}
+	return Mutation{Before: before, After: WakeAlarm{State: protocol.WakeAlarmNotScheduled}, Outcome: "cancelled"}, nil
+}
+
+func (mutator Mutator) writeAndVerify(expected WakeAlarm) error {
+	payload := []byte("0\n")
+	if expected.State == protocol.WakeAlarmScheduled {
+		var ok bool
+		payload, ok = epochPayload(expected.ScheduledFor)
+		if !ok {
+			return ErrOperationRejected
+		}
+	}
+	if len(payload) > MaxWriteBytes {
+		return ErrOperationFailed
+	}
+	if err := mutator.reader.fileSystem.WriteWakeAlarm(payload); err != nil {
+		return ErrOperationFailed
+	}
+	observed, err := mutator.reader.readWakeAlarm()
+	if err != nil || observed.State != expected.State || (expected.State == protocol.WakeAlarmScheduled && observed.ScheduledFor != expected.ScheduledFor) {
+		return ErrOperationFailed
+	}
+	return nil
+}
+
+func parseCanonicalTimestamp(value string) (time.Time, bool) {
+	if !protocol.IsCanonicalTimestamp(value) {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(protocolTimestampLayout, value)
+	return parsed.UTC(), err == nil
+}
+
+func parseRequiredTimestamp(value string) time.Time {
+	parsed, _ := parseCanonicalTimestamp(value)
+	return parsed
+}
+
+func epochPayload(value string) ([]byte, bool) {
+	parsed, ok := parseCanonicalTimestamp(value)
+	if !ok {
+		return nil, false
+	}
+	payload := []byte(strconv.FormatInt(parsed.Unix(), 10) + "\n")
+	return payload, len(payload) <= MaxWriteBytes
 }
 
 func (reader Reader) readRTC() (string, error) {

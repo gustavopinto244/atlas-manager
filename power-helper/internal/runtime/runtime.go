@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/backend"
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/lock"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/privilege"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
@@ -47,6 +48,10 @@ func RunProcess() (exitCode int) {
 		}
 	}()
 	startup := privilege.CurrentStartupDependencies(len(os.Args))
-	operations := backend.NewReadOnly(rtc.NewReader(rtc.LinuxFileSystem{}, rtc.SystemClock{}))
+	fileSystem := rtc.LinuxFileSystem{}
+	clock := rtc.SystemClock{}
+	reader := rtc.NewReader(fileSystem, clock)
+	mutator := rtc.NewMutator(fileSystem, clock)
+	operations := backend.NewLinuxOperations(reader, mutator, lock.NewFixedFileLock())
 	return Run(os.Stdin, os.Stdout, startup, operations)
 }
