@@ -5,14 +5,16 @@ Atlas Manager Linux power helper. It does not install anything automatically.
 
 ## Supported bundle
 
-Issue #254 produces only `linux/amd64` bundles with `CGO_ENABLED=0`. The
+Issue #254 produces only `linux/amd64` bundles with `GOAMD64=v1` and
+`CGO_ENABLED=0`. The
 package version and `SOURCE_DATE_EPOCH` are explicit build inputs. A detached
 SHA-256 file verifies integrity, but a checksum stored beside an artifact does
 not prove authenticity; retain the reviewed source commit and use a separately
 reviewed signature or provenance attestation when that gate is available.
 
-The archive contains one directory with the helper, installer, manifest,
-checksums, licenses, and this documentation. It does not contain the fixture,
+The archive contains one directory with the helper, installer, qualification
+utility, manifest, checksums, licenses, and this documentation. It does not
+contain the fixture,
 source tree, secrets, or Node.js dependencies.
 
 ## Prerequisite group
@@ -84,3 +86,13 @@ behavior, or systemd-logind host. It does not enable Atlas Manager production
 wiring or HTTP effects. Host qualification, installation recovery drills,
 application-user enrollment, and production activation require later reviewed
 Issues.
+
+The qualification utility is read-only and uses the same unpacked bundle:
+
+```bash
+sudo ./bin/atlas-manager-power-helper-host-qualification qualify
+```
+
+After installation run `verify-disabled-installation`; after explicit
+uninstallation run `verify-removed`. The utility never installs, executes,
+repairs, or activates the helper, and the local helper group must remain empty.

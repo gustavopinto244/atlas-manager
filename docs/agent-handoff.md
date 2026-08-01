@@ -14,7 +14,8 @@ The authoritative PR #253 merge baseline in this checkout is:
 df23dc5ecdeb1ea65f020331c6281cb3776d8d34
 ```
 
-Issue #254 adds ADR-009, a deterministic `linux/amd64`/CGO-disabled bundle,
+Issue #254 adds ADR-009, a deterministic `linux/amd64` bundle with
+`GOAMD64=v1` and `CGO_ENABLED=0`,
 strict manifest and executable checksums, an operator-only Go installer, the
 fixed empty-group prerequisite, atomic installation state, verification,
 upgrade, recovery, rollback, and uninstall documentation. The installer uses
@@ -596,3 +597,31 @@ Authorization events and event-history query results use the same persistent
 event-history instance. Successful reads can therefore include their own
 authorization event. Malformed queries and admission-limit rejections do not
 create authorization events.
+
+## Current work — Issue #256
+
+The active branch is:
+
+```
+feat/linux-power-helper-host-qualification
+```
+
+The authoritative merged PR #255 baseline for this work is
+`e6d36bf84969d177303c5a64f68ecb544c9dba8b`.
+
+This delivery adds ADR-010 and a fixed-resource, read-only host qualification
+executable with `qualify`, `verify-disabled-installation`, and
+`verify-removed`. It requires effective UID zero but performs no
+installation, group change, helper execution, sysfs write, lock creation,
+`PowerOff` call, or child process. The qualification executable is
+included in the deterministic bundle without setuid metadata. Atlas Manager
+remains mock-first and live host evidence must stay outside source control.
+
+Validation for this branch used Node.js 24.18.0, npm 11.16.0, and Go
+1.23.0 linux/amd64 with `GOAMD64=v1`. The Go module passed formatting, module verification,
+vet, tests, and Linux builds; the deterministic bundle was reproduced twice
+with package version `0.1.1` and `SOURCE_DATE_EPOCH=1722470400`.
+Both bundle archives hashed to
+`11a5e5ce538e07a275e3b4d6f1d31eb4ff2d1b7f8283f4ec2aad755c478da795`.
+No host installation, group modification, setuid change, helper execution,
+RTC access, D-Bus operation, wake effect, or shutdown occurred.

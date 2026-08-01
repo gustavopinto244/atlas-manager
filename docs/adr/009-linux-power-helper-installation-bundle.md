@@ -10,6 +10,11 @@ installer, a strict manifest, SHA-256 checksums, license texts, and the
 installation runbook. Installation is explicit and remains outside npm,
 Atlas Manager startup, CI, and the application composition.
 
+The bundle also carries the separate read-only host-qualification executable.
+It is not installed into `/usr/local/libexec` and never receives setuid
+metadata; it remains beside the bundle for operator inspection and disabled
+installation verification.
+
 The installer accepts only `inspect-bundle`, `install`, `verify`, and
 `uninstall`. It discovers the bundle beside its own executable and uses only
 the fixed production paths. Mutation requires effective UID zero. The local
@@ -33,7 +38,8 @@ rejected.
 
 The package version, source commit, and canonical nonnegative
 `SOURCE_DATE_EPOCH` are explicit inputs. Go builds use `CGO_ENABLED=0`,
-`GOOS=linux`, `GOARCH=amd64`, `-trimpath`, and `-buildvcs=false`. Archive
+`GOOS=linux`, `GOARCH=amd64`, `GOAMD64=v1`, `-trimpath`, and `-buildvcs=false`.
+The manifest records `goamd64: "v1"` and rejects any other baseline. Archive
 ordering, ownership, modes, timestamps, and gzip metadata are normalized.
 Checksums protect integrity only; a detached checksum stored beside an archive
 does not establish authenticity. Release signing or provenance attestation is

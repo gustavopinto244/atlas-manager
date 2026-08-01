@@ -575,3 +575,12 @@ authentication, a three-second deadline, exclusive operation locking, safe
 unsupported/rejected/failed mappings, and uncertain-acceptance handling. The
 helper is still not installed or production-wired; Atlas Manager remains
 mock-first and no HTTP or real host effect is activated.
+
+## Issue #256 delivery notes
+
+Issue #256 adds capability-based Linux host qualification and a documented
+disabled-installation drill. The utility is read-only, requires effective
+root, inspects fixed Linux/RTC/system-bus resources, validates an empty helper
+group, and emits bounded reports. It does not install or execute the helper,
+enroll users, call logind `PowerOff`, test firmware wake behavior, or enable
+Atlas Manager. Operational evidence remains outside source control.
