@@ -23,9 +23,9 @@ contains historical design detail; statements about an earlier milestone do
 not override the current implementation or matrix.
 
 The broader administrative API and dashboard remain future delivery work. The
-health endpoints remain unauthenticated, and the only administrative route is
-the explicitly protected, read-only event-history route described below; no
-administrative Docker endpoint has been added.
+health endpoints remain unauthenticated, and the administrative routes are
+explicitly protected and gated; no administrative Docker endpoint has been
+added.
 
 The first protected administrative HTTP slice is now available behind an
 explicit deployment gate: `GET /admin/event-history`. It is disabled unless
@@ -45,8 +45,19 @@ restrictive security headers. The route admits at most 60 requests per
 60-second process-local window and four concurrently, without IP or proxy
 headers, and grants no CORS permission.
 
-Only event-history reads are exposed. There are still no HTTP power mutation
-routes, no helper activation, and no real RTC or machine power effect.
+Only event-history reads and the mock-first wake-alarm lifecycle are exposed.
+There are still no shutdown or scheduler HTTP routes, no helper activation,
+and no real RTC or machine power effect.
+
+The mock-first wake-alarm lifecycle is separately available behind
+`ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true`. It requires the same loopback,
+Cloudflare Access, persistent event-history, and trusted role configuration,
+with at least a `power_operator` or `administrator`. The exact resource is
+`/admin/power/wake-alarm` with `GET`, `PUT`, and `DELETE`; `GET` observes the
+mock alarm, `PUT` sets a future canonical `scheduledFor`, and `DELETE` is
+idempotent. Wake requests share the administrative rate and concurrency limits,
+while PUT and DELETE share one fail-fast mutation slot. There is no CORS,
+helper activation, real RTC access, or real machine power effect.
 
 ## v0.6 — Power management (active)
 
@@ -200,7 +211,8 @@ attempts use `administrative/unauthenticated`. Authorization does not replace
 explicit shutdown confirmation. The Issue #236 mock-first feature had no HTTP
 routes, credentials, sessions, tokens, production identity provider, real
 helper activation, or real machine effects; Issues #238 and #240 now add the
-Cloudflare identity foundation and the protected read-only event-history route.
+Cloudflare identity foundation, protected event-history delivery, and the
+mock-first wake-alarm route.
 
 ## Capability history and planned work
 
@@ -2450,5 +2462,5 @@ bound, cached in memory for ten minutes, refreshed once for an unknown key ID,
 and protected by a thirty-second failed-fetch cooldown. Missing configuration
 keeps the existing deny-all authenticator and performs no network request.
 Tokens, claims, emails, headers, and keys are never logged, persisted, or
-returned in authentication results. No administrative route, cookie fallback,
-session, production helper activation, or real power effect is included.
+returned in authentication results. No shutdown route, cookie fallback, session,
+production helper activation, or real power effect is included.

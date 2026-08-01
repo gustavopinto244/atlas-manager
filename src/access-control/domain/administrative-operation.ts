@@ -2,6 +2,7 @@ import type { AdministrativePermission } from "./administrative-permission.js";
 import type { AdministrativeRole } from "./administrative-role.js";
 
 export const ADMINISTRATIVE_OPERATIONS = Object.freeze([
+  "read_wake_alarm",
   "schedule_wake_alarm",
   "cancel_wake_alarm",
   "request_machine_shutdown",
@@ -18,6 +19,7 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
   Record<AdministrativeRole, readonly AdministrativePermission[]>
 > = Object.freeze({
   power_operator: Object.freeze([
+    "power.wake.read",
     "power.wake.schedule",
     "power.wake.cancel",
     "power.shutdown.request",
@@ -29,6 +31,7 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
   ] as AdministrativePermission[]),
   auditor: Object.freeze(["event_history.read"] as AdministrativePermission[]),
   administrator: Object.freeze([
+    "power.wake.read",
     "power.wake.schedule",
     "power.wake.cancel",
     "power.shutdown.request",
@@ -42,6 +45,7 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
 const OPERATION_PERMISSIONS: Readonly<
   Record<AdministrativeOperation, AdministrativePermission>
 > = Object.freeze({
+  read_wake_alarm: "power.wake.read",
   schedule_wake_alarm: "power.wake.schedule",
   cancel_wake_alarm: "power.wake.cancel",
   request_machine_shutdown: "power.shutdown.request",

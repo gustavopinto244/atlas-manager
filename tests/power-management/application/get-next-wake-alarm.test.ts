@@ -48,4 +48,14 @@ describe("GetNextWakeAlarm", () => {
 
     expect(reader.read).not.toHaveBeenCalled();
   });
+
+  it("uses an explicitly supplied timestamp without reading the clock", async () => {
+    const clock = createClock();
+    const reader: WakeAlarmReader = { read: vi.fn().mockResolvedValue(RESULT) };
+    const useCase = new GetNextWakeAlarm(clock, reader);
+
+    await expect(useCase.executeAt(OBSERVED_AT)).resolves.toBe(RESULT);
+    expect(clock.now).not.toHaveBeenCalled();
+    expect(reader.read).toHaveBeenCalledWith(OBSERVED_AT);
+  });
 });

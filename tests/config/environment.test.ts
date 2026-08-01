@@ -13,6 +13,19 @@ describe("parseEnvironment", () => {
     );
   });
 
+  it("keeps wake-alarm HTTP disabled by default", () => {
+    expect(parseEnvironment({}).administrativeWakeAlarmHttpEnabled).toBe(false);
+  });
+
+  it.each(["1", "0", "yes", "no", "TRUE", "False", "", " true"])(
+    "rejects non-canonical wake-alarm HTTP boolean %s",
+    (enabled) => {
+      expect(() =>
+        parseEnvironment({ ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: enabled }),
+      ).toThrow();
+    },
+  );
+
   it.each(["1", "0", "yes", "no", "TRUE", "False", "", " true"])(
     "rejects non-canonical administrative HTTP boolean %s",
     (enabled) => {
@@ -52,6 +65,44 @@ describe("parseEnvironment", () => {
         roles: ["auditor"],
       },
     ]);
+  });
+
+  it("accepts wake-alarm HTTP independently with a power operator", () => {
+    const config = parseEnvironment({
+      HOST: "127.0.0.1",
+      CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+      CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "true",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE:
+        "/var/lib/atlas-manager/admin-events.jsonl",
+      ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+        {
+          principalId: "00000000-0000-4000-8000-000000000001",
+          roles: ["power_operator"],
+        },
+      ]),
+    });
+    expect(config.administrativeWakeAlarmHttpEnabled).toBe(true);
+    expect(config.administrativeEventHistoryHttpEnabled).toBe(false);
+  });
+
+  it("requires a power-capable role when wake-alarm HTTP is enabled", () => {
+    expect(() =>
+      parseEnvironment({
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+        ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "true",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/admin-events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          {
+            principalId: "00000000-0000-4000-8000-000000000001",
+            roles: ["auditor"],
+          },
+        ]),
+      }),
+    ).toThrow();
   });
 
   it.each([
@@ -146,6 +197,7 @@ describe("parseEnvironment", () => {
       port: 3000,
       logLevel: "info",
       administrativeEventHistoryHttpEnabled: false,
+      administrativeWakeAlarmHttpEnabled: false,
     });
     expect(
       config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
@@ -167,6 +219,7 @@ describe("parseEnvironment", () => {
       port: 8080,
       logLevel: "info",
       administrativeEventHistoryHttpEnabled: false,
+      administrativeWakeAlarmHttpEnabled: false,
     });
   });
 

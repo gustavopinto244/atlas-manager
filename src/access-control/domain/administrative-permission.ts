@@ -1,4 +1,5 @@
 export const ADMINISTRATIVE_PERMISSIONS = Object.freeze([
+  "power.wake.read",
   "power.wake.schedule",
   "power.wake.cancel",
   "power.shutdown.request",

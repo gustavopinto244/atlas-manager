@@ -305,6 +305,43 @@ describe("administrative access-control foundation", () => {
     ).rejects.toMatchObject({ code: "administrative_authorization_denied" });
   });
 
+  it("protects wake-alarm reads with one shared authorization timestamp", async () => {
+    const history = createEventHistory();
+    const configured = access(["power_operator"]);
+    const reader = vi.fn(async (observedAt: string) => ({
+      observedAt,
+      wakeAlarm: { state: "not_scheduled" as const },
+    }));
+    const power = createPowerManagement({
+      clock: clock(),
+      administrativeEventHistoryCapabilities: history,
+      wakeAlarmReader: { read: reader },
+    });
+    const protectedAdministration = createProtectedAdministration({
+      accessControl: configured.capabilities,
+      powerManagement: power,
+      eventHistory: history,
+      clock: clock(),
+    });
+
+    await expect(
+      protectedAdministration.getNextWakeAlarm.execute(),
+    ).resolves.toMatchObject({
+      observedAt: NOW,
+      wakeAlarm: { state: "not_scheduled" },
+    });
+    expect(reader).toHaveBeenCalledWith(NOW);
+    const events = await history.getAdministrativeEventHistory.execute();
+    expect(events.events.map((event) => event.operation)).toEqual([
+      "authorize_administrative_operation",
+    ]);
+    expect(events.events[0]?.details).toMatchObject({
+      requestedOperation: "read_wake_alarm",
+      permission: "power.wake.read",
+      decision: "allowed",
+    });
+  });
+
   it("audits a manual scheduler tick as the administrator", async () => {
     const history = createEventHistory();
     const configured = access(["scheduler_operator"]);

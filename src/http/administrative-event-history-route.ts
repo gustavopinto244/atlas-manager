@@ -14,9 +14,16 @@ import {
   mapAdministrativeEventHistoryResponse,
   type AdministrativeEventHistoryHttpResponse,
 } from "./administrative-event-history-response.js";
+import {
+  ADMINISTRATIVE_MAX_REQUEST_TARGET_BYTES,
+  mapAdministrativeAccessControlError,
+  setAdministrativeSecurityHeaders,
+  validateAdministrativeRequestTarget,
+} from "./administrative-http.js";
 
 export const ADMINISTRATIVE_EVENT_HISTORY_ROUTE = "/admin/event-history";
-export const ADMINISTRATIVE_EVENT_HISTORY_MAX_URL_BYTES = 4_096;
+export const ADMINISTRATIVE_EVENT_HISTORY_MAX_URL_BYTES =
+  ADMINISTRATIVE_MAX_REQUEST_TARGET_BYTES;
 export const ADMINISTRATIVE_EVENT_HISTORY_MAX_RESPONSE_BYTES = 1_048_576;
 
 export interface ProtectedAdministrativeEventHistoryQuery {
@@ -75,7 +82,7 @@ async function processRequest(
       response.setHeader("Allow", "GET");
       throw new HttpError(405, "method_not_allowed", "Method Not Allowed");
     }
-    validateRequestTarget(request.url);
+    validateAdministrativeRequestTarget(request.url);
     validateRequestBody(request);
     const query = parseAdministrativeEventHistoryQuery(request.url);
     const reader = createAssertionReader(request);
@@ -93,14 +100,6 @@ function createAssertionReader(
   request: Parameters<RequestHandler>[0],
 ): CloudflareAccessAssertionReader {
   return createCloudflareAccessAssertionReader(request);
-}
-
-function validateRequestTarget(requestTarget: string): void {
-  if (
-    Buffer.byteLength(requestTarget, "utf8") >
-    ADMINISTRATIVE_EVENT_HISTORY_MAX_URL_BYTES
-  )
-    throw new HttpError(414, "uri_too_long", "URI Too Long");
 }
 
 function validateRequestBody(request: Parameters<RequestHandler>[0]): void {
@@ -139,54 +138,18 @@ function mapAdministrativeEventHistoryError(error: unknown): HttpError {
       "invalid_administrative_event_history_query",
       "Invalid administrative event-history query",
     );
-  if (error instanceof AdministrativeAccessControlError) {
-    if (error.code === "administrative_authentication_required")
-      return new HttpError(
-        401,
-        "administrative_authentication_required",
-        "Administrative authentication required",
-      );
-    if (error.code === "administrative_authorization_denied")
-      return new HttpError(
-        403,
-        "administrative_authorization_denied",
-        "Administrative authorization denied",
-      );
-    if (error.code === "administrative_identity_unavailable")
-      return new HttpError(
-        503,
-        "administrative_identity_unavailable",
-        "Administrative identity unavailable",
-      );
-    if (error.code === "authorization_audit_unavailable")
-      return new HttpError(
-        503,
-        "authorization_audit_unavailable",
-        "Authorization audit unavailable",
-      );
-    if (error.code === "protected_operation_failed")
+  const accessError = mapAdministrativeAccessControlError(error);
+  if (accessError !== undefined) {
+    if (
+      error instanceof AdministrativeAccessControlError &&
+      error.code === "protected_operation_failed"
+    )
       return new HttpError(
         503,
         "administrative_event_history_unavailable",
         "Administrative event history unavailable",
       );
-    return new HttpError(
-      503,
-      "administrative_authorization_unavailable",
-      "Administrative authorization unavailable",
-    );
+    return accessError;
   }
   return new HttpError(500, "internal_error", "Internal server error");
-}
-
-function setAdministrativeSecurityHeaders(response: Response): void {
-  response.setHeader("Cache-Control", "no-store, private");
-  response.setHeader("Pragma", "no-cache");
-  response.setHeader("X-Content-Type-Options", "nosniff");
-  response.setHeader("Referrer-Policy", "no-referrer");
-  response.setHeader("X-Frame-Options", "DENY");
-  response.setHeader(
-    "Content-Security-Policy",
-    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
-  );
 }

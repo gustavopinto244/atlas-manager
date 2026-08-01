@@ -749,3 +749,35 @@ response bound, and restrictive no-store response headers. It does not enable
 Express `trust proxy`, use client IPs, add CORS, expose a bearer challenge, or
 register power-management routes. Health routes remain independent of this
 composition and of Cloudflare or event-history availability.
+
+### Protected wake-alarm delivery
+
+Issue #242 adds the bounded mock-first wake-alarm resource:
+
+```text
+wake-alarm HTTP handler
+        ↓
+request-scoped Cloudflare provider
+        ↓
+request-scoped access control
+        ↓
+protected administration facade
+        ↓
+shared mock-first power composition
+        ↓
+shared persistent event history
+```
+
+`GET`, `PUT`, and `DELETE /admin/power/wake-alarm` are registered only when
+`ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true`. Both administrative routes
+share one clock, verifier/JWKS cache, role reader, event-history store, power
+composition, global admission, and wake mutation gate. Each request still
+creates its own assertion reader, authentication provider, access control, and
+protected facade. Handlers invoke only operation-specific protected
+capabilities and never call power adapters directly.
+
+GET uses the protected authorization timestamp for the wake observation. PUT
+and DELETE preserve authorization, started, effect, and terminal event order.
+A terminal audit failure leaves mock state authoritative and requires a later
+GET recheck; no retry or rollback is performed. No RTC hardware or machine
+power effect is enabled.

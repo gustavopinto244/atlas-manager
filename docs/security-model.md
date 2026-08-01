@@ -940,6 +940,35 @@ without authentication or audit work. Responses are bounded to 1 MiB and
 include `no-store`, `nosniff`, no-referrer, deny-framing, and restrictive CSP
 headers. CORS permissions and bearer challenges are intentionally absent.
 
-Only event-history reads are exposed. Wake, shutdown, preparation, execution,
-and scheduler routes remain absent, and no helper or real machine effect is
-activated by this delivery.
+Event-history reads and the mock-first wake-alarm lifecycle are exposed.
+Shutdown, preparation, execution, and scheduler routes remain absent, and no
+helper or real machine effect is activated by this delivery.
+
+## Protected wake-alarm HTTP delivery
+
+Issue #242 adds `GET`, `PUT`, and `DELETE /admin/power/wake-alarm` behind the
+separate `ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED` gate. Enabling either
+administrative surface requires exact loopback binding, paired Cloudflare
+configuration, persistent event history, and trusted role assignments. Wake
+delivery additionally requires a `power_operator` or `administrator`; an
+auditor or scheduler operator is not granted wake access.
+
+The read permission is `power.wake.read` and maps only to `read_wake_alarm`.
+Wake requests use no query parameters, reject bodies on GET and DELETE, bound
+PUT JSON to 512 UTF-8 bytes, and accept only the two exact JSON content types.
+PUT sets a future canonical timestamp and DELETE remains idempotent. The
+existing mock state is the only target effect.
+
+All administrative routes share one process-local admission budget of 60
+requests per 60 seconds and four concurrent requests. PUT and DELETE share a
+single fail-fast mutation gate. Admission and validation happen before
+authentication, so malformed, limited, or busy requests do not fill the audit
+history. Accepted requests authenticate, authorize, record the decision, and
+then invoke the protected capability. Authorization audit failure prevents the
+target; terminal audit failure preserves a completed mock mutation and returns
+a state-recheck error without compensation.
+
+Wake responses are explicit, bounded, non-cacheable, and use the same
+restrictive headers as event history. No CORS, ETag, bearer challenge, trusted
+proxy, client-IP security, helper activation, real RTC access, or real power
+effect is introduced.

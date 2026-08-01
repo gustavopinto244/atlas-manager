@@ -510,3 +510,13 @@ Update this roadmap when:
 Do not use this roadmap as a substitute for acceptance criteria.
 
 Every implementation task must still be represented by a scoped GitHub Issue.
+
+## Issue #242 delivery notes
+
+The protected mock-first wake-alarm lifecycle advances v0.6 and v0.9 without
+completing either milestone. It adds `power.wake.read`, the protected
+`read_wake_alarm` operation, authenticated and authorization-audited GET/PUT/
+DELETE delivery, strict request and response bounds, shared administrative
+admission, and fail-fast mutation concurrency. Persistent audit history and
+real-helper activation prerequisites remain required; no RTC or machine power
+effect is enabled.

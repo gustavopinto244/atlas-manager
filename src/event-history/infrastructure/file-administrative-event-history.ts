@@ -301,9 +301,14 @@ export class FileAdministrativeEventHistory
           "event_history_corrupted",
         );
       const prior = attemptStatuses.get(event.attemptId) ?? [];
+      const isSingleAuthorizationEvent =
+        event.operation === "authorize_administrative_operation" &&
+        (event.status === "succeeded" || event.status === "rejected");
       if (
         prior.length > 1 ||
-        (prior.length === 0 && event.status !== "started") ||
+        (prior.length === 0 &&
+          event.status !== "started" &&
+          !isSingleAuthorizationEvent) ||
         (prior.length === 1 && event.status === "started")
       )
         throw new FileAdministrativeEventHistoryError(

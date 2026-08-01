@@ -171,6 +171,30 @@ describe("administrative event domain", () => {
         operation: "authorize_administrative_operation",
         status: "succeeded",
         details: {
+          requestedOperation: "read_wake_alarm",
+          permission: "power.wake.read",
+          decision: "allowed",
+        },
+      }),
+    ).toBeTruthy();
+    expect(() =>
+      createAdministrativeEventInput({
+        ...common,
+        operation: "authorize_administrative_operation",
+        status: "succeeded",
+        details: {
+          requestedOperation: "read_wake_alarm",
+          permission: "power.wake.schedule",
+          decision: "allowed",
+        },
+      }),
+    ).toThrow();
+    expect(
+      createAdministrativeEventInput({
+        ...common,
+        operation: "authorize_administrative_operation",
+        status: "succeeded",
+        details: {
           requestedOperation: "schedule_wake_alarm",
           permission: "power.wake.schedule",
           decision: "allowed",
