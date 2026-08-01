@@ -74,6 +74,16 @@ idempotent. Wake requests share the administrative rate and concurrency limits,
 while PUT and DELETE share one fail-fast mutation slot. There is no CORS,
 helper activation, real RTC access, or real machine power effect.
 
+Issue #248 adds read-only Linux RTC observation to the standalone helper
+source, not to the application composition. The production helper uses only
+fixed `rtc0` sysfs attributes, verifies `/sys` is sysfs, bounds each read to
+128 bytes, and checks RTC time against the system clock within 300 seconds
+before labeling values as UTC. Missing support is reported as unsupported and
+uncertain or malformed state fails closed. Wake scheduling, cancellation, and
+shutdown remain unsupported; the helper is not installed, setuid-enabled, or
+invoked by Atlas Manager. CI uses a separately named deterministic fixture and
+does not require RTC hardware.
+
 ## v0.6 — Power management (active)
 
 The first three power-management vertical slices are mock-first. They provide

@@ -49,14 +49,37 @@ func (r Request) HasSchedule() bool {
 }
 
 type Response struct {
-	Version   int       `json:"version"`
-	Operation Operation `json:"operation"`
-	Outcome   string    `json:"outcome"`
-	Code      string    `json:"code"`
+	Version   int
+	Operation Operation
+	Outcome   string
+	Code      string
+	Result    *ResponseResult
 }
+
+type ResponseResult struct {
+	RTCInformation *RTCInformationResult
+	WakeAlarm      *WakeAlarmResult
+}
+
+type RTCInformationResult struct {
+	RTCTime   string
+	WakeAlarm WakeAlarmResult
+}
+
+type WakeAlarmResult struct {
+	State        string `json:"state"`
+	ScheduledFor string `json:"scheduledFor,omitempty"`
+}
+
+const (
+	WakeAlarmUnsupported  = "unsupported"
+	WakeAlarmNotScheduled = "not_scheduled"
+	WakeAlarmScheduled    = "scheduled"
+)
 
 var (
 	ErrInvalidInput     = errors.New("invalid helper input")
+	ErrInvalidResponse  = errors.New("invalid helper response")
 	ErrResponseTooLarge = errors.New("helper response too large")
 )
 
@@ -118,10 +141,59 @@ func ParseRequestLine(input []byte) (Request, error) {
 }
 
 func RejectingResponse(request Request) Response {
-	return Response{Version: Version, Operation: request.Operation, Outcome: "rejected", Code: "operation_unsupported"}
+	response, err := NewFailureResponse(request.Operation, "rejected", "operation_unsupported")
+	if err != nil {
+		return Response{}
+	}
+	return response
+}
+
+func NewFailureResponse(operation Operation, outcome string, code string) (Response, error) {
+	response := Response{Version: Version, Operation: operation, Outcome: outcome, Code: code}
+	if err := validateResponse(response); err != nil {
+		return Response{}, err
+	}
+	return response, nil
+}
+
+func NewWakeAlarmResult(state string, scheduledFor string) (WakeAlarmResult, error) {
+	result := WakeAlarmResult{State: state, ScheduledFor: scheduledFor}
+	if err := validateWakeAlarmResult(result); err != nil {
+		return WakeAlarmResult{}, err
+	}
+	return result, nil
+}
+
+func NewReadRTCInformationSuccess(rtcTime string, wakeAlarm WakeAlarmResult) (Response, error) {
+	response := Response{
+		Version:   Version,
+		Operation: ReadRTCInformation,
+		Outcome:   "success",
+		Result:    &ResponseResult{RTCInformation: &RTCInformationResult{RTCTime: rtcTime, WakeAlarm: wakeAlarm}},
+	}
+	if err := validateResponse(response); err != nil {
+		return Response{}, err
+	}
+	return response, nil
+}
+
+func NewReadWakeAlarmSuccess(wakeAlarm WakeAlarmResult) (Response, error) {
+	response := Response{
+		Version:   Version,
+		Operation: ReadWakeAlarm,
+		Outcome:   "success",
+		Result:    &ResponseResult{WakeAlarm: &wakeAlarm},
+	}
+	if err := validateResponse(response); err != nil {
+		return Response{}, err
+	}
+	return response, nil
 }
 
 func MarshalResponse(response Response) ([]byte, error) {
+	if err := validateResponse(response); err != nil {
+		return nil, err
+	}
 	encoded, err := json.Marshal(response)
 	if err != nil {
 		return nil, ErrResponseTooLarge
@@ -131,6 +203,120 @@ func MarshalResponse(response Response) ([]byte, error) {
 		return nil, ErrResponseTooLarge
 	}
 	return encoded, nil
+}
+
+func (r Response) MarshalJSON() ([]byte, error) {
+	if err := validateResponse(r); err != nil {
+		return nil, err
+	}
+	if r.Outcome == "success" {
+		if r.Operation == ReadRTCInformation {
+			return json.Marshal(struct {
+				Version   int                      `json:"version"`
+				Operation Operation                `json:"operation"`
+				Outcome   string                   `json:"outcome"`
+				Result    RTCInformationResultJSON `json:"result"`
+			}{
+				Version: r.Version, Operation: r.Operation, Outcome: r.Outcome,
+				Result: RTCInformationResultJSON{
+					RTCTime:   r.Result.RTCInformation.RTCTime,
+					WakeAlarm: r.Result.RTCInformation.WakeAlarm,
+				},
+			})
+		}
+		return json.Marshal(struct {
+			Version   int             `json:"version"`
+			Operation Operation       `json:"operation"`
+			Outcome   string          `json:"outcome"`
+			Result    WakeAlarmResult `json:"result"`
+		}{
+			Version: r.Version, Operation: r.Operation, Outcome: r.Outcome,
+			Result: r.Result.WakeAlarmValue(),
+		})
+	}
+	return json.Marshal(struct {
+		Version   int       `json:"version"`
+		Operation Operation `json:"operation"`
+		Outcome   string    `json:"outcome"`
+		Code      string    `json:"code"`
+	}{Version: r.Version, Operation: r.Operation, Outcome: r.Outcome, Code: r.Code})
+}
+
+type RTCInformationResultJSON struct {
+	RTCTime   string          `json:"rtcTime"`
+	WakeAlarm WakeAlarmResult `json:"wakeAlarm"`
+}
+
+func (r *ResponseResult) WakeAlarmValue() WakeAlarmResult {
+	if r == nil || r.WakeAlarm == nil {
+		return WakeAlarmResult{}
+	}
+	return *r.WakeAlarm
+}
+
+func validateResponse(response Response) error {
+	if response.Version != Version || !isKnownOperation(response.Operation) {
+		return ErrInvalidResponse
+	}
+	if response.Outcome == "success" {
+		if response.Code != "" || response.Result == nil {
+			return ErrInvalidResponse
+		}
+		switch response.Operation {
+		case ReadRTCInformation:
+			if response.Result.RTCInformation == nil || response.Result.WakeAlarm != nil {
+				return ErrInvalidResponse
+			}
+			if !IsCanonicalTimestamp(response.Result.RTCInformation.RTCTime) {
+				return ErrInvalidResponse
+			}
+			return validateWakeAlarmResult(response.Result.RTCInformation.WakeAlarm)
+		case ReadWakeAlarm:
+			if response.Result.WakeAlarm == nil || response.Result.RTCInformation != nil {
+				return ErrInvalidResponse
+			}
+			return validateWakeAlarmResult(*response.Result.WakeAlarm)
+		default:
+			return ErrInvalidResponse
+		}
+	}
+	if response.Outcome != "rejected" && response.Outcome != "failed" {
+		return ErrInvalidResponse
+	}
+	if response.Code == "" || response.Result != nil || !isFailureCode(response.Code) {
+		return ErrInvalidResponse
+	}
+	return nil
+}
+
+func validateWakeAlarmResult(result WakeAlarmResult) error {
+	switch result.State {
+	case WakeAlarmUnsupported, WakeAlarmNotScheduled:
+		if result.ScheduledFor != "" {
+			return ErrInvalidResponse
+		}
+	case WakeAlarmScheduled:
+		if !IsCanonicalTimestamp(result.ScheduledFor) {
+			return ErrInvalidResponse
+		}
+	default:
+		return ErrInvalidResponse
+	}
+	return nil
+}
+
+func isKnownOperation(operation Operation) bool {
+	_, ok := operations[operation]
+	return ok
+}
+
+func isFailureCode(code string) bool {
+	switch code {
+	case "operation_unsupported", "operation_rejected", "operation_failed", "state_unavailable":
+		return true
+	default:
+		return false
+	}
 }
 
 func IsCanonicalTimestamp(value string) bool {

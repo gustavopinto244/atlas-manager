@@ -835,3 +835,27 @@ ownership, nonzero group, process group membership, and root-owned safe parent
 directory. It does not repair state. No installation command, setuid change,
 helper wiring, or real backend is included. CI builds the Linux artifact only
 under the ignored `dist/power-helper/` directory.
+
+### Read-only Linux RTC backend
+
+ADR-006 adds the first real helper backend without changing application
+composition:
+
+```text
+fixed helper protocol
+        ↓
+Linux read-only backend
+        ↓
+/sys/class/rtc/rtc0/since_epoch
+/sys/class/rtc/rtc0/wakealarm
+```
+
+The backend verifies the fixed `/sys` mount, exposes no generic path reader,
+opens attributes read-only, bounds reads to 128 bytes, and validates RTC time
+against one injected system-clock interval with 300 seconds of tolerance.
+Missing RTC support is unsupported; malformed or uncertain state is
+`state_unavailable`. Only the two read operations are implemented. The three
+mutation operations remain deny-all, and the backend is not wired into the
+Node.js power-management composition. A separate test executable injects
+fixed deterministic results for TypeScript/Go compatibility without reading
+CI hardware.

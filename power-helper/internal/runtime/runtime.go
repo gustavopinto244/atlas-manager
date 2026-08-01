@@ -7,9 +7,10 @@ import (
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/backend"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/privilege"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
 )
 
-func Run(stdin io.Reader, stdout io.Writer, startup privilege.StartupDependencies) int {
+func Run(stdin io.Reader, stdout io.Writer, startup privilege.StartupDependencies, operations backend.Operations) int {
 	if !privilege.ValidateStartup(startup) {
 		return protocol.InternalFailureExitCode
 	}
@@ -21,7 +22,7 @@ func Run(stdin io.Reader, stdout io.Writer, startup privilege.StartupDependencie
 	if err != nil {
 		return protocol.InvalidInputExitCode
 	}
-	response, err := protocol.MarshalResponse(backend.Dispatch(backend.DenyAll{}, request))
+	response, err := protocol.MarshalResponse(backend.Dispatch(operations, request))
 	if err != nil {
 		return protocol.InternalFailureExitCode
 	}
@@ -46,5 +47,6 @@ func RunProcess() (exitCode int) {
 		}
 	}()
 	startup := privilege.CurrentStartupDependencies(len(os.Args))
-	return Run(os.Stdin, os.Stdout, startup)
+	operations := backend.NewReadOnly(rtc.NewReader(rtc.LinuxFileSystem{}, rtc.SystemClock{}))
+	return Run(os.Stdin, os.Stdout, startup, operations)
 }

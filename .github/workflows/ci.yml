@@ -46,6 +46,10 @@ jobs:
         working-directory: power-helper
         run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper ./cmd/atlas-manager-power-helper
 
+      - name: Build deterministic helper compatibility fixture
+        working-directory: power-helper
+        run: mkdir -p ../dist/power-helper-test && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper-test/atlas-manager-power-helper-fixture ./cmd/atlas-manager-power-helper-fixture
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -67,6 +71,8 @@ jobs:
 
       - name: Run tests
         run: npm test
+        env:
+          ATLAS_MANAGER_POWER_HELPER_FIXTURE: ${{ github.workspace }}/dist/power-helper-test/atlas-manager-power-helper-fixture
 
       - name: Build production application
         run: npm run build

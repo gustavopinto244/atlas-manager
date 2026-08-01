@@ -1,5 +1,48 @@
 # Agent handoff
 
+## Current work — Issue #248
+
+The active branch is:
+
+```text
+feat/linux-power-helper-read-only-rtc-backend
+```
+
+The authoritative merged PR #247 baseline in this checkout is:
+
+```text
+b836aa826dbad6e7265d542de1f78179aa60297e
+```
+
+Issue #248 adds ADR-006 and a fixed read-only Linux backend under the pinned
+Go 1.23.0 helper module. Production reads only `/sys` after checking the
+sysfs magic, then `/sys/class/rtc/rtc0/since_epoch` and
+`/sys/class/rtc/rtc0/wakealarm`; no path, environment, argument, or request
+field selects an RTC. Attribute reads are capped at 128 bytes and RTC time
+must be within 300 seconds of the system clock captured around the read.
+Missing support is `operation_unsupported`; malformed, unreadable, or
+misaligned state is `state_unavailable`; an absent wakealarm is a successful
+`unsupported` observation. Only `read_rtc_information` and `read_wake_alarm`
+are real; schedule, cancel, and shutdown remain deny-all.
+
+The protocol now has typed operation-specific read-success responses with
+canonical field ordering. A separately named deterministic fixture executable
+supports TypeScript/Go compatibility tests without host RTC hardware. The
+production helper is not installed, setuid-enabled, or wired into Atlas
+Manager, and npm dependencies and Go third-party modules remain unchanged.
+
+Final validation for Issue #248 completed with Node.js 24.18.0, npm 11.16.0,
+and Go 1.23.0 on Linux. `nvm use` is unavailable in the shell. The complete
+Node suite passed with 171 test files, 2,408 passing tests, and 1 skipped
+test. The Go suite passed 32 tests, including the Linux build and
+TypeScript/Go fixture compatibility. Formatting, lint, typecheck, Go vet,
+build, and `git diff --check` passed. `npm ci` completed without dependency
+changes; its existing development-tree advisory was not changed. Production
+`npm audit --omit=dev` reported zero vulnerabilities.
+
+Do not reset, discard, commit, push, merge, or open a Pull Request without the
+project owner's approval.
+
 ## Current work — Issue #246
 
 The active branch is:
