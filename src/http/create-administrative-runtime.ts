@@ -5,6 +5,10 @@ import { createProtectedAdministration } from "../access-control/composition/cre
 import { InMemoryAdministrativeRoleAssignmentReader } from "../access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
 import { createEventHistory } from "../event-history/composition/create-event-history.js";
 import { createPowerManagement } from "../power-management/composition/create-power-management.js";
+import {
+  createConfiguredPowerManagementInfrastructure,
+  type ConfiguredPowerManagementInfrastructureDependencies,
+} from "../power-management/composition/create-configured-power-management-infrastructure.js";
 import type { MachineShutdownConfirmationReader } from "../power-management/application/ports/machine-shutdown-readiness-readers.js";
 import type { ServiceManagementCapabilities } from "../service-management/composition/create-service-management.js";
 import type { AdministrativeEventHistoryPage } from "../event-history/domain/administrative-event-history-page.js";
@@ -27,6 +31,7 @@ export interface AdministrativeRuntime {
 export function createAdministrativeRuntime(
   config: EnvironmentConfig,
   serviceManagement?: ServiceManagementCapabilities,
+  compositionDependencies: ConfiguredPowerManagementInfrastructureDependencies = {},
 ): AdministrativeRuntime {
   const filePath = config.administrativeEventHistoryFilePath;
   const roleAssignments = config.administrativeRoleAssignments;
@@ -51,9 +56,14 @@ export function createAdministrativeRuntime(
       configuration: cloudflareAccess,
       clock,
     });
+  const powerInfrastructure = createConfiguredPowerManagementInfrastructure(
+    config.powerManagementBackend,
+    compositionDependencies,
+  );
   const powerManagement = createPowerManagement({
     clock,
     administrativeEventHistoryCapabilities: eventHistory,
+    ...powerInfrastructure.adapters,
     ...(config.machineShutdownOccurrenceClaimFilePath === undefined ||
     config.machinePowerSchedulerCursorFilePath === undefined
       ? {}

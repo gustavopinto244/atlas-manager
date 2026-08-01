@@ -54,7 +54,7 @@ describe("Linux power-helper adapters", () => {
     ).resolves.toMatchObject({
       operation: "shutdown",
       requestedAt,
-      outcome: "simulated",
+      outcome: "accepted",
     });
 
     expect(

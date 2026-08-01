@@ -1089,7 +1089,10 @@ the existing exclusive helper lock and never reads or writes RTC state.
 A successful reply means logind accepted the request, not that power-off is
 complete. Uncertain acceptance is never retried or compensated and is exposed
 only as the existing `operation_failed` protocol category. The helper source is
-not installed or wired into Atlas Manager.
+not installed, and the application selects it only through the explicit
+fail-closed `POWER_MANAGEMENT_BACKEND=linux_helper` composition gate. The
+default remains mock and composition performs no helper request. A selected
+helper failure is never converted to mock success.
 
 ## Read-only host qualification
 
@@ -1110,3 +1113,20 @@ real-effect activation.
 The qualification and bundle target is fixed to `GOOS=linux`, `GOARCH=amd64`,
 `GOAMD64=v1`, and `CGO_ENABLED=0`; a host CPU model is evidence only and is
 never used as an allowlist.
+
+## Production-shaped composition boundary
+
+ADR-011 keeps the application safe by default. `POWER_MANAGEMENT_BACKEND` is
+the only selector and accepts exactly `mock` or `linux_helper`; it defaults to
+`mock`. The selection is immutable and atomic across RTC information, wake
+alarm read, wake alarm mutation, and machine shutdown adapters. No helper path,
+argument, RTC resource, D-Bus resource, fallback, repair, installation,
+group enrollment, or runtime switch is configurable.
+
+The Linux adapter is created once with one shared fixed-contract transport and
+the existing installation inspector. Creating the composition performs no
+helper request. Real adapter failures remain failures, and route enablement,
+scheduler execution, host qualification, installation, application-user
+enrollment, and real-effect certification are independent gates. A successful
+Linux shutdown means `accepted` by logind, not completed power-off; the mock
+backend continues to report `simulated`.

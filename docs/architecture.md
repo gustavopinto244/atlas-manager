@@ -124,11 +124,10 @@ responses, inspects the fixed root-owned helper installation, and uses a
 bounded no-shell process transport. The only accepted executable path is
 `/usr/local/libexec/atlas-manager-power-helper`; callers cannot supply a path,
 arguments, environment, working directory, timeout, or output limit. The
-helper source is implemented separately by Issue #246 but is not installed or
-production-wired in this slice. Default power-management
-composition remains mock-first and production activation is gated by ADR-002
+helper source is not installed. Default power-management composition remains
+mock-first, while ADR-011 provides an explicit complete-bundle selector;
 authentication, authorization, confirmation, auditing, deployment, and
-security-review prerequisites.
+security-review prerequisites still gate real effects.
 
 ### Administrative event-history boundary
 
@@ -926,7 +925,10 @@ The requester owns a narrow project interface and hides concrete D-Bus types.
 The bus address, destination, object, interface, method, argument, and
 deadline are constants. No D-Bus work occurs after lock rejection, and the
 requester performs no RTC access. The production Node.js composition remains
-mock-first and does not construct or invoke this helper backend.
+mock-first by default. ADR-011 provides a separate explicit composition gate
+for selecting the complete Linux adapter bundle; construction remains frozen
+and does not inspect or invoke the helper. HTTP route flags and scheduler
+activation remain independent.
 
 ### Linux host qualification
 
@@ -941,3 +943,19 @@ two-second D-Bus checks `NameHasOwner`, introspection, and `CanPowerOff`.
 It never creates locks, writes sysfs, invokes the helper, calls `PowerOff`,
 changes groups, or changes installation state. A passing report approves only
 a disabled installation with an empty helper group.
+
+### Production-shaped power composition
+
+ADR-011 selects the complete power-management infrastructure atomically. The
+default `mock` selector constructs the existing mock readers and controllers.
+The exact `linux_helper` selector creates one frozen bundle containing the
+fixed-path transport, installation inspector, RTC reader, wake reader, wake
+controller, and machine-shutdown controller; all four adapters share that
+transport. Composition performs no helper request and does not fall back to
+mock when the selected helper is unavailable or rejects an operation.
+
+The Linux shutdown adapter reports `accepted` only when the helper reports a
+successful systemd-logind `PowerOff(false)` reply. It never claims that the
+machine completed power-off. Installation, empty-group qualification,
+application-user enrollment, HTTP activation, scheduler activation, and
+real-effect certification remain separate deployment gates.

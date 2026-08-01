@@ -7,6 +7,38 @@ import {
 } from "../../src/config/environment.js";
 
 describe("parseEnvironment", () => {
+  it("defaults power management to the mock backend", () => {
+    const config = parseEnvironment({});
+    expect(config.powerManagementBackend).toBe("mock");
+    expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  it("accepts only the exact Linux helper backend value", () => {
+    expect(
+      parseEnvironment({ POWER_MANAGEMENT_BACKEND: "linux_helper" })
+        .powerManagementBackend,
+    ).toBe("linux_helper");
+  });
+
+  it.each([
+    "",
+    "Mock",
+    "LINUX_HELPER",
+    "linux-helper",
+    "linux",
+    "helper",
+    "real",
+    "production",
+    "true",
+    "false",
+    " mock",
+    "mock ",
+  ])("rejects invalid power-management backend %s", (value) => {
+    expect(() =>
+      parseEnvironment({ POWER_MANAGEMENT_BACKEND: value }),
+    ).toThrow();
+  });
+
   it("keeps administrative event-history HTTP disabled by default", () => {
     expect(parseEnvironment({}).administrativeEventHistoryHttpEnabled).toBe(
       false,
@@ -258,6 +290,7 @@ describe("parseEnvironment", () => {
       host: "127.0.0.1",
       port: 3000,
       logLevel: "info",
+      powerManagementBackend: "mock",
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
       administrativeShutdownHttpEnabled: false,
@@ -281,6 +314,7 @@ describe("parseEnvironment", () => {
       host: "0.0.0.0",
       port: 8080,
       logLevel: "info",
+      powerManagementBackend: "mock",
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
       administrativeShutdownHttpEnabled: false,

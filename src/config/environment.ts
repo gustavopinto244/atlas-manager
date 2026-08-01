@@ -24,6 +24,10 @@ export const LOG_LEVELS = [
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+export const POWER_MANAGEMENT_BACKENDS = ["mock", "linux_helper"] as const;
+
+export type PowerManagementBackend = (typeof POWER_MANAGEMENT_BACKENDS)[number];
+
 const persistenceFilePathSchema = z.string().superRefine((value, context) => {
   if (value.length === 0) {
     context.addIssue({
@@ -147,6 +151,11 @@ const environmentSchema = z
         error: `must be one of: ${LOG_LEVELS.join(", ")}`,
       })
       .default("info"),
+    POWER_MANAGEMENT_BACKEND: z
+      .enum(POWER_MANAGEMENT_BACKENDS, {
+        error: "must be exactly mock or linux_helper",
+      })
+      .default("mock"),
     SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
       persistenceFilePathSchema.optional(),
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
@@ -407,6 +416,7 @@ export interface EnvironmentConfig {
   readonly host: string;
   readonly port: number;
   readonly logLevel: LogLevel;
+  readonly powerManagementBackend: PowerManagementBackend;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   readonly serviceAvailabilityOverrideFilePath?: string;
@@ -460,6 +470,7 @@ export function parseEnvironment(
     host: parsedEnvironment.HOST,
     port: parsedEnvironment.PORT,
     logLevel: parsedEnvironment.LOG_LEVEL,
+    powerManagementBackend: parsedEnvironment.POWER_MANAGEMENT_BACKEND,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
     administrativeWakeAlarmHttpEnabled:

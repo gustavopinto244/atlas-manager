@@ -10,6 +10,7 @@ import {
 import { FixedAdministrativePowerOperationGate } from "../../src/http/administrative-power-operation-gate.js";
 import { FixedAdministrativeRequestAdmission } from "../../src/http/administrative-request-admission.js";
 import { createApp } from "../../src/http/create-app.js";
+import { mapMachineShutdownExecutionResponse } from "../../src/http/administrative-shutdown-response.js";
 
 const NOW = new Date("2026-08-01T14:00:00.000Z");
 const OCCURRENCE = {
@@ -88,6 +89,31 @@ function body(stage: "preparation" | "execution") {
 }
 
 describe("protected shutdown routes", () => {
+  it("preserves accepted helper shutdown semantics in the HTTP mapper", () => {
+    const response = mapMachineShutdownExecutionResponse({
+      occurrence: OCCURRENCE,
+      processedAt: NOW.toISOString(),
+      outcome: "executed",
+      wakeAlarmMutation: {
+        operation: "schedule",
+        requestedAt: NOW.toISOString(),
+        outcome: "scheduled",
+        before: { state: "not_scheduled" },
+        after: {
+          state: "scheduled",
+          scheduledFor: OCCURRENCE.wakeScheduledFor,
+        },
+      },
+      shutdownResult: {
+        operation: "shutdown",
+        requestedAt: NOW.toISOString(),
+        outcome: "accepted",
+      },
+    });
+
+    expect(response.shutdown).toEqual({ outcome: "accepted" });
+  });
+
   it("maps preparation through the protected facade with a request confirmation", async () => {
     const fixture = createFixture();
     const response = await request(fixture.app)

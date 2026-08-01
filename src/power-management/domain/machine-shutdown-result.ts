@@ -3,7 +3,7 @@ import { isCanonicalTimestamp } from "./canonical-timestamp.js";
 export interface MachineShutdownResult {
   readonly operation: "shutdown";
   readonly requestedAt: string;
-  readonly outcome: "simulated";
+  readonly outcome: "simulated" | "accepted";
 }
 
 export type MachineShutdownResultValidationErrorCode =
@@ -47,14 +47,14 @@ export function createMachineShutdownResult(
   if (!isCanonicalTimestamp(input["requestedAt"])) {
     throw new MachineShutdownResultValidationError("invalid_requested_at");
   }
-  if (input["outcome"] !== "simulated") {
+  if (input["outcome"] !== "simulated" && input["outcome"] !== "accepted") {
     throw new MachineShutdownResultValidationError("invalid_outcome");
   }
 
   return Object.freeze({
     operation: "shutdown" as const,
     requestedAt: input["requestedAt"],
-    outcome: "simulated" as const,
+    outcome: input["outcome"],
   });
 }
 

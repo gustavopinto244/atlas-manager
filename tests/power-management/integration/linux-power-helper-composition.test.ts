@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPowerManagement } from "../../../src/power-management/composition/create-power-management.js";
 import { createLinuxPowerHelperAdapters } from "../../../src/power-management/composition/create-linux-power-helper-adapters.js";
+import { createConfiguredPowerManagementInfrastructure } from "../../../src/power-management/composition/create-configured-power-management-infrastructure.js";
 import { InMemoryLinuxPowerHelperTransport } from "../../../src/power-management/infrastructure/in-memory-linux-power-helper-transport.js";
 import type { PowerManagementClock } from "../../../src/power-management/application/ports/power-management-clock.js";
 
@@ -10,13 +11,16 @@ describe("helper-backed power-management composition seam", () => {
   it("keeps eleven frozen capabilities and routes helper-backed overrides", async () => {
     const transport = new InMemoryLinuxPowerHelperTransport();
     const adapters = createLinuxPowerHelperAdapters({ transport });
+    const infrastructure = createConfiguredPowerManagementInfrastructure(
+      "linux_helper",
+      { createLinuxPowerHelperAdapters: () => adapters },
+    );
     const clock: PowerManagementClock = { now: vi.fn(() => new Date(NOW)) };
     const capabilities = createPowerManagement({
       clock,
-      rtcInformationReader: adapters.rtcInformationReader,
-      wakeAlarmReader: adapters.wakeAlarmReader,
-      wakeAlarmController: adapters.wakeAlarmController,
-      machineShutdownController: adapters.machineShutdownController,
+      ...infrastructure.adapters,
+      /* The explicit adapter overrides above are the composition boundary's
+       * frozen bundle; no adapter is constructed per use case. */
     });
 
     expect(Object.isFrozen(capabilities)).toBe(true);
@@ -33,7 +37,7 @@ describe("helper-backed power-management composition seam", () => {
     ).resolves.toEqual({
       operation: "shutdown",
       requestedAt: NOW,
-      outcome: "simulated",
+      outcome: "accepted",
     });
     expect(
       transport.invocations.map((invocation) => invocation.operation),
