@@ -2400,3 +2400,21 @@ wake-alarm, filesystem, or machine-shutdown effect is enabled. Production
 activation waits for authenticated administration, authorization, destructive
 confirmation, persistent audit events, deployment validation, recovery
 procedures, and a security review as recorded in ADR-002.
+
+### Cloudflare Access identity verification
+
+ADR-004 adds a production-shaped, but not yet HTTP-exposed, authentication
+adapter for Cloudflare Access application JWTs. HTTP delivery reads only the
+case-insensitive `Cf-Access-Jwt-Assertion` header and passes one bounded,
+request-scoped assertion to the access-control provider. The application
+verifies an RS256 signature against the fixed team JWKS endpoint and requires
+the configured issuer, audience, `type: app`, temporal claims, and a canonical
+lowercase UUID subject. Empty subjects reject Cloudflare service tokens.
+
+Signing keys are fetched with a fixed five-second timeout and 64 KiB response
+bound, cached in memory for ten minutes, refreshed once for an unknown key ID,
+and protected by a thirty-second failed-fetch cooldown. Missing configuration
+keeps the existing deny-all authenticator and performs no network request.
+Tokens, claims, emails, headers, and keys are never logged, persisted, or
+returned in authentication results. No administrative route, cookie fallback,
+session, production helper activation, or real power effect is included.

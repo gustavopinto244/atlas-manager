@@ -1427,3 +1427,54 @@ and helper security review.
 An infrastructure adapter that translates one existing power-management port
 into a strict helper protocol operation and maps only validated responses into
 existing project-owned domain results. It performs no fallback to mock behavior.
+
+### Cloudflare Access assertion
+
+The bounded compact JWT delivered in the `Cf-Access-Jwt-Assertion` request
+header. It is request-scoped and is never logged or persisted.
+
+### Access application token
+
+A Cloudflare Access JWT for one configured application. Atlas Manager accepts
+only tokens with an RS256 signature, `type: app`, and a validated human UUID
+subject.
+
+### Access audience
+
+The one exact application audience configured for this deployment. It is
+compared without wildcard, substring, case-folding, or trimming behavior.
+
+### Access issuer
+
+The internally derived HTTPS issuer
+`https://<team-name>.cloudflareaccess.com`.
+
+### JWKS
+
+The JSON Web Key Set published by the trusted Cloudflare Access team endpoint.
+Atlas Manager accepts a bounded set of validated RS256 RSA verification keys.
+
+### Signing-key rotation
+
+The normal replacement of Access signing keys. An unknown key ID causes at
+most one coalesced JWKS refresh before the assertion is accepted or rejected.
+
+### Request-scoped authentication provider
+
+An authentication-provider instance that captures only one request's bounded
+assertion reader. Shared verifier and JWKS infrastructure may be reused.
+
+### Human administrative subject
+
+The canonical lowercase UUID in a verified Access token's `sub` claim. Empty
+subjects used by service tokens are not human administrative identities.
+
+### Identity-provider unavailable
+
+The safe authentication outcome returned when required Cloudflare signing-key
+data cannot be safely obtained or parsed.
+
+### Assertion verification
+
+The application-side process of validating JWT structure, signature, issuer,
+audience, type, temporal claims, and human subject before creating a principal.

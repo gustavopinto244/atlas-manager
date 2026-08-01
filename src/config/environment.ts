@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 
 import { z } from "zod";
+import { createCloudflareAccessConfiguration } from "../access-control/domain/cloudflare-access-configuration.js";
 
 export const LOG_LEVELS = [
   "trace",
@@ -39,6 +40,38 @@ const persistenceFilePathSchema = z.string().superRefine((value, context) => {
   }
 });
 
+const cloudflareAccessTeamNameSchema = z
+  .string()
+  .superRefine((value, context) => {
+    if (
+      value.length < 1 ||
+      value.length > 63 ||
+      value.trim() !== value ||
+      !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(value)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "must be a lowercase Cloudflare Access team name",
+      });
+  });
+
+const cloudflareAccessAudienceSchema = z
+  .string()
+  .superRefine((value, context) => {
+    if (
+      value.length < 1 ||
+      value.length > 256 ||
+      value.trim() !== value ||
+      !/^[\x21-\x7e]+$/u.test(value) ||
+      value.includes(",") ||
+      value.includes('"')
+    )
+      context.addIssue({
+        code: "custom",
+        message: "must be one non-empty ASCII audience value",
+      });
+  });
+
 const environmentSchema = z
   .object({
     HOST: z
@@ -62,8 +95,23 @@ const environmentSchema = z
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
       persistenceFilePathSchema.optional(),
     SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
+    CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
+    CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
   })
   .superRefine((environment, context) => {
+    const hasTeamName = environment.CLOUDFLARE_ACCESS_TEAM_NAME !== undefined;
+    const hasAudience = environment.CLOUDFLARE_ACCESS_AUDIENCE !== undefined;
+    if (hasTeamName !== hasAudience) {
+      context.addIssue({
+        code: "custom",
+        path: [
+          hasTeamName
+            ? "CLOUDFLARE_ACCESS_TEAM_NAME"
+            : "CLOUDFLARE_ACCESS_AUDIENCE",
+        ],
+        message: "must be configured together",
+      });
+    }
     if (
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE !==
         undefined &&
@@ -122,12 +170,25 @@ export interface EnvironmentConfig {
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   readonly serviceAvailabilityOverrideFilePath?: string;
+  readonly cloudflareAccess?: Readonly<{
+    readonly teamName: string;
+    readonly issuer: string;
+    readonly audience: string;
+  }>;
 }
 
 export function parseEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
 ): EnvironmentConfig {
   const parsedEnvironment = environmentSchema.parse(environment);
+  const cloudflareAccessConfiguration =
+    parsedEnvironment.CLOUDFLARE_ACCESS_TEAM_NAME === undefined ||
+    parsedEnvironment.CLOUDFLARE_ACCESS_AUDIENCE === undefined
+      ? undefined
+      : createCloudflareAccessConfiguration({
+          teamName: parsedEnvironment.CLOUDFLARE_ACCESS_TEAM_NAME,
+          audience: parsedEnvironment.CLOUDFLARE_ACCESS_AUDIENCE,
+        });
 
   return {
     host: parsedEnvironment.HOST,
@@ -152,6 +213,15 @@ export function parseEnvironment(
       : {
           serviceAvailabilityOverrideFilePath:
             parsedEnvironment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+        }),
+    ...(cloudflareAccessConfiguration === undefined
+      ? {}
+      : {
+          cloudflareAccess: {
+            teamName: cloudflareAccessConfiguration.teamName,
+            issuer: cloudflareAccessConfiguration.issuer,
+            audience: cloudflareAccessConfiguration.audience,
+          },
         }),
   };
 }
