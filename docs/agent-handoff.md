@@ -1,5 +1,35 @@
 # Agent handoff
 
+## Current work — Issue #254
+
+The active branch is:
+
+```text
+feat/linux-power-helper-installation-bundle
+```
+
+The authoritative PR #253 merge baseline in this checkout is:
+
+```text
+df23dc5ecdeb1ea65f020331c6281cb3776d8d34
+```
+
+Issue #254 adds ADR-009, a deterministic `linux/amd64`/CGO-disabled bundle,
+strict manifest and executable checksums, an operator-only Go installer, the
+fixed empty-group prerequisite, atomic installation state, verification,
+upgrade, recovery, rollback, and uninstall documentation. The installer uses
+only fixed production paths, executes no child process, requires root only for
+mutation, and never creates the group or enrolls a user. The archive does not
+carry setuid; the explicit installer applies exact `04750` metadata only after
+validation. Tests use temporary sandbox paths through internal constructors;
+the production CLI exposes no root or destination option.
+
+Validation and final artifact hashes are still pending in this working tree.
+The helper is not installed, no group or user was changed, no setuid was
+applied, and Atlas Manager remains mock-first. The next recommended delivery
+is host qualification and a disabled installation drill, not automatic
+production activation.
+
 ## Current work — Issue #252
 
 The active branch is:

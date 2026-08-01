@@ -1,5 +1,27 @@
 # Atlas Manager — High-Level Architecture
 
+## Reproducible helper installation boundary
+
+Issue #254 adds a separate release/build boundary around the helper:
+
+```text
+explicit build inputs
+        ↓
+reproducible linux/amd64 bundle
+        ↓
+operator-run installer
+        ↓
+fixed root-owned setuid helper path
+```
+
+The installer is not part of Atlas Manager and is never called by npm, startup,
+HTTP, or the helper. It validates the closed manifest, executable checksums,
+root-owned parents, and an existing empty `atlas-manager-power` group before an
+atomic replacement. Its production paths are fixed; sandbox roots are only
+available through internal tests. The archive does not contain setuid metadata,
+and no application user is enrolled. Host qualification and production wiring
+remain later deployment decisions.
+
 ## Document purpose
 
 This document describes the intended high-level software architecture of Atlas
