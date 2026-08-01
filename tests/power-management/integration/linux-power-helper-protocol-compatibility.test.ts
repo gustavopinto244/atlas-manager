@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +48,98 @@ describe("cross-language Linux power-helper protocol corpus", () => {
       });
     }
   });
+
+  it("accepts every canonical read-success response fixture", () => {
+    const fixtures = [
+      ["read_rtc_information_unsupported.json", "read_rtc_information"],
+      ["read_rtc_information_not_scheduled.json", "read_rtc_information"],
+      ["read_rtc_information_scheduled.json", "read_rtc_information"],
+      ["read_wake_alarm_unsupported.json", "read_wake_alarm"],
+      ["read_wake_alarm_not_scheduled.json", "read_wake_alarm"],
+      ["read_wake_alarm_scheduled.json", "read_wake_alarm"],
+    ] as const;
+    for (const [name, operation] of fixtures) {
+      const response = readFileSync(
+        join(corpus, "responses", "success", name),
+        "utf8",
+      );
+      expect(parseLinuxPowerHelperResponse(response, operation)).toEqual(
+        JSON.parse(response),
+      );
+    }
+  });
+
+  it("rejects invalid read-success response fixtures", () => {
+    const fixtures = [
+      ["read_wake_alarm_scheduled_missing_timestamp.json", "read_wake_alarm"],
+      ["read_rtc_information_with_code.json", "read_rtc_information"],
+      ["read_wake_alarm_with_result_on_failure.json", "read_wake_alarm"],
+    ] as const;
+    for (const [name, operation] of fixtures) {
+      const response = readFileSync(
+        join(corpus, "responses", "invalid", name),
+        "utf8",
+      );
+      expect(() =>
+        parseLinuxPowerHelperResponse(response, operation),
+      ).toThrow();
+    }
+  });
+
+  it.skipIf(!process.env.ATLAS_MANAGER_POWER_HELPER_FIXTURE)(
+    "round-trips read requests through the deterministic Go fixture",
+    () => {
+      const fixture = process.env.ATLAS_MANAGER_POWER_HELPER_FIXTURE;
+      if (!fixture) {
+        throw new Error("fixture path is required");
+      }
+      for (const operation of [
+        "read_rtc_information",
+        "read_wake_alarm",
+      ] as const) {
+        const source = readFileSync(
+          join(corpus, "valid", `${operation}.json`),
+          "utf8",
+        );
+        const request = createLinuxPowerHelperRequest(
+          JSON.parse(source) as unknown,
+        );
+        const result = spawnSync(fixture, {
+          input: Buffer.from(serializeLinuxPowerHelperRequest(request), "utf8"),
+          encoding: "buffer",
+          maxBuffer: 16_384,
+          timeout: 5_000,
+        });
+        expect(result.status).toBe(0);
+        expect(result.stderr).toEqual(Buffer.alloc(0));
+        const expected =
+          operation === "read_rtc_information"
+            ? '{"version":1,"operation":"read_rtc_information","outcome":"success","result":{"rtcTime":"2026-08-01T18:00:00.000Z","wakeAlarm":{"state":"scheduled","scheduledFor":"2026-08-02T09:00:00.000Z"}}}\n'
+            : '{"version":1,"operation":"read_wake_alarm","outcome":"success","result":{"state":"scheduled","scheduledFor":"2026-08-02T09:00:00.000Z"}}\n';
+        expect(result.stdout.toString("utf8")).toBe(expected);
+        expect(parseLinuxPowerHelperResponse(result.stdout, operation)).toEqual(
+          {
+            version: 1,
+            operation,
+            outcome: "success",
+            result:
+              operation === "read_rtc_information"
+                ? {
+                    rtcTime: "2026-08-01T18:00:00.000Z",
+                    wakeAlarm: {
+                      state: "scheduled",
+                      scheduledFor: "2026-08-02T09:00:00.000Z",
+                    },
+                  }
+                : {
+                    state: "scheduled",
+                    scheduledFor: "2026-08-02T09:00:00.000Z",
+                  },
+          },
+        );
+      }
+    },
+  );
 
   it("keeps the shared invalid corpus available to the TypeScript suite", () => {
     const invalidNames = [

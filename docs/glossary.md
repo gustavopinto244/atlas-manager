@@ -1613,3 +1613,19 @@ directories.
 The shared canonical and invalid JSON fixtures under
 `power-helper/testdata/protocol`. TypeScript and Go tests consume the same
 fixtures to prevent their protocol descriptions from diverging.
+
+### Fixed Linux RTC resource
+
+The reviewed `rtc0` sysfs resource consisting only of
+`/sys/class/rtc/rtc0/since_epoch` and `/sys/class/rtc/rtc0/wakealarm`. It is
+not configurable, discovered dynamically, or selected by a request.
+
+### RTC-to-system-clock alignment
+
+The fixed check that places a `since_epoch` value within 300 seconds of the
+system clock captured around the read before representing it as canonical UTC.
+
+### Read-only RTC helper backend
+
+The Issue #248 Go backend that observes fixed Linux RTC sysfs state and keeps
+all wake and shutdown mutation operations unsupported.

@@ -1,0 +1,1 @@
+{"version":1,"operation":"read_rtc_information","outcome":"success","result":{"rtcTime":"2026-08-01T18:00:00.000Z","wakeAlarm":{"state":"not_scheduled"}}}

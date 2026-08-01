@@ -542,3 +542,12 @@ an exact `04750` setuid installation inspection, a deny-all production backend,
 shared protocol fixtures, and CI build/test coverage. The helper is not
 installed or production-wired, and all RTC, wake-alarm, filesystem, process,
 network, and machine-power effects remain deferred.
+
+## Issue #248 delivery notes
+
+Issue #248 advances v0.6 without completing it. ADR-006 adds a fixed `rtc0`
+read-only sysfs backend for `read_rtc_information` and `read_wake_alarm`, with
+bounded attributes, sysfs verification, canonical epoch parsing, and fixed
+RTC-to-system-clock alignment validation. Wake and shutdown mutations remain
+unsupported. The helper is not installed or wired into the application, and
+CI uses deterministic fixtures instead of host RTC hardware.

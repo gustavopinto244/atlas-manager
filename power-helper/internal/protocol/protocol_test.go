@@ -95,6 +95,106 @@ func TestStrictBoundariesAndTimestampRules(t *testing.T) {
 	}
 }
 
+func TestReadSuccessResponsesUseStrictCanonicalShapes(t *testing.T) {
+	wakeAlarm, err := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T09:00:00.000Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readRTC, err := NewReadRTCInformationSuccess("2026-08-01T18:00:00.000Z", wakeAlarm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := MarshalResponse(readRTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\"version\":1,\"operation\":\"read_rtc_information\",\"outcome\":\"success\",\"result\":{\"rtcTime\":\"2026-08-01T18:00:00.000Z\",\"wakeAlarm\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"}}}\n"
+	if string(encoded) != want {
+		t.Fatalf("unexpected canonical RTC response: %s", encoded)
+	}
+
+	readWake, err := NewReadWakeAlarmSuccess(wakeAlarm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err = MarshalResponse(readWake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = "{\"version\":1,\"operation\":\"read_wake_alarm\",\"outcome\":\"success\",\"result\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"}}\n"
+	if string(encoded) != want {
+		t.Fatalf("unexpected canonical wake response: %s", encoded)
+	}
+}
+
+func TestSuccessResponseFixturesAreCanonicalGoOutput(t *testing.T) {
+	wakeStates := []struct {
+		name         string
+		state        string
+		scheduledFor string
+	}{
+		{name: "unsupported", state: WakeAlarmUnsupported},
+		{name: "not_scheduled", state: WakeAlarmNotScheduled},
+		{name: "scheduled", state: WakeAlarmScheduled, scheduledFor: "2026-08-02T09:00:00.000Z"},
+	}
+	for _, testCase := range wakeStates {
+		t.Run("read_rtc_information_"+testCase.name, func(t *testing.T) {
+			wakeAlarm, err := NewWakeAlarmResult(testCase.state, testCase.scheduledFor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := NewReadRTCInformationSuccess("2026-08-01T18:00:00.000Z", wakeAlarm)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := MarshalResponse(response)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := mustRead(t, "../../testdata/protocol/responses/success/read_rtc_information_"+testCase.name+".json")
+			if string(encoded) != string(want) {
+				t.Fatalf("fixture mismatch: %s", encoded)
+			}
+		})
+		t.Run("read_wake_alarm_"+testCase.name, func(t *testing.T) {
+			wakeAlarm, err := NewWakeAlarmResult(testCase.state, testCase.scheduledFor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := NewReadWakeAlarmSuccess(wakeAlarm)
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := MarshalResponse(response)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := mustRead(t, "../../testdata/protocol/responses/success/read_wake_alarm_"+testCase.name+".json")
+			if string(encoded) != string(want) {
+				t.Fatalf("fixture mismatch: %s", encoded)
+			}
+		})
+	}
+}
+
+func TestReadSuccessConstructorsRejectInvalidStatesAndOperations(t *testing.T) {
+	for _, state := range []WakeAlarmResult{
+		{State: "unknown"},
+		{State: WakeAlarmScheduled},
+		{State: WakeAlarmNotScheduled, ScheduledFor: "2026-08-02T09:00:00.000Z"},
+	} {
+		if _, err := NewWakeAlarmResult(state.State, state.ScheduledFor); err == nil {
+			t.Fatalf("invalid wake state accepted: %#v", state)
+		}
+	}
+	if _, err := NewReadRTCInformationSuccess("2026-08-01T18:00:00Z", WakeAlarmResult{State: WakeAlarmNotScheduled}); err == nil {
+		t.Fatal("noncanonical RTC time accepted")
+	}
+	if _, err := NewFailureResponse(ReadWakeAlarm, "success", "operation_unsupported"); err == nil {
+		t.Fatal("success failure response accepted")
+	}
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	content, err := os.ReadFile(path)

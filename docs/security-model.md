@@ -1012,3 +1012,22 @@ filesystem, RTC, D-Bus, systemd, or power operation. Setuid code is
 security-sensitive; each future fixed-resource backend and installation
 procedure requires separate review. The binary is not installed or wired into
 production by this delivery.
+
+## Read-only RTC boundary
+
+ADR-006 limits the helper's first operating-system backend to fixed `rtc0`
+sysfs observation. `/sys` must report the Linux sysfs magic before the backend
+reads the fixed `since_epoch` and `wakealarm` attributes. No caller, request,
+environment, working directory, or command-line value can select a path.
+
+Each attribute is read-only and bounded to 128 bytes. Canonical unsigned epoch
+values are converted to UTC only when the RTC value falls within 300 seconds
+of the system clock captured around the read. Missing support maps to
+`operation_unsupported`; malformed, unreadable, or timezone-uncertain state
+maps to `state_unavailable`. The backend never writes sysfs, starts a child
+process, invokes a shell, accesses `/dev/rtc0`, or performs a power effect.
+
+The production helper remains uninstalled and the Atlas Manager composition
+remains mock-first. A deterministic, separately named fixture is used for
+cross-language tests; it is not selectable by the production executable and
+does not require RTC hardware in CI.
