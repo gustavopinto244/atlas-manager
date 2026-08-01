@@ -992,3 +992,23 @@ Wake responses are explicit, bounded, non-cacheable, and use the same
 restrictive headers as event history. No CORS, ETag, bearer challenge, trusted
 proxy, client-IP security, helper activation, real RTC access, or real power
 effect is introduced.
+
+## External helper privilege boundary
+
+ADR-005 accepts a compiled, memory-safe Go helper as the future privilege
+boundary while keeping Atlas Manager unprivileged. The intended installation
+is `/usr/local/libexec/atlas-manager-power-helper`, root-owned, group-owned by
+the dedicated `atlas-manager-power` group, and mode `04750`. The application
+must belong to that group, and the parent directory must be root-owned and
+not writable by group or others. Installation inspection reports safe project
+categories and never repairs or prints filesystem details.
+
+The helper accepts no arguments and no environment-selected behavior. It
+handles one bounded canonical JSON request, uses only the fixed five-operation
+v1 vocabulary, and currently rejects every valid operation with
+`operation_unsupported`. Invalid input and startup failures are silent and
+use fixed nonzero exit codes. There is no shell, child process, network,
+filesystem, RTC, D-Bus, systemd, or power operation. Setuid code is
+security-sensitive; each future fixed-resource backend and installation
+procedure requires separate review. The binary is not installed or wired into
+production by this delivery.

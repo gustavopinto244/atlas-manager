@@ -1594,3 +1594,22 @@ application does not retry or roll back.
 
 The one global process-local 60-per-60-second and four-concurrent request
 boundary shared by all enabled administrative HTTP routes.
+
+### External Linux power helper
+
+The standalone compiled Go executable at the fixed future installation path
+`/usr/local/libexec/atlas-manager-power-helper`. Issue #246 supplies only its
+strict protocol runtime and deny-all backend; it is not installed or enabled.
+
+### Setuid helper installation
+
+The intended root-owned installation with dedicated group
+`atlas-manager-power` and exact mode `04750`. The application inspector checks
+the state but never changes ownership, permissions, group membership, or
+directories.
+
+### Helper protocol corpus
+
+The shared canonical and invalid JSON fixtures under
+`power-helper/testdata/protocol`. TypeScript and Go tests consume the same
+fixtures to prevent their protocol descriptions from diverging.

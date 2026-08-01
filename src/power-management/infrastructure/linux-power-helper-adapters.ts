@@ -269,9 +269,14 @@ function translateTransportError(error: unknown): LinuxPowerHelperAdapterError {
     code === "helper_not_regular_file" ||
     code === "helper_symbolic_link_rejected" ||
     code === "helper_owner_invalid" ||
+    code === "helper_setuid_required" ||
+    code === "helper_group_invalid" ||
+    code === "helper_process_group_missing" ||
+    code === "helper_mode_invalid" ||
     code === "helper_permissions_unsafe" ||
     code === "helper_not_executable" ||
     code === "helper_parent_invalid" ||
+    code === "helper_parent_owner_invalid" ||
     code === "helper_inspection_failed"
   ) {
     return new LinuxPowerHelperAdapterError("helper_installation_invalid");

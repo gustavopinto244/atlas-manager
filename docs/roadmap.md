@@ -331,8 +331,9 @@ scheduling remain deferred. v0.6 remains active.
 - security-focused protocol, installation, transport, adapter, composition,
   and integration coverage.
 
-This is an application-side foundation only. The external helper is not
-implemented, installed, or production-wired. Authentication, authorization,
+This is an application-side foundation only. Issue #246 now supplies the
+external helper source, but it remains uninstalled and not production-wired.
+Authentication, authorization,
 destructive confirmation, persistent administrative auditing, deployment and
 permission validation, recovery procedures, supported Linux verification,
 operator-visible failures, and helper security review remain activation gates.
@@ -532,3 +533,12 @@ persistent occurrence claims, wake-before-simulated-shutdown ordering, shared
 administrative admission, and one fail-fast power-operation gate. Preparation
 may stop registered services. No helper, real RTC mutation, or real machine
 shutdown is enabled, and partial effects are never rolled back or retried.
+
+## Issue #246 delivery notes
+
+Issue #246 advances v0.6 without completing it. ADR-005 adds a pinned,
+standard-library-only Go helper module, strict one-request protocol handling,
+an exact `04750` setuid installation inspection, a deny-all production backend,
+shared protocol fixtures, and CI build/test coverage. The helper is not
+installed or production-wired, and all RTC, wake-alarm, filesystem, process,
+network, and machine-power effects remain deferred.

@@ -1,5 +1,43 @@
 # Agent handoff
 
+## Current work — Issue #246
+
+The active branch is:
+
+```text
+feat/external-linux-power-helper-executable
+```
+
+The authoritative merged PR #245 baseline is:
+
+```text
+9a66397e4d65a3dd8eba555773676ffaeb2b93dd
+```
+
+Issue #246 adds ADR-005 and the standalone pinned Go module under
+`power-helper/`. The executable name and future installation path remain
+`atlas-manager-power-helper` and `/usr/local/libexec/atlas-manager-power-helper`.
+The intended owner/group/mode are `root`, `atlas-manager-power`, and `04750`.
+The helper requires Linux, effective UID zero, the fixed executable identity,
+and no arguments; it handles one bounded v1 JSON request and rejects every
+valid operation with `operation_unsupported`. Invalid input exits 64 and
+internal startup failure exits 70, with no stderr diagnostics.
+
+The deny-all backend performs no filesystem, device, process, shell, network,
+RTC, wake, or shutdown effect. The application-side inspector now checks
+exact mode, setuid, nonzero GID, process group membership, root parent
+ownership, and safe parent permissions without repairing installation state.
+CI pins Go 1.23.0, runs format/vet/tests, and builds an ignored Linux artifact;
+no installation or production wiring is present. TypeScript and Go consume
+the shared protocol corpus. Final validation used Node.js 24.18.0, npm
+11.16.0, and Go 1.23.0: 171 Node test files/2,406 tests, 7 Go tests, clean
+format/lint/typecheck/vet/build checks, unchanged npm and Go module
+dependencies, and 0 production npm vulnerabilities. `nvm use` remains
+unavailable in the shell; versions were verified directly.
+
+The next recommended delivery is the separately reviewed read-only helper
+backend. Real effects remain disabled.
+
 ## Current work
 
 The active branch for Issue #244 is:

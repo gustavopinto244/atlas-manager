@@ -11,13 +11,15 @@ const validFile: LinuxPowerHelperFileStats = {
   isRegularFile: true,
   isDirectory: false,
   uid: 0,
-  mode: 0o755,
+  gid: 2000,
+  mode: 0o4750,
 };
 const validParent: LinuxPowerHelperFileStats = {
   isSymbolicLink: false,
   isRegularFile: false,
   isDirectory: true,
   uid: 0,
+  gid: 0,
   mode: 0o755,
 };
 
@@ -30,6 +32,7 @@ function createFileSystem(
       if (path === LINUX_POWER_HELPER_PATH) return file;
       return parent;
     }),
+    getProcessGroups: vi.fn(() => [2000]),
   };
 }
 
@@ -48,8 +51,10 @@ describe("Linux power-helper installation inspection", () => {
     ["helper_symbolic_link_rejected", { ...validFile, isSymbolicLink: true }],
     ["helper_not_regular_file", { ...validFile, isRegularFile: false }],
     ["helper_owner_invalid", { ...validFile, uid: 1000 }],
-    ["helper_permissions_unsafe", { ...validFile, mode: 0o775 }],
-    ["helper_not_executable", { ...validFile, mode: 0o644 }],
+    ["helper_setuid_required", { ...validFile, mode: 0o750 }],
+    ["helper_group_invalid", { ...validFile, gid: 0 }],
+    ["helper_mode_invalid", { ...validFile, mode: 0o4755 }],
+    ["helper_process_group_missing", { ...validFile, gid: 3000 }],
   ] as const)("rejects unsafe helper files with %s", (code, file) => {
     expect(() =>
       new NodeLinuxPowerHelperInstallationInspector(
@@ -62,6 +67,7 @@ describe("Linux power-helper installation inspection", () => {
     ["helper_parent_invalid", { ...validParent, isSymbolicLink: true }],
     ["helper_parent_invalid", { ...validParent, isDirectory: false }],
     ["helper_parent_invalid", { ...validParent, mode: 0o775 }],
+    ["helper_parent_owner_invalid", { ...validParent, uid: 1000 }],
   ] as const)("rejects unsafe parent directories with %s", (code, parent) => {
     expect(() =>
       new NodeLinuxPowerHelperInstallationInspector(
@@ -77,6 +83,7 @@ describe("Linux power-helper installation inspection", () => {
         Object.assign(error, { code: "ENOENT" });
         throw error;
       }),
+      getProcessGroups: vi.fn(() => []),
     };
     expect(() =>
       new NodeLinuxPowerHelperInstallationInspector(missing).inspect(),
@@ -86,6 +93,7 @@ describe("Linux power-helper installation inspection", () => {
       lstat: vi.fn(() => {
         throw new Error("private filesystem detail");
       }),
+      getProcessGroups: vi.fn(() => []),
     };
     expect(() =>
       new NodeLinuxPowerHelperInstallationInspector(failed).inspect(),

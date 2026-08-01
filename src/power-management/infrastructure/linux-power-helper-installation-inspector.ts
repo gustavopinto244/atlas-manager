@@ -8,9 +8,14 @@ export type LinuxPowerHelperInstallationErrorCode =
   | "helper_not_regular_file"
   | "helper_symbolic_link_rejected"
   | "helper_owner_invalid"
+  | "helper_setuid_required"
+  | "helper_group_invalid"
+  | "helper_process_group_missing"
+  | "helper_mode_invalid"
   | "helper_permissions_unsafe"
   | "helper_not_executable"
   | "helper_parent_invalid"
+  | "helper_parent_owner_invalid"
   | "helper_inspection_failed";
 
 export class LinuxPowerHelperInstallationError extends Error {
@@ -33,11 +38,13 @@ export interface LinuxPowerHelperFileStats {
   readonly isRegularFile: boolean;
   readonly isDirectory: boolean;
   readonly uid: number;
+  readonly gid: number;
   readonly mode: number;
 }
 
 export interface LinuxPowerHelperFileSystem {
   lstat(path: string): LinuxPowerHelperFileStats;
+  getProcessGroups(): readonly number[];
 }
 
 export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelperInstallationInspector {
@@ -70,11 +77,19 @@ export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelp
     if (helper.uid !== 0) {
       throw new LinuxPowerHelperInstallationError("helper_owner_invalid");
     }
-    if ((helper.mode & 0o022) !== 0) {
-      throw new LinuxPowerHelperInstallationError("helper_permissions_unsafe");
+    if ((helper.mode & 0o4000) === 0) {
+      throw new LinuxPowerHelperInstallationError("helper_setuid_required");
     }
-    if ((helper.mode & 0o111) === 0) {
-      throw new LinuxPowerHelperInstallationError("helper_not_executable");
+    if (helper.gid <= 0) {
+      throw new LinuxPowerHelperInstallationError("helper_group_invalid");
+    }
+    if ((helper.mode & 0o7777) !== 0o4750) {
+      throw new LinuxPowerHelperInstallationError("helper_mode_invalid");
+    }
+    if (!this.#fileSystem.getProcessGroups().includes(helper.gid)) {
+      throw new LinuxPowerHelperInstallationError(
+        "helper_process_group_missing",
+      );
     }
 
     let parent: LinuxPowerHelperFileStats;
@@ -93,6 +108,11 @@ export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelp
     ) {
       throw new LinuxPowerHelperInstallationError("helper_parent_invalid");
     }
+    if (parent.uid !== 0) {
+      throw new LinuxPowerHelperInstallationError(
+        "helper_parent_owner_invalid",
+      );
+    }
   }
 }
 
@@ -104,8 +124,12 @@ const nodeFileSystem: LinuxPowerHelperFileSystem = Object.freeze({
       isRegularFile: stats.isFile(),
       isDirectory: stats.isDirectory(),
       uid: stats.uid,
+      gid: stats.gid,
       mode: stats.mode,
     });
+  },
+  getProcessGroups(): readonly number[] {
+    return process.getgroups?.() ?? [];
   },
 });
 

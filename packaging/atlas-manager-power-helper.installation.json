@@ -1,0 +1,11 @@
+{
+  "name": "atlas-manager-power-helper",
+  "sourceModule": "power-helper",
+  "executable": "atlas-manager-power-helper",
+  "installPath": "/usr/local/libexec/atlas-manager-power-helper",
+  "owner": "root",
+  "group": "atlas-manager-power",
+  "mode": "04750",
+  "automaticInstallation": false,
+  "productionActivation": false
+}
