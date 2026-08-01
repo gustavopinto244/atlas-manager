@@ -97,6 +97,15 @@ The helper is still not installed, setuid-enabled, or connected to Atlas
 Manager. Existing HTTP routes remain mock-first and unchanged; CI uses
 deterministic lock/filesystem fixtures and never mutates host RTC hardware.
 
+Issue #252 adds the real standalone-helper shutdown backend through the fixed
+systemd-logind call `org.freedesktop.login1.Manager.PowerOff(false)`. The
+helper validates `/run/dbus/system_bus_socket`, uses one private
+EXTERNAL-authenticated connection, holds the exclusive operation lock, and
+enforces a three-second deadline. Inhibitors are not bypassed; no shell,
+subprocess, syscall, retry, fallback, or RTC access is used. A successful
+reply means logind accepted the request, not that power-off is complete.
+The helper remains uninstalled and Atlas Manager remains mock-first.
+
 ## v0.6 — Power management (active)
 
 The first three power-management vertical slices are mock-first. They provide
@@ -2523,3 +2532,20 @@ failures produce safe fixed exit codes and no diagnostics on stderr.
 The helper is not installed, not wired into the production composition, and
 does not enable real power. Future read-only and mutating Linux backends need
 separate reviewed Issues.
+
+### Systemd-logind shutdown backend
+
+ADR-008 adds the final version-one helper source backend for
+`request_shutdown`. It validates the root-owned fixed Unix socket
+`/run/dbus/system_bus_socket`, opens one private connection with EXTERNAL
+authentication, performs `Hello`, and calls exactly
+`org.freedesktop.login1.Manager.PowerOff(false)`. The call has a fixed
+three-second deadline, respects logind inhibitors, and never uses a shell,
+child process, syscall, fallback, or retry.
+
+`accepted: true` means only that logind returned a successful method reply; it
+does not prove that the host has already powered off. Connection loss or a
+deadline after transmission is treated as uncertain internally and maps to the
+existing safe `operation_failed` response. The helper remains uninstalled,
+unsetuid, and unwired, so Atlas Manager's HTTP and shutdown workflows remain
+mock-first and simulated.

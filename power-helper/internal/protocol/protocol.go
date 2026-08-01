@@ -60,6 +60,7 @@ type ResponseResult struct {
 	RTCInformation *RTCInformationResult
 	WakeAlarm      *WakeAlarmResult
 	Mutation       *WakeAlarmMutationResult
+	Shutdown       *ShutdownResult
 }
 
 type RTCInformationResult struct {
@@ -76,6 +77,10 @@ type WakeAlarmMutationResult struct {
 	Before  WakeAlarmResult
 	After   WakeAlarmResult
 	Outcome string
+}
+
+type ShutdownResult struct {
+	Accepted bool
 }
 
 const (
@@ -205,6 +210,19 @@ func NewCancelWakeAlarmSuccess(before WakeAlarmResult, after WakeAlarmResult, ou
 	return newMutationSuccess(CancelWakeAlarm, before, after, outcome)
 }
 
+func NewRequestShutdownSuccess() (Response, error) {
+	response := Response{
+		Version:   Version,
+		Operation: RequestShutdown,
+		Outcome:   "success",
+		Result:    &ResponseResult{Shutdown: &ShutdownResult{Accepted: true}},
+	}
+	if err := validateResponse(response); err != nil {
+		return Response{}, err
+	}
+	return response, nil
+}
+
 func newMutationSuccess(operation Operation, before WakeAlarmResult, after WakeAlarmResult, outcome string) (Response, error) {
 	response := Response{
 		Version:   Version,
@@ -267,6 +285,17 @@ func (r Response) MarshalJSON() ([]byte, error) {
 				},
 			})
 		}
+		if r.Operation == RequestShutdown {
+			return json.Marshal(struct {
+				Version   int                `json:"version"`
+				Operation Operation          `json:"operation"`
+				Outcome   string             `json:"outcome"`
+				Result    ShutdownResultJSON `json:"result"`
+			}{
+				Version: r.Version, Operation: r.Operation, Outcome: r.Outcome,
+				Result: ShutdownResultJSON{Accepted: r.Result.Shutdown.Accepted},
+			})
+		}
 		return json.Marshal(struct {
 			Version   int             `json:"version"`
 			Operation Operation       `json:"operation"`
@@ -296,6 +325,10 @@ type WakeAlarmMutationResultJSON struct {
 	Outcome string          `json:"outcome"`
 }
 
+type ShutdownResultJSON struct {
+	Accepted bool `json:"accepted"`
+}
+
 func (r *ResponseResult) WakeAlarmValue() WakeAlarmResult {
 	if r == nil || r.WakeAlarm == nil {
 		return WakeAlarmResult{}
@@ -313,7 +346,7 @@ func validateResponse(response Response) error {
 		}
 		switch response.Operation {
 		case ReadRTCInformation:
-			if response.Result.RTCInformation == nil || response.Result.WakeAlarm != nil || response.Result.Mutation != nil {
+			if response.Result.RTCInformation == nil || response.Result.WakeAlarm != nil || response.Result.Mutation != nil || response.Result.Shutdown != nil {
 				return ErrInvalidResponse
 			}
 			if !IsCanonicalTimestamp(response.Result.RTCInformation.RTCTime) {
@@ -321,15 +354,20 @@ func validateResponse(response Response) error {
 			}
 			return validateWakeAlarmResult(response.Result.RTCInformation.WakeAlarm)
 		case ReadWakeAlarm:
-			if response.Result.WakeAlarm == nil || response.Result.RTCInformation != nil || response.Result.Mutation != nil {
+			if response.Result.WakeAlarm == nil || response.Result.RTCInformation != nil || response.Result.Mutation != nil || response.Result.Shutdown != nil {
 				return ErrInvalidResponse
 			}
 			return validateWakeAlarmResult(*response.Result.WakeAlarm)
 		case ScheduleWakeAlarm, CancelWakeAlarm:
-			if response.Result.Mutation == nil || response.Result.RTCInformation != nil || response.Result.WakeAlarm != nil {
+			if response.Result.Mutation == nil || response.Result.RTCInformation != nil || response.Result.WakeAlarm != nil || response.Result.Shutdown != nil {
 				return ErrInvalidResponse
 			}
 			return validateMutationResult(response.Operation, *response.Result.Mutation)
+		case RequestShutdown:
+			if response.Result.Shutdown == nil || response.Result.RTCInformation != nil || response.Result.WakeAlarm != nil || response.Result.Mutation != nil || !response.Result.Shutdown.Accepted {
+				return ErrInvalidResponse
+			}
+			return nil
 		default:
 			return ErrInvalidResponse
 		}

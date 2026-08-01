@@ -38,6 +38,10 @@ jobs:
         working-directory: power-helper
         run: go vet ./...
 
+      - name: Verify Go modules
+        working-directory: power-helper
+        run: go mod verify
+
       - name: Run Go tests
         working-directory: power-helper
         run: go test ./...

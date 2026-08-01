@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
 	"errors"
 
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/lock"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/shutdown"
 )
 
 // Operations expose only the fixed version-one helper operations.
@@ -53,14 +55,19 @@ type RTCMutator interface {
 	Cancel() (rtc.Mutation, error)
 }
 
-type LinuxOperations struct {
-	reader  RTCReader
-	mutator RTCMutator
-	lock    lock.OperationLock
+type MachineShutdownRequester interface {
+	RequestPowerOff(context.Context) error
 }
 
-func NewLinuxOperations(reader RTCReader, mutator RTCMutator, operationLock lock.OperationLock) LinuxOperations {
-	return LinuxOperations{reader: reader, mutator: mutator, lock: operationLock}
+type LinuxOperations struct {
+	reader            RTCReader
+	mutator           RTCMutator
+	shutdownRequester MachineShutdownRequester
+	lock              lock.OperationLock
+}
+
+func NewLinuxOperations(reader RTCReader, mutator RTCMutator, shutdownRequester MachineShutdownRequester, operationLock lock.OperationLock) LinuxOperations {
+	return LinuxOperations{reader: reader, mutator: mutator, shutdownRequester: shutdownRequester, lock: operationLock}
 }
 
 func (operations LinuxOperations) ReadRTCInformation(request protocol.Request) protocol.Response {
@@ -107,8 +114,23 @@ func (operations LinuxOperations) CancelWakeAlarm(request protocol.Request) prot
 	return cancelMutationResponse(request, mutation)
 }
 
-func (LinuxOperations) RequestShutdown(request protocol.Request) protocol.Response {
-	return protocol.RejectingResponse(request)
+func (operations LinuxOperations) RequestShutdown(request protocol.Request) protocol.Response {
+	release, err := operations.lock.AcquireExclusive()
+	if err != nil {
+		return operationRejected(request)
+	}
+	defer release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), shutdown.DBusDeadline)
+	defer cancel()
+	if err := operations.shutdownRequester.RequestPowerOff(ctx); err != nil {
+		return shutdownFailure(request, err)
+	}
+	response, err := protocol.NewRequestShutdownSuccess()
+	if err != nil {
+		return operationFailed(request)
+	}
+	return response
 }
 
 func NewReadOnly(reader RTCReader) ReadOnly {
@@ -249,6 +271,16 @@ func operationFailed(request protocol.Request) protocol.Response {
 		return protocol.Response{}
 	}
 	return response
+}
+
+func shutdownFailure(request protocol.Request, err error) protocol.Response {
+	if errors.Is(err, shutdown.ErrShutdownUnsupported) {
+		return protocol.RejectingResponse(request)
+	}
+	if errors.Is(err, shutdown.ErrShutdownRejected) {
+		return operationRejected(request)
+	}
+	return operationFailed(request)
 }
 
 func Dispatch(operations Operations, request protocol.Request) protocol.Response {

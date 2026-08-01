@@ -26,3 +26,14 @@ func TestDeterministicFixtureSupportsMutationLifecycle(t *testing.T) {
 	assertOutcome(operations.CancelWakeAlarm(request(protocol.CancelWakeAlarm, "")), "cancelled")
 	assertOutcome(operations.CancelWakeAlarm(request(protocol.CancelWakeAlarm, "")), "not_scheduled")
 }
+
+func TestDeterministicFixtureSupportsShutdownSuccess(t *testing.T) {
+	response := NewOperations().RequestShutdown(protocol.Request{
+		Version:     protocol.Version,
+		Operation:   protocol.RequestShutdown,
+		RequestedAt: "2026-08-01T12:00:00.000Z",
+	})
+	if response.Outcome != "success" || response.Result == nil || response.Result.Shutdown == nil || !response.Result.Shutdown.Accepted {
+		t.Fatalf("unexpected shutdown fixture response: %#v", response)
+	}
+}

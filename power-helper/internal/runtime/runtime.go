@@ -9,6 +9,7 @@ import (
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/privilege"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/shutdown"
 )
 
 func Run(stdin io.Reader, stdout io.Writer, startup privilege.StartupDependencies, operations backend.Operations) int {
@@ -52,6 +53,7 @@ func RunProcess() (exitCode int) {
 	clock := rtc.SystemClock{}
 	reader := rtc.NewReader(fileSystem, clock)
 	mutator := rtc.NewMutator(fileSystem, clock)
-	operations := backend.NewLinuxOperations(reader, mutator, lock.NewFixedFileLock())
+	shutdownRequester := shutdown.NewSystemdLogindRequester(shutdown.LinuxSystemBusSocketInspector{}, shutdown.FixedBusConnector{})
+	operations := backend.NewLinuxOperations(reader, mutator, shutdownRequester, lock.NewFixedFileLock())
 	return Run(os.Stdin, os.Stdout, startup, operations)
 }

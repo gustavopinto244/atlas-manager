@@ -1,5 +1,48 @@
 # Agent handoff
 
+## Current work — Issue #252
+
+The active branch is:
+
+```text
+feat/linux-power-helper-systemd-shutdown-backend
+```
+
+The authoritative merged PR #251 baseline in this checkout is:
+
+```text
+df59b47da3a6074b20546c608954e67f5b69f4f8
+```
+
+Issue #252 adds ADR-008 and the real helper-side shutdown backend through the
+fixed systemd-logind D-Bus contract. The helper validates the root-owned
+`/run/dbus/system_bus_socket` and `/run/dbus` parent, uses one private
+EXTERNAL-authenticated connection, performs `Hello`, and calls only
+`org.freedesktop.login1.Manager.PowerOff(false)`. The existing exclusive
+operation lock is held across socket inspection, connection, call, response
+construction, and release. The fixed internal deadline is three seconds.
+
+Definite unsupported conditions map to `operation_unsupported`, controlled
+logind or inhibitor rejection maps to `operation_rejected`, and infrastructure
+or uncertain-acceptance failures map to `operation_failed`. No retry,
+reconnect, fallback, inhibitor bypass, RTC access, shell, subprocess, syscall,
+or signal subscription is present. The helper remains uninstalled, unsetuid,
+and unwired; Atlas Manager remains mock-first and simulated.
+
+The only direct new dependency is `github.com/godbus/dbus/v5 v5.2.2` under the
+Go module, with transitive `golang.org/x/sys v0.27.0`. Final validation used
+Node.js 24.18.0, npm 11.16.0, and Go 1.23.0 linux/amd64. The Node suite passed
+171 files and 2,415 tests with the deterministic fixture enabled; the Go suite
+passed 97 tests. Formatting, lint, typecheck, Node build, Go format, vet,
+module verification, Linux builds, compatibility tests, and `git diff --check`
+passed. npm dependencies are unchanged; production audit reports zero
+vulnerabilities. `nvm use` is unavailable in the shell; versions were verified
+directly. No helper was installed, no setuid or group change was made, and no
+system bus or real shutdown was invoked.
+
+Do not reset, discard, commit, push, merge, or open a Pull Request without the
+project owner's approval.
+
 ## Current work — Issue #248
 
 The active branch is:

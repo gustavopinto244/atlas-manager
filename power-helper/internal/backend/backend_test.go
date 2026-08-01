@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
 	"testing"
 
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/lock"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/shutdown"
 )
 
 type fakeRTCReader struct {
@@ -21,6 +23,16 @@ type fakeMutator struct {
 	cancel   rtc.Mutation
 	err      error
 	calls    int
+}
+
+type fakeShutdownRequester struct {
+	calls int
+	err   error
+}
+
+func (requester *fakeShutdownRequester) RequestPowerOff(context.Context) error {
+	requester.calls++
+	return requester.err
 }
 
 func (mutator *fakeMutator) Schedule(string) (rtc.Mutation, error) {
@@ -129,7 +141,7 @@ func TestLinuxOperationsSchedulesWithExclusiveLockAndTypedResponse(t *testing.T)
 		Outcome: "scheduled",
 	}}
 	request := protocol.Request{Version: protocol.Version, Operation: protocol.ScheduleWakeAlarm, RequestedAt: "2026-08-01T18:00:00.000Z", ScheduledFor: "2026-08-02T09:00:00.000Z"}
-	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, operationLock), request)
+	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, &fakeShutdownRequester{}, operationLock), request)
 	encoded, err := protocol.MarshalResponse(response)
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +159,7 @@ func TestLinuxOperationsReadsWithSharedLock(t *testing.T) {
 		WakeAlarm: rtc.WakeAlarm{State: protocol.WakeAlarmNotScheduled},
 	}}
 	request := protocol.Request{Version: protocol.Version, Operation: protocol.ReadRTCInformation, RequestedAt: "2026-08-01T18:00:00.000Z"}
-	response := Dispatch(NewLinuxOperations(reader, &fakeMutator{}, operationLock), request)
+	response := Dispatch(NewLinuxOperations(reader, &fakeMutator{}, &fakeShutdownRequester{}, operationLock), request)
 	if response.Outcome != "success" || operationLock.sharedCalls != 1 || operationLock.exclusiveCalls != 0 || operationLock.releases != 1 {
 		t.Fatalf("unexpected shared read: %#v", operationLock)
 	}
@@ -157,7 +169,7 @@ func TestLinuxOperationsRejectsWithoutLockOrTargetInvocation(t *testing.T) {
 	operationLock := &fakeLock{err: lock.ErrUnavailable}
 	mutator := &fakeMutator{}
 	request := protocol.Request{Version: protocol.Version, Operation: protocol.CancelWakeAlarm, RequestedAt: "2026-08-01T18:00:00.000Z"}
-	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, operationLock), request)
+	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, &fakeShutdownRequester{}, operationLock), request)
 	encoded, err := protocol.MarshalResponse(response)
 	if err != nil {
 		t.Fatal(err)
@@ -168,12 +180,41 @@ func TestLinuxOperationsRejectsWithoutLockOrTargetInvocation(t *testing.T) {
 	}
 }
 
-func TestShutdownDoesNotAcquireLockOrReadRTC(t *testing.T) {
+func TestShutdownUsesExclusiveLockAndDoesNotReadRTC(t *testing.T) {
 	operationLock := &fakeLock{}
 	mutator := &fakeMutator{}
+	requester := &fakeShutdownRequester{}
 	request := protocol.Request{Version: protocol.Version, Operation: protocol.RequestShutdown, RequestedAt: "2026-08-01T18:00:00.000Z"}
-	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, operationLock), request)
-	if response != protocol.RejectingResponse(request) || operationLock.sharedCalls != 0 || operationLock.exclusiveCalls != 0 || mutator.calls != 0 {
+	response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, mutator, requester, operationLock), request)
+	encoded, err := protocol.MarshalResponse(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\"version\":1,\"operation\":\"request_shutdown\",\"outcome\":\"success\",\"result\":{\"accepted\":true}}\n"
+	if string(encoded) != want || operationLock.sharedCalls != 0 || operationLock.exclusiveCalls != 1 || operationLock.releases != 1 || requester.calls != 1 || mutator.calls != 0 {
 		t.Fatalf("shutdown acquired dependencies: %#v", operationLock)
+	}
+}
+
+func TestShutdownMapsCategorizedFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		err     error
+		outcome string
+		code    string
+	}{
+		{name: "unsupported", err: shutdown.ErrShutdownUnsupported, outcome: "rejected", code: "operation_unsupported"},
+		{name: "rejected", err: shutdown.ErrShutdownRejected, outcome: "rejected", code: "operation_rejected"},
+		{name: "failed", err: shutdown.ErrShutdownFailed, outcome: "failed", code: "operation_failed"},
+		{name: "uncertain", err: shutdown.ErrShutdownAcceptanceUncertain, outcome: "failed", code: "operation_failed"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			requester := &fakeShutdownRequester{err: testCase.err}
+			request := protocol.Request{Version: protocol.Version, Operation: protocol.RequestShutdown, RequestedAt: "2026-08-01T18:00:00.000Z"}
+			response := Dispatch(NewLinuxOperations(&fakeRTCReader{}, &fakeMutator{}, requester, &fakeLock{}), request)
+			if response.Outcome != testCase.outcome || response.Code != testCase.code || requester.calls != 1 {
+				t.Fatalf("unexpected mapping: %#v", response)
+			}
+		})
 	}
 }

@@ -281,6 +281,32 @@ func TestMutationSuccessFixturesMatchGoSerialization(t *testing.T) {
 	}
 }
 
+func TestShutdownSuccessUsesStrictCanonicalShape(t *testing.T) {
+	response, err := NewRequestShutdownSuccess()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := MarshalResponse(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := mustRead(t, "../../testdata/protocol/responses/success/request_shutdown_accepted.json")
+	if string(encoded) != string(want) {
+		t.Fatalf("shutdown fixture mismatch: %s", encoded)
+	}
+
+	invalid := []Response{
+		{Version: Version, Operation: RequestShutdown, Outcome: "success", Result: &ResponseResult{Shutdown: &ShutdownResult{Accepted: false}}},
+		{Version: Version, Operation: RequestShutdown, Outcome: "success", Result: &ResponseResult{Shutdown: &ShutdownResult{Accepted: true}, WakeAlarm: &WakeAlarmResult{State: WakeAlarmNotScheduled}}},
+		{Version: Version, Operation: ReadWakeAlarm, Outcome: "success", Result: &ResponseResult{Shutdown: &ShutdownResult{Accepted: true}}},
+	}
+	for _, candidate := range invalid {
+		if _, err := MarshalResponse(candidate); err == nil {
+			t.Fatal("invalid shutdown result was accepted")
+		}
+	}
+}
+
 func mustScheduleResponse(t *testing.T, before WakeAlarmResult, after WakeAlarmResult, outcome string) Response {
 	t.Helper()
 	response, err := NewScheduleWakeAlarmSuccess(before, after, outcome)

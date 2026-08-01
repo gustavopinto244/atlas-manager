@@ -1648,3 +1648,27 @@ closed.
 The intentional state in which replacement successfully cancels the old alarm
 but fails before verifying the new alarm. The helper does not retry or restore
 the old value; a later authoritative read is required.
+
+### Systemd-logind shutdown requester
+
+The fixed helper-side adapter that asks
+`org.freedesktop.login1.Manager.PowerOff(false)` over the system D-Bus. It does
+not invoke commands, bypass inhibitors, or prove that power-off completed.
+
+### Fixed system-bus boundary
+
+The root-owned `/run/dbus/system_bus_socket` and its root-owned safe parent.
+The helper never accepts a D-Bus address from environment, protocol, or
+configuration input.
+
+### Shutdown acceptance
+
+The limited meaning of a successful helper shutdown response: systemd-logind
+returned a successful method reply. It is not confirmation that the machine is
+already powered off.
+
+### Uncertain shutdown acceptance
+
+The internal state after the PowerOff request may have been transmitted but no
+reply was received. It maps to `operation_failed` and is never retried or
+compensated.
