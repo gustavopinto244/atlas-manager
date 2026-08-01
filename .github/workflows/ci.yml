@@ -43,7 +43,8 @@ jobs:
         run: go test ./...
 
       - name: Build Linux power helper
-        run: mkdir -p dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o dist/power-helper/atlas-manager-power-helper ./power-helper/cmd/atlas-manager-power-helper
+        working-directory: power-helper
+        run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper ./cmd/atlas-manager-power-helper
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
