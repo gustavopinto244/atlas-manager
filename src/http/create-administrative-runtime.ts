@@ -5,23 +5,28 @@ import { createProtectedAdministration } from "../access-control/composition/cre
 import { InMemoryAdministrativeRoleAssignmentReader } from "../access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
 import { createEventHistory } from "../event-history/composition/create-event-history.js";
 import { createPowerManagement } from "../power-management/composition/create-power-management.js";
+import type { MachineShutdownConfirmationReader } from "../power-management/application/ports/machine-shutdown-readiness-readers.js";
+import type { ServiceManagementCapabilities } from "../service-management/composition/create-service-management.js";
 import type { AdministrativeEventHistoryPage } from "../event-history/domain/administrative-event-history-page.js";
 import {
   FixedAdministrativeRequestAdmission,
   type AdministrativeRequestClock,
 } from "./administrative-request-admission.js";
-import { FixedAdministrativeWakeAlarmMutationGate } from "./administrative-wake-alarm-mutation-gate.js";
+import { FixedAdministrativePowerOperationGate } from "./administrative-power-operation-gate.js";
 import type { AdministrativeEventHistoryRouteDependencies } from "./administrative-event-history-route.js";
 import type { AdministrativeWakeAlarmRouteDependencies } from "./administrative-wake-alarm-route.js";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
+import type { AdministrativeShutdownRouteDependencies } from "./administrative-shutdown-route.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
   readonly wakeAlarm?: AdministrativeWakeAlarmRouteDependencies;
+  readonly shutdown?: AdministrativeShutdownRouteDependencies;
 }
 
 export function createAdministrativeRuntime(
   config: EnvironmentConfig,
+  serviceManagement?: ServiceManagementCapabilities,
 ): AdministrativeRuntime {
   const filePath = config.administrativeEventHistoryFilePath;
   const roleAssignments = config.administrativeRoleAssignments;
@@ -49,11 +54,37 @@ export function createAdministrativeRuntime(
   const powerManagement = createPowerManagement({
     clock,
     administrativeEventHistoryCapabilities: eventHistory,
+    ...(config.machineShutdownOccurrenceClaimFilePath === undefined ||
+    config.machinePowerSchedulerCursorFilePath === undefined
+      ? {}
+      : {
+          persistence: {
+            occurrenceClaimFilePath:
+              config.machineShutdownOccurrenceClaimFilePath,
+            schedulerCursorFilePath: config.machinePowerSchedulerCursorFilePath,
+          },
+        }),
+    ...(serviceManagement === undefined
+      ? {}
+      : {
+          serviceManagementReadinessCapabilities: {
+            listRegisteredServices: serviceManagement.listRegisteredServices,
+            getRegisteredServiceAvailabilityForInterval:
+              serviceManagement.getRegisteredServiceAvailabilityForInterval,
+            getRegisteredServiceStatus:
+              serviceManagement.getRegisteredServiceStatus,
+          },
+          serviceManagementPreparationCapabilities:
+            serviceManagement.orchestrateRegisteredServicesStop,
+        }),
   });
   const admission = new FixedAdministrativeRequestAdmission(clock);
-  const mutationGate = new FixedAdministrativeWakeAlarmMutationGate();
+  const powerOperationGate = new FixedAdministrativePowerOperationGate();
 
-  const createProtected = (reader: CloudflareAccessAssertionReader) => {
+  const createProtected = (
+    reader: CloudflareAccessAssertionReader,
+    confirmationReader?: MachineShutdownConfirmationReader,
+  ) => {
     const accessControl = createAdministrativeAccessControl({
       authenticator:
         cloudflareAuthentication.createAuthenticationProviderForRequest(reader),
@@ -64,6 +95,9 @@ export function createAdministrativeRuntime(
       powerManagement,
       eventHistory,
       clock,
+      ...(confirmationReader === undefined
+        ? {}
+        : { machineShutdownConfirmationReader: confirmationReader }),
     });
   };
 
@@ -90,10 +124,22 @@ export function createAdministrativeRuntime(
       ? {
           wakeAlarm: Object.freeze({
             admission,
-            mutationGate,
+            mutationGate: powerOperationGate,
             createProtectedAdministration: (
               reader: CloudflareAccessAssertionReader,
             ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...(config.administrativeShutdownHttpEnabled
+      ? {
+          shutdown: Object.freeze({
+            admission,
+            powerOperationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+              confirmationReader: MachineShutdownConfirmationReader,
+            ) => createProtected(reader, confirmationReader),
           }),
         }
       : {}),

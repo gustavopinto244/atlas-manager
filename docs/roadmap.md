@@ -520,3 +520,15 @@ DELETE delivery, strict request and response bounds, shared administrative
 admission, and fail-fast mutation concurrency. Persistent audit history and
 real-helper activation prerequisites remain required; no RTC or machine power
 effect is enabled.
+
+## Issue #244 delivery notes
+
+Issue #244 advances v0.6, v0.8, and v0.9 without completing any of them. It
+adds the disabled-by-default, loopback-only two-stage shutdown HTTP workflow:
+`POST /admin/power/shutdown/preparations` and `POST
+/admin/power/shutdown/executions`. The routes use separate confirmations,
+fresh execution readiness, existing dependency-aware service preparation,
+persistent occurrence claims, wake-before-simulated-shutdown ordering, shared
+administrative admission, and one fail-fast power-operation gate. Preparation
+may stop registered services. No helper, real RTC mutation, or real machine
+shutdown is enabled, and partial effects are never rolled back or retried.

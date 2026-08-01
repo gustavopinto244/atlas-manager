@@ -107,8 +107,9 @@ function start(): void {
     );
     const administrativeRuntime =
       config.administrativeEventHistoryHttpEnabled ||
-      config.administrativeWakeAlarmHttpEnabled
-        ? createAdministrativeRuntime(config)
+      config.administrativeWakeAlarmHttpEnabled ||
+      config.administrativeShutdownHttpEnabled
+        ? createAdministrativeRuntime(config, serviceManagement)
         : undefined;
     const app = createApp({
       logger,
@@ -119,6 +120,9 @@ function start(): void {
       ...(administrativeRuntime?.wakeAlarm === undefined
         ? {}
         : { administrativeWakeAlarm: administrativeRuntime.wakeAlarm }),
+      ...(administrativeRuntime?.shutdown === undefined
+        ? {}
+        : { administrativeShutdown: administrativeRuntime.shutdown }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

@@ -45,9 +45,24 @@ restrictive security headers. The route admits at most 60 requests per
 60-second process-local window and four concurrently, without IP or proxy
 headers, and grants no CORS permission.
 
-Only event-history reads and the mock-first wake-alarm lifecycle are exposed.
-There are still no shutdown or scheduler HTTP routes, no helper activation,
-and no real RTC or machine power effect.
+The mock-first shutdown workflow is available separately behind
+`ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=true`. It requires the same shared
+administrative configuration plus distinct persistent occurrence-claim and
+scheduler-cursor files, and at least a `power_operator` or `administrator`.
+The exact routes are `POST /admin/power/shutdown/preparations` and `POST
+/admin/power/shutdown/executions`. Preparation and execution require different
+exact confirmations; execution never performs automatic preparation and never
+infers confirmation from authentication, roles, loopback access, or a previous
+request. Preparation may stop registered services through the existing
+dependency-aware service-management composition. Execution performs fresh
+readiness, permanently claims the occurrence, schedules the mock wake alarm,
+and requests simulated shutdown in that order. Claims and completed effects are
+not released, retried, rolled back, or compensated after partial failures.
+
+All protected administrative routes share the 60-per-60-second process-local
+admission limit, four-request concurrency limit, and one active power-operation
+gate. Shutdown remains simulated: no helper, real RTC mutation, or real machine
+power effect is enabled.
 
 The mock-first wake-alarm lifecycle is separately available behind
 `ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true`. It requires the same loopback,

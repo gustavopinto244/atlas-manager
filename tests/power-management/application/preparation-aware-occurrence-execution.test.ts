@@ -93,6 +93,34 @@ function executor(
   };
 }
 describe("preparation-aware occurrence execution", () => {
+  it("can reject an HTTP-style execution without automatically preparing", async () => {
+    const clock = { now: vi.fn(() => new Date(at)) };
+    const evalr = readiness("confirmed", "blocked");
+    const prep = new PrepareMachineShutdownOccurrence(clock, evalr, {
+      tasks: { drain: vi.fn() },
+      backup: { complete: vi.fn() },
+      filesystem: { synchronize: vi.fn() },
+      events: new InMemoryMachineShutdownPreparationEventRecorder(),
+    });
+    const h = executor(clock, evalr, prep);
+    const result = await h.useCase.executeAt(
+      occurrence,
+      at,
+      {
+        kind: "administrative",
+        actorId: "administrator:00000000-0000-4000-8000-000000000001",
+      },
+      {
+        confirmationReader: { read: vi.fn(async () => "confirmed" as const) },
+        automaticallyPrepare: false,
+      },
+    );
+
+    expect(result.outcome).toBe("rejected");
+    expect(h.wake.schedule).not.toHaveBeenCalled();
+    expect(h.shutdown.requestShutdown).not.toHaveBeenCalled();
+  });
+
   it("shares one processedAt and returns not_required preparation before claim/effects", async () => {
     const clock = { now: vi.fn(() => new Date(at)) };
     const evalr = readiness();

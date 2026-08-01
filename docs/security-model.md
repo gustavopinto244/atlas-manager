@@ -127,6 +127,26 @@ Events must not be silently altered to conceal actions or failures.
 
 ## Trust boundaries
 
+### Protected shutdown boundary
+
+Shutdown HTTP delivery is disabled by default and remains loopback-only. It
+requires persistent event history, persistent occurrence claims and scheduler
+cursor state, Cloudflare identity verification, and a trusted power-capable
+role assignment. Authentication is request-scoped and authorization is audited
+before preparation or execution effects.
+
+Preparation and execution require different exact confirmations. A valid JWT,
+an administrator or power-operator role, local access, or a previous
+preparation request never supplies current execution confirmation. Execution
+does not automatically prepare; it evaluates readiness again before claiming.
+
+The occurrence claim is permanent. Wake scheduling precedes the simulated
+shutdown request. If a later audit or effect fails, completed effects and the
+claim remain authoritative; there is no retry, rollback, cancellation, or
+compensation. HTTP returns a state-recheck error without exposing internal
+results. No helper, RTC mutation, real shutdown, trusted proxy, client-IP
+security, or CORS permission is enabled.
+
 ### External client boundary
 
 HTTP clients are outside the trusted application boundary.

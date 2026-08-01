@@ -22,12 +22,15 @@ import {
   createWakeAlarmSchedule,
   WakeAlarmScheduleValidationError,
 } from "../../power-management/domain/wake-alarm-schedule.js";
+import type { MachineShutdownConfirmationReader } from "../../power-management/application/ports/machine-shutdown-readiness-readers.js";
+import { MachineShutdownOccurrenceExecutionError } from "../../power-management/application/execute-machine-shutdown-occurrence.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
   readonly powerManagement: PowerManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
   readonly clock: PowerManagementClock;
+  readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
   readonly administrativeEventAttemptIdGenerator?: AdministrativeEventAttemptIdGenerator;
 }
 
@@ -72,6 +75,7 @@ export function createProtectedAdministration(
     input.clock,
   );
   const power = input.powerManagement;
+  const confirmationReader = input.machineShutdownConfirmationReader;
   const getNextWakeAlarm = Object.freeze({
     execute: () =>
       runner.run("read_wake_alarm", (at) =>
@@ -109,13 +113,21 @@ export function createProtectedAdministration(
           value,
           at,
           source,
+          confirmationReader,
         ),
       ),
   });
   const executeMachineShutdownOccurrence = Object.freeze({
     execute: (value: unknown) =>
       runner.run("execute_machine_shutdown_occurrence", (at, source) =>
-        power.executeMachineShutdownOccurrence.executeAt(value, at, source),
+        power.executeMachineShutdownOccurrence.executeAt(
+          value,
+          at,
+          source,
+          confirmationReader === undefined
+            ? {}
+            : { confirmationReader, automaticallyPrepare: false },
+        ),
       ),
   });
   const runMachinePowerSchedulerTick = Object.freeze({
@@ -242,6 +254,7 @@ class ExecuteProtectedAdministrativeOperation {
       )
         throw error;
       if (error instanceof WakeAlarmScheduleValidationError) throw error;
+      if (error instanceof MachineShutdownOccurrenceExecutionError) throw error;
       throw new AdministrativeAccessControlError(
         "protected_operation_failed",
         operation,

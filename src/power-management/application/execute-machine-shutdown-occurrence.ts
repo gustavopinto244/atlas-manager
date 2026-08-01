@@ -15,6 +15,7 @@ import {
   type AdministrativeAuditTrailError,
 } from "../../event-history/application/administrative-audit-trail.js";
 import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
+import type { MachineShutdownConfirmationReader } from "./ports/machine-shutdown-readiness-readers.js";
 import {
   DIRECT_POWER_AUDIT_SOURCE,
   MACHINE_AUDIT_TARGET,
@@ -74,11 +75,15 @@ export class ExecuteMachineShutdownOccurrence {
     input: unknown,
     processedAt: string,
     source: AdministrativeEventSource = DIRECT_POWER_AUDIT_SOURCE,
+    options: Readonly<{
+      readonly confirmationReader?: MachineShutdownConfirmationReader;
+      readonly automaticallyPrepare?: boolean;
+    }> = {},
   ): Promise<
     ReturnType<typeof createMachineShutdownOccurrenceExecutionResult>
   > {
     const occurrence = createMachineShutdownOccurrence(input);
-    if (!this.#audit) return this.executeCore(occurrence, processedAt);
+    if (!this.#audit) return this.executeCore(occurrence, processedAt, options);
     const attempt = await this.#audit.begin({
       occurredAt: processedAt,
       source,
@@ -93,7 +98,7 @@ export class ExecuteMachineShutdownOccurrence {
       typeof createMachineShutdownOccurrenceExecutionResult
     >;
     try {
-      result = await this.executeCore(occurrence, processedAt);
+      result = await this.executeCore(occurrence, processedAt, options);
     } catch (error) {
       try {
         await this.#audit.complete(attempt, "failed", {
@@ -124,6 +129,10 @@ export class ExecuteMachineShutdownOccurrence {
   private async executeCore(
     occurrence: ReturnType<typeof createMachineShutdownOccurrence>,
     processedAt: string,
+    options: Readonly<{
+      readonly confirmationReader?: MachineShutdownConfirmationReader;
+      readonly automaticallyPrepare?: boolean;
+    }>,
   ): Promise<
     ReturnType<typeof createMachineShutdownOccurrenceExecutionResult>
   > {
@@ -144,8 +153,16 @@ export class ExecuteMachineShutdownOccurrence {
       });
     let decision;
     if (this.#readiness) {
-      decision = await this.#readiness.evaluateAt(occurrence, processedAt);
-      if (!this.#preparation && decision.outcome === "rejected")
+      decision = await this.#readiness.evaluateAt(
+        occurrence,
+        processedAt,
+        options.confirmationReader,
+      );
+      if (
+        decision.outcome === "rejected" &&
+        (this.#preparation === undefined ||
+          options.automaticallyPrepare === false)
+      )
         return createMachineShutdownOccurrenceExecutionResult({
           occurrence,
           processedAt,
@@ -154,11 +171,16 @@ export class ExecuteMachineShutdownOccurrence {
         });
     }
     let preparationReport;
-    if (this.#preparation && decision) {
+    if (
+      this.#preparation &&
+      decision &&
+      options.automaticallyPrepare !== false
+    ) {
       preparationReport = await this.#preparation.prepareAt(
         occurrence,
         processedAt,
         decision,
+        options.confirmationReader,
       );
       if (preparationReport.outcome === "blocked")
         return createMachineShutdownOccurrenceExecutionResult({

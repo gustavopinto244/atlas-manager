@@ -40,6 +40,7 @@ import {
   MACHINE_AUDIT_TARGET,
 } from "./administrative-audit-context.js";
 import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
+import type { MachineShutdownConfirmationReader } from "./ports/machine-shutdown-readiness-readers.js";
 
 const PREPARABLE = new Set([
   "service_running",
@@ -157,9 +158,16 @@ export class PrepareMachineShutdownOccurrence {
     input: unknown,
     processedAt: string,
     source: AdministrativeEventSource,
+    confirmationReader?: MachineShutdownConfirmationReader,
   ): Promise<MachineShutdownPreparationReport> {
     const occurrence = createMachineShutdownOccurrence(input);
-    if (!this.#audit) return this.prepareAt(occurrence, processedAt);
+    if (!this.#audit)
+      return this.prepareAt(
+        occurrence,
+        processedAt,
+        undefined,
+        confirmationReader,
+      );
     const attempt = await this.#audit.begin({
       occurredAt: processedAt,
       source,
@@ -172,7 +180,12 @@ export class PrepareMachineShutdownOccurrence {
     });
     let report: MachineShutdownPreparationReport;
     try {
-      report = await this.prepareAt(occurrence, processedAt);
+      report = await this.prepareAt(
+        occurrence,
+        processedAt,
+        undefined,
+        confirmationReader,
+      );
     } catch (error) {
       try {
         await this.#audit.complete(attempt, "failed", {
@@ -189,9 +202,13 @@ export class PrepareMachineShutdownOccurrence {
         : ("rejected" as const);
     const details = {
       preparationOutcome: report.outcome,
-      blockerCodes: report.finalDecision?.blockers.map(
-        (blocker) => blocker.code,
-      ),
+      ...(report.finalDecision === undefined
+        ? {}
+        : {
+            blockerCodes: report.finalDecision.blockers.map(
+              (blocker) => blocker.code,
+            ),
+          }),
       completedStepCount: report.steps.filter(
         (step) => step.outcome === "completed",
       ).length,
@@ -212,11 +229,16 @@ export class PrepareMachineShutdownOccurrence {
     input: unknown,
     processedAt: string,
     suppliedDecision?: MachineShutdownReadinessDecision,
+    confirmationReader?: MachineShutdownConfirmationReader,
   ): Promise<MachineShutdownPreparationReport> {
     const occurrence = createMachineShutdownOccurrence(input);
     const initialDecision =
       suppliedDecision ??
-      (await this.#readiness.evaluateAt(occurrence, processedAt));
+      (await this.#readiness.evaluateAt(
+        occurrence,
+        processedAt,
+        confirmationReader,
+      ));
     const planning = createMachineShutdownPreparationPlan({
       occurrence,
       processedAt,
@@ -474,6 +496,7 @@ export class PrepareMachineShutdownOccurrence {
     const finalDecision = await this.#readiness.evaluateAt(
       occurrence,
       processedAt,
+      confirmationReader,
     );
     const reevaluate = createMachineShutdownPreparationStepResult({
       kind: "reevaluate_readiness",

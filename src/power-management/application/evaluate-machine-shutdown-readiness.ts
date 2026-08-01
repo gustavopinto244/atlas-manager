@@ -55,6 +55,7 @@ export class EvaluateMachineShutdownReadiness {
   public async evaluateAt(
     input: unknown,
     evaluatedAt: string,
+    confirmationReader: MachineShutdownConfirmationReader = this.#confirmation,
   ): Promise<MachineShutdownReadinessDecision> {
     const occurrence = createMachineShutdownOccurrence(input);
     const instant = Date.parse(evaluatedAt);
@@ -74,7 +75,7 @@ export class EvaluateMachineShutdownReadiness {
       });
     let confirmation: "confirmed" | "not_confirmed";
     try {
-      confirmation = await this.#confirmation.read(occurrence, evaluatedAt);
+      confirmation = await confirmationReader.read(occurrence, evaluatedAt);
     } catch {
       return createMachineShutdownReadinessDecision({
         occurrence,

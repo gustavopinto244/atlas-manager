@@ -17,11 +17,24 @@ describe("parseEnvironment", () => {
     expect(parseEnvironment({}).administrativeWakeAlarmHttpEnabled).toBe(false);
   });
 
+  it("keeps shutdown HTTP disabled by default", () => {
+    expect(parseEnvironment({}).administrativeShutdownHttpEnabled).toBe(false);
+  });
+
   it.each(["1", "0", "yes", "no", "TRUE", "False", "", " true"])(
     "rejects non-canonical wake-alarm HTTP boolean %s",
     (enabled) => {
       expect(() =>
         parseEnvironment({ ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: enabled }),
+      ).toThrow();
+    },
+  );
+
+  it.each(["1", "0", "yes", "no", "TRUE", "False", "", " true"])(
+    "rejects non-canonical shutdown HTTP boolean %s",
+    (enabled) => {
+      expect(() =>
+        parseEnvironment({ ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: enabled }),
       ).toThrow();
     },
   );
@@ -101,6 +114,55 @@ describe("parseEnvironment", () => {
             roles: ["auditor"],
           },
         ]),
+      }),
+    ).toThrow();
+  });
+
+  it("accepts shutdown HTTP only with persistent power state and a power role", () => {
+    const config = parseEnvironment({
+      HOST: "127.0.0.1",
+      CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+      CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "true",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE:
+        "/var/lib/atlas-manager/admin-events.jsonl",
+      ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+        {
+          principalId: "00000000-0000-4000-8000-000000000001",
+          roles: ["power_operator"],
+        },
+      ]),
+      MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+        "/var/lib/atlas-manager/shutdown-claims.json",
+      MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+        "/var/lib/atlas-manager/shutdown-cursor.json",
+    });
+    expect(config.administrativeShutdownHttpEnabled).toBe(true);
+    expect(config.machineShutdownOccurrenceClaimFilePath).toBe(
+      "/var/lib/atlas-manager/shutdown-claims.json",
+    );
+    expect(config.machinePowerSchedulerCursorFilePath).toBe(
+      "/var/lib/atlas-manager/shutdown-cursor.json",
+    );
+  });
+
+  it("rejects shutdown activation without paired persistent power state", () => {
+    expect(() =>
+      parseEnvironment({
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+        ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "true",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/admin-events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          {
+            principalId: "00000000-0000-4000-8000-000000000001",
+            roles: ["administrator"],
+          },
+        ]),
+        MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+          "/var/lib/atlas-manager/shutdown-claims.json",
       }),
     ).toThrow();
   });
@@ -198,6 +260,7 @@ describe("parseEnvironment", () => {
       logLevel: "info",
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
+      administrativeShutdownHttpEnabled: false,
     });
     expect(
       config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
@@ -220,6 +283,7 @@ describe("parseEnvironment", () => {
       logLevel: "info",
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
+      administrativeShutdownHttpEnabled: false,
     });
   });
 
