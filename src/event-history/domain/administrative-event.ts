@@ -337,6 +337,7 @@ function createDetails(
     const permission = record["permission"];
     const decision = record["decision"];
     const validOperation = [
+      "read_wake_alarm",
       "schedule_wake_alarm",
       "cancel_wake_alarm",
       "request_machine_shutdown",
@@ -346,6 +347,7 @@ function createDetails(
       "read_administrative_event_history",
     ].includes(requestedOperation as string);
     const validPermission = [
+      "power.wake.read",
       "power.wake.schedule",
       "power.wake.cancel",
       "power.shutdown.request",
@@ -355,6 +357,7 @@ function createDetails(
       "event_history.read",
     ].includes(permission as string);
     const expected = {
+      read_wake_alarm: "power.wake.read",
       schedule_wake_alarm: "power.wake.schedule",
       cancel_wake_alarm: "power.wake.cancel",
       request_machine_shutdown: "power.shutdown.request",

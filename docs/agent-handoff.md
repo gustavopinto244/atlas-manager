@@ -2,6 +2,50 @@
 
 ## Current work
 
+The active branch for Issue #242 is:
+
+```text
+feat/protected-administrative-wake-alarm-http
+```
+
+The authoritative merged PR #241 baseline is:
+
+```text
+66d195eddcde2fbf6ae0b3a96370023ca9244f58
+```
+
+Issue #242 adds the explicitly gated mock-first resource
+`/admin/power/wake-alarm` with GET, PUT, and DELETE. It adds
+`power.wake.read` and `read_wake_alarm`, keeps auditor and scheduler roles
+without wake access, and shares the persistent event history, Cloudflare
+verifier/JWKS cache, role reader, clock, power composition, global 60-per-60
+second/four-concurrent admission, and one-active-mutation gate with Issue
+#240. Requests are request-scoped at the assertion reader, authentication,
+access-control, and protected-facade layers.
+
+GET uses the authorization timestamp for observation. PUT and DELETE are
+idempotent state-setting operations and preserve authorization/start/effect/
+terminal audit ordering. Invalid or admitted-limit requests create no audit
+event. Terminal audit failure preserves the mock state and returns a safe
+state-recheck response without retry or rollback. The delivery is loopback-
+only, disabled by default, bounded, non-CORS, and does not activate a helper or
+real RTC/power effect.
+
+Version-one JSON Lines reconstruction accepts the new authorization detail pair
+`read_wake_alarm`/`power.wake.read` without migration. A binary predating Issue
+#242 may reject newly written authorization-detail vocabulary during rollback;
+events must not be silently skipped or removed.
+
+Validation for Issue #242 completed with Node.js `v24.18.0` and npm `11.16.0`.
+`nvm use` was unavailable because nvm is not installed in the shell; the
+reported runtime versions were verified directly. `npm ci` completed with the
+existing development-tree advisory and no dependency changes. Format check,
+lint, typecheck, build, and `git diff --check` passed. The full suite passed
+with 166 test files and 2,375 tests. `npm audit --omit=dev` reported zero
+production vulnerabilities. `package.json` and `package-lock.json` remain
+unchanged. The next recommended delivery is the separately reviewed
+destructive shutdown HTTP slice.
+
 The active branch for Issue #240 is:
 
 ```text

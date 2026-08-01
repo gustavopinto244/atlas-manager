@@ -1523,3 +1523,41 @@ data cannot be safely obtained or parsed.
 
 The application-side process of validating JWT structure, signature, issuer,
 audience, type, temporal claims, and human subject before creating a principal.
+
+### Protected wake-alarm resource
+
+The exact mock-first resource `/admin/power/wake-alarm`, supporting GET
+observation, PUT desired-state scheduling, and DELETE cancellation after the
+existing protected-administration checks.
+
+### Wake-alarm read permission
+
+The explicit `power.wake.read` permission for `read_wake_alarm`. It is granted
+to `power_operator` and `administrator`, not to `auditor` or
+`scheduler_operator`.
+
+### Idempotent wake schedule
+
+A PUT expressing the desired future alarm instant. Repeating the same instant
+returns `unchanged`; a different instant returns `replaced`.
+
+### Idempotent wake cancellation
+
+A DELETE that returns `cancelled` when an alarm exists and `not_scheduled` when
+it is already absent.
+
+### Wake mutation gate
+
+The process-local fail-fast gate allowing one active wake PUT or DELETE. A
+second mutation receives a conflict and is never authenticated or audited.
+
+### Wake state recheck requirement
+
+The safe response after a wake mutation completed but its terminal audit failed.
+The client must GET the authoritative state before another mutation; the
+application does not retry or roll back.
+
+### Shared administrative admission
+
+The one global process-local 60-per-60-second and four-concurrent request
+boundary shared by all enabled administrative HTTP routes.

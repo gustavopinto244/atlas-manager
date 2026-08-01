@@ -17,6 +17,11 @@ import {
   AdministrativeAuditPartialEffectError,
   AdministrativeAuditTrailError,
 } from "../../event-history/application/administrative-audit-trail.js";
+import {
+  assertWakeAlarmScheduleIsFuture,
+  createWakeAlarmSchedule,
+  WakeAlarmScheduleValidationError,
+} from "../../power-management/domain/wake-alarm-schedule.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
@@ -27,6 +32,7 @@ export interface ProtectedAdministrationCompositionInput {
 }
 
 export interface ProtectedAdministrationCapabilities {
+  readonly getNextWakeAlarm: Readonly<{ execute(): Promise<unknown> }>;
   readonly scheduleWakeAlarm: Readonly<{
     execute(input: unknown): Promise<unknown>;
   }>;
@@ -66,10 +72,22 @@ export function createProtectedAdministration(
     input.clock,
   );
   const power = input.powerManagement;
+  const getNextWakeAlarm = Object.freeze({
+    execute: () =>
+      runner.run("read_wake_alarm", (at) =>
+        power.getNextWakeAlarm.executeAt(at),
+      ),
+  });
   const scheduleWakeAlarm = Object.freeze({
     execute: (value: unknown) =>
-      runner.run("schedule_wake_alarm", (at, source) =>
-        power.scheduleWakeAlarm.executeAsAuthorized(value, at, source),
+      runner.run(
+        "schedule_wake_alarm",
+        (at, source) =>
+          power.scheduleWakeAlarm.executeAsAuthorized(value, at, source),
+        (at) => {
+          const schedule = createWakeAlarmSchedule(value);
+          assertWakeAlarmScheduleIsFuture(at, schedule.scheduledFor);
+        },
       ),
   });
   const cancelWakeAlarm = Object.freeze({
@@ -113,6 +131,7 @@ export function createProtectedAdministration(
       ),
   });
   return Object.freeze({
+    getNextWakeAlarm,
     scheduleWakeAlarm,
     cancelWakeAlarm,
     requestMachineShutdown,
@@ -150,8 +169,10 @@ class ExecuteProtectedAdministrativeOperation {
       evaluatedAt: string,
       source: AdministrativeEventSource,
     ) => Promise<T>,
+    validate?: (evaluatedAt: string) => void,
   ): Promise<T> {
     const evaluatedAt = this.#clock.now().toISOString();
+    validate?.(evaluatedAt);
     const authentication = await this.#authenticate.execute();
     if (authentication.outcome !== "authenticated") {
       const source = Object.freeze({
@@ -220,7 +241,11 @@ class ExecuteProtectedAdministrativeOperation {
         error instanceof AdministrativeAuditTrailError
       )
         throw error;
-      throw new AdministrativeAccessControlError("protected_operation_failed");
+      if (error instanceof WakeAlarmScheduleValidationError) throw error;
+      throw new AdministrativeAccessControlError(
+        "protected_operation_failed",
+        operation,
+      );
     }
   }
 }

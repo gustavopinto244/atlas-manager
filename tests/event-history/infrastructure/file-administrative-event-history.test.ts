@@ -33,6 +33,22 @@ function input(index: number, status: "started" | "succeeded" = "started") {
   };
 }
 
+function wakeAuthorizationInput(index: number) {
+  return {
+    attemptId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    occurredAt: "2026-08-01T12:00:00.000Z",
+    source: SOURCE,
+    target: TARGET,
+    operation: "authorize_administrative_operation" as const,
+    status: "succeeded" as const,
+    details: {
+      requestedOperation: "read_wake_alarm" as const,
+      permission: "power.wake.read" as const,
+      decision: "allowed" as const,
+    },
+  };
+}
+
 function fixture(): { directory: string; file: string } {
   const directory = mkdtempSync(join(tmpdir(), "atlas-event-history-"));
   return { directory, file: join(directory, "events.jsonl") };
@@ -72,6 +88,25 @@ describe("FileAdministrativeEventHistory", () => {
       const page = await second.query({ afterSequence: 2 });
       expect(page.events).toHaveLength(1);
       expect(page.events[0]?.sequence).toBe(3);
+    } finally {
+      cleanup(directory);
+    }
+  });
+
+  it("reconstructs the wake authorization vocabulary without migration", async () => {
+    const { directory, file } = fixture();
+    try {
+      const first = new FileAdministrativeEventHistory(file);
+      await first.record(wakeAuthorizationInput(1));
+      const second = new FileAdministrativeEventHistory(file);
+      await second.record(input(2));
+      const page = await second.query();
+      expect(page.events.map((event) => event.sequence)).toEqual([1, 2]);
+      expect(page.events[0]?.details).toEqual({
+        requestedOperation: "read_wake_alarm",
+        permission: "power.wake.read",
+        decision: "allowed",
+      });
     } finally {
       cleanup(directory);
     }

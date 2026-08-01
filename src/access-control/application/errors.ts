@@ -10,6 +10,7 @@ export class AdministrativeAccessControlError extends Error {
   public override readonly name = "AdministrativeAccessControlError";
   public constructor(
     public readonly code: AdministrativeAccessControlErrorCode,
+    public readonly operation?: string,
   ) {
     super(code);
     Object.freeze(this);

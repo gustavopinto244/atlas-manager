@@ -159,6 +159,11 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
     ADMINISTRATIVE_EVENT_HISTORY_FILE:
       administrativeEventHistoryFileSchema.optional(),
     ADMINISTRATIVE_ROLE_ASSIGNMENTS:
@@ -224,8 +229,12 @@ const environmentSchema = z
       });
     }
 
-    const administrativeHttpEnabled =
+    const eventHistoryHttpEnabled =
       environment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true";
+    const wakeAlarmHttpEnabled =
+      environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true";
+    const administrativeHttpEnabled =
+      eventHistoryHttpEnabled || wakeAlarmHttpEnabled;
     if (administrativeHttpEnabled) {
       if (environment.HOST !== "127.0.0.1")
         context.addIssue({
@@ -260,6 +269,7 @@ const environmentSchema = z
             environment.ADMINISTRATIVE_ROLE_ASSIGNMENTS,
           );
           if (
+            eventHistoryHttpEnabled &&
             !assignments.some((assignment) =>
               assignment.roles.some((role) =>
                 roleHasAdministrativePermission(role, "event_history.read"),
@@ -270,6 +280,19 @@ const environmentSchema = z
               code: "custom",
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include an auditor or administrator",
+            });
+          if (
+            wakeAlarmHttpEnabled &&
+            !assignments.some(
+              (assignment) =>
+                assignment.roles.includes("power_operator") ||
+                assignment.roles.includes("administrator"),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a power operator or administrator",
             });
         } catch {
           // The field-level schema has already reported the safe category.
@@ -311,6 +334,7 @@ export interface EnvironmentConfig {
     readonly audience: string;
   }>;
   readonly administrativeEventHistoryHttpEnabled: boolean;
+  readonly administrativeWakeAlarmHttpEnabled: boolean;
   readonly administrativeEventHistoryFilePath?: string;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
 }
@@ -353,6 +377,8 @@ export function parseEnvironment(
     logLevel: parsedEnvironment.LOG_LEVEL,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
+    administrativeWakeAlarmHttpEnabled:
+      parsedEnvironment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true",
     ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE ===
     undefined
       ? {}
