@@ -625,3 +625,62 @@ Both bundle archives hashed to
 `11a5e5ce538e07a275e3b4d6f1d31eb4ff2d1b7f8283f4ec2aad755c478da795`.
 No host installation, group modification, setuid change, helper execution,
 RTC access, D-Bus operation, wake effect, or shutdown occurred.
+
+## Current work — Issue #258
+
+The active branch is:
+
+```text
+feat/production-shaped-linux-power-helper-composition
+```
+
+The authoritative merged PR #257 baseline for this delivery is:
+
+```text
+eb6440c98314ed52ba6ff0b53061c39b291fd7cd
+```
+
+Issue #258 adds ADR-011 and the immutable, fail-closed
+`POWER_MANAGEMENT_BACKEND` selector. `mock` remains the exact default and
+`linux_helper` is the only alternate value. Linux selection creates one
+shared, frozen helper-adapter bundle; composition performs no helper request
+and helper failures never fall back to mock. The Linux shutdown result is
+`accepted`, while mock shutdown remains `simulated`; accepted does not claim
+completed power-off.
+
+The helper remains uninstalled and unwired for deployment. No Atlas host or VM
+drill, helper execution, group or user change, setuid change, RTC access or
+mutation, D-Bus power request, reboot, or shutdown was performed.
+
+Final validation used Node.js 24.18.0, npm 11.16.0, and Go 1.23.0
+linux/amd64. Node passed 172 test files, 2,433 tests, and 3 skipped tests.
+The Go suite passed 111 individual tests; formatting, module verification,
+vet, tests, and Linux amd64 CGO-disabled builds passed. Node formatting, lint,
+typecheck, build, and `git diff --check` passed. Production npm audit reported
+zero vulnerabilities. `npm ci` restored the lockfile dependency tree without
+changing package metadata. No real helper, host, RTC, D-Bus, wake, reboot, or
+shutdown operation was performed.
+
+The final Node run reported three skipped compatibility tests. All are
+conditional on the nonproduction deterministic Go fixture environment
+variable `ATLAS_MANAGER_POWER_HELPER_FIXTURE`, which is intentionally unset
+for the ordinary repository test command so it cannot accidentally select an
+executable:
+
+```text
+tests/power-management/integration/linux-power-helper-protocol-compatibility.test.ts
+  round-trips read requests through the deterministic Go fixture
+  round-trips shutdown requests through the deterministic Go fixture
+  round-trips mutation requests through the deterministic Go fixture
+```
+
+Reason: these process-level TypeScript/Go compatibility checks require the
+separately built, nonproduction fixture path. They are not skipped because of
+host RTC, D-Bus, installation, privilege, or power-operation availability.
+The dedicated fixture compatibility workflow enables that path explicitly and
+does not execute the production helper.
+
+The artifact check found no remaining helper binaries, installer/bundle/
+qualification binaries, or `.tar.gz` archives outside `.git`. A previously
+generated ignored `dist/power-helper/atlas-manager-power-helper` artifact was
+removed; no release artifact is retained in the working tree.

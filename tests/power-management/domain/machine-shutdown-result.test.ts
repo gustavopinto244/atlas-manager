@@ -32,6 +32,21 @@ describe("machine shutdown result", () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
+  it("creates an immutable accepted helper shutdown result", () => {
+    const result = createMachineShutdownResult({
+      operation: "shutdown",
+      requestedAt: REQUESTED_AT,
+      outcome: "accepted",
+    });
+
+    expect(result).toEqual({
+      operation: "shutdown",
+      requestedAt: REQUESTED_AT,
+      outcome: "accepted",
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
   it.each([
     [
       "a restart operation",

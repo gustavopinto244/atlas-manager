@@ -1713,3 +1713,24 @@ production-effect certification.
 The explicit operator sequence of qualification, installation, disabled-state
 verification, reboot verification, uninstall, and removed-state verification.
 The `atlas-manager-power` group remains empty throughout the drill.
+
+### Power-management backend selector
+
+The exact `POWER_MANAGEMENT_BACKEND` configuration value that chooses the
+complete frozen power adapter set. `mock` is the default; `linux_helper` is
+the only alternate value. Paths, arguments, resources, and fallback behavior
+are not configurable.
+
+### Production-shaped composition
+
+The startup boundary that selects and freezes either the mock power
+infrastructure or one complete Linux helper adapter bundle without executing
+the helper. It is a composition gate, not installation, enrollment, HTTP
+activation, scheduler activation, or real-effect certification.
+
+### Accepted shutdown
+
+The Linux helper domain result produced after systemd-logind returns a
+successful `PowerOff(false)` reply. It records acceptance of the request, not
+completion of host power-off. Mock shutdowns retain the distinct
+`simulated` outcome.

@@ -174,7 +174,7 @@ export class LinuxPowerHelperMachineShutdownController implements MachineShutdow
       return createMachineShutdownResult({
         operation: "shutdown",
         requestedAt,
-        outcome: "simulated",
+        outcome: "accepted",
       });
     } catch {
       throw new LinuxPowerHelperAdapterError("helper_output_invalid");

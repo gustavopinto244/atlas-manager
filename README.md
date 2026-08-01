@@ -2504,15 +2504,14 @@ transport or helper failures become focused project-owned errors without paths,
 commands, output, environment values, exit details, or helper text.
 
 The helper-backed RTC, wake-alarm, and shutdown adapters share one frozen
-transport bundle and can be supplied through existing narrow test overrides.
-Default `createPowerManagement` remains mock-first, with eleven capabilities;
-construction performs no helper inspection or process work. The privileged
-helper source is implemented separately by Issue #246 but is not installed or
-production-wired by this project slice, and no real RTC,
-wake-alarm, filesystem, or machine-shutdown effect is enabled. Production
-activation waits for authenticated administration, authorization, destructive
-confirmation, persistent audit events, deployment validation, recovery
-procedures, and a security review as recorded in ADR-002.
+transport bundle and can be selected only through the exact
+`POWER_MANAGEMENT_BACKEND=linux_helper` configuration value. The default is
+`mock`; composition performs no helper inspection or process work. Selecting
+the Linux helper is atomic for all four power adapters and has no fallback to
+mock behavior. The helper remains uninstalled and no real effect is enabled
+until the separate installation, enrollment, host-qualification, HTTP, and
+real-effect gates are completed. A helper shutdown result is `accepted`, not
+`completed`; the mock result remains `simulated`.
 
 ### Cloudflare Access identity verification
 
@@ -2548,9 +2547,10 @@ with `operation_unsupported`. It performs no filesystem, device, process,
 shell, network, RTC, wake, or shutdown effect. Invalid input and startup
 failures produce safe fixed exit codes and no diagnostics on stderr.
 
-The helper is not installed, not wired into the production composition, and
-does not enable real power. Future read-only and mutating Linux backends need
-separate reviewed Issues.
+The helper is not installed and does not enable real power. ADR-011 now
+provides a production-shaped composition gate, disabled by default; future
+deployment, enrollment, and real-effect activation still require separate
+reviewed Issues.
 
 ### Systemd-logind shutdown backend
 
@@ -2565,9 +2565,9 @@ child process, syscall, fallback, or retry.
 `accepted: true` means only that logind returned a successful method reply; it
 does not prove that the host has already powered off. Connection loss or a
 deadline after transmission is treated as uncertain internally and maps to the
-existing safe `operation_failed` response. The helper remains uninstalled,
-unsetuid, and unwired, so Atlas Manager's HTTP and shutdown workflows remain
-mock-first and simulated.
+existing safe `operation_failed` response. The helper remains uninstalled and
+unsetuid; Atlas Manager remains mock-first unless the exact composition
+selector is explicitly chosen, and no HTTP or scheduler activation is implied.
 
 ### Host qualification and disabled installation
 
@@ -2580,3 +2580,13 @@ bounded canonical report. It never installs or executes the helper, changes
 RTC state, calls `PowerOff`, modifies groups, or activates Atlas Manager.
 Firmware wake behavior, application-user enrollment, and production wiring
 remain separate gates.
+
+### Production-shaped helper composition
+
+ADR-011 adds an explicit, fail-closed composition selector. The only accepted
+values are `mock` and `linux_helper`, with `mock` as the default. The selected
+backend is frozen once during startup; HTTP input, helper discovery,
+environment-selected paths, and runtime switching cannot change it. HTTP
+route flags and the machine-power scheduler remain independent. The Atlas
+host has not been drilled, the helper has not been installed or executed, and
+Atlas Manager remains mock-first by default.

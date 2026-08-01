@@ -584,3 +584,14 @@ root, inspects fixed Linux/RTC/system-bus resources, validates an empty helper
 group, and emits bounded reports. It does not install or execute the helper,
 enroll users, call logind `PowerOff`, test firmware wake behavior, or enable
 Atlas Manager. Operational evidence remains outside source control.
+
+## Issue #258 delivery notes
+
+Issue #258 delivers production-shaped composition only. The exact
+`POWER_MANAGEMENT_BACKEND=mock` value remains the default, while the exact
+`linux_helper` value selects one frozen complete Linux adapter bundle. No
+helper request occurs during composition and helper failures do not fall back
+to mock behavior. Administrative HTTP activation and scheduler execution are
+independent. Host deployment, disabled-installation qualification, application
+user enrollment, real helper activation, and real-effect certification remain
+deferred.
