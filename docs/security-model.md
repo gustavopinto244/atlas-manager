@@ -1,5 +1,24 @@
 # Atlas Manager — Security Model
 
+## Privileged helper installation
+
+The helper installation boundary is deliberately separate from the Node.js
+application. A reproducible Linux amd64 bundle is inspected and installed only
+by an explicit operator action. The installer has no configurable root,
+destination, bundle, or executable path and executes no child process. It
+requires effective root for mutation, validates a pre-existing empty
+`atlas-manager-power` group, and never edits account databases or enrolls an
+application user.
+
+The archive helper is not setuid. The installer applies exact root ownership,
+group ownership, and mode `04750` only after checksum, manifest, parent,
+candidate, and target validation, then atomically replaces the fixed path.
+Unknown target state is rejected rather than adopted or repaired. Checksums
+provide integrity checking but not authenticity; signatures, host
+qualification, and production activation remain separate gates. CI uses
+temporary sandbox trees and never writes privileged host paths or invokes the
+helper.
+
 ## Document purpose
 
 This document defines the initial security model for Atlas Manager.

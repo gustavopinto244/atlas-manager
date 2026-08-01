@@ -1,5 +1,10 @@
 # Atlas Manager — Project Roadmap
 
+Issue #254 delivers the reproducible helper distribution and operator-controlled
+installation boundary for v0.6. Packaging does not complete the milestone:
+host qualification, application-user enrollment, production wiring, and real
+effect recovery remain later gates.
+
 ## Document purpose
 
 This roadmap presents the intended development sequence for Atlas Manager.

@@ -106,6 +106,24 @@ subprocess, syscall, retry, fallback, or RTC access is used. A successful
 reply means logind accepted the request, not that power-off is complete.
 The helper remains uninstalled and Atlas Manager remains mock-first.
 
+Issue #254 adds a reproducible, operator-controlled `linux/amd64` installation
+bundle. The build requires an explicit package version, source commit, and
+`SOURCE_DATE_EPOCH`; it uses `CGO_ENABLED=0`, `-trimpath`, and
+`-buildvcs=false`. The archive contains the helper, a separate installer,
+strict manifest, checksums, licenses, and the installation runbook. Checksums
+verify integrity but do not prove authenticity.
+
+The installer accepts only `inspect-bundle`, `install`, `verify`, and
+`uninstall`, discovers the bundle beside its own executable, and has no
+configurable destination. Only install and uninstall require root. The local
+`atlas-manager-power` group must already exist and be empty; no user is added
+to it. Installation is atomic and sets the fixed helper state to root-owned,
+group `atlas-manager-power`, mode `04750` at
+`/usr/local/libexec/atlas-manager-power-helper`. npm, Atlas Manager startup,
+CI, and the application composition never install or invoke the helper.
+Host qualification, signatures/provenance, user enrollment, and production
+activation remain separate gates.
+
 ## v0.6 — Power management (active)
 
 The first three power-management vertical slices are mock-first. They provide

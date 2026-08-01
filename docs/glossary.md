@@ -1,5 +1,33 @@
 # Atlas Manager — Project Glossary
 
+### Power-helper installation bundle
+
+A deterministic Linux amd64 archive containing the exact helper executable,
+operator installer, strict manifest, checksums, license texts, and installation
+runbook. It is a distribution artifact, not an activation mechanism.
+
+### Operator-controlled installation
+
+An explicit root-only action performed by a local administrator after bundle,
+host, and group checks. Atlas Manager and npm never perform it.
+
+### Empty power-helper group
+
+The required local `atlas-manager-power` group with no members. Issue #254
+requires it to exist before installation and deliberately does not enroll the
+application user.
+
+### Managed helper installation
+
+The fixed root-owned helper path plus its exact hash and protected installation
+state record. Unmanaged or unsafe files are never automatically adopted.
+
+### Reproducible bundle
+
+An artifact whose executable inputs, manifest, archive ordering, ownership,
+modes, timestamps, and gzip metadata are deterministic for the same source
+commit, package version, and `SOURCE_DATE_EPOCH`.
+
 ## Document purpose
 
 This glossary defines the main terms used in Atlas Manager documentation and
