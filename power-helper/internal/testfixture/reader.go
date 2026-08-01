@@ -91,5 +91,9 @@ func (operations *Operations) CancelWakeAlarm(request protocol.Request) protocol
 }
 
 func (*Operations) RequestShutdown(request protocol.Request) protocol.Response {
-	return protocol.RejectingResponse(request)
+	response, err := protocol.NewRequestShutdownSuccess()
+	if err != nil {
+		return protocol.RejectingResponse(request)
+	}
+	return response
 }

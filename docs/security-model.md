@@ -1051,3 +1051,23 @@ preserved and reported as failed without retry, rollback, or compensation.
 The helper remains uninstalled and the application remains mock-first. Shutdown
 continues to be unsupported, and tests inject narrow lock/filesystem ports
 instead of writing real sysfs.
+
+## Systemd-logind shutdown boundary
+
+ADR-008 restricts helper shutdown to the fixed root-owned socket
+`/run/dbus/system_bus_socket` and the exact noninteractive call
+`org.freedesktop.login1.Manager.PowerOff(false)`. The parent directory must be
+a root-owned non-group-writable directory, and the socket must be a root-owned
+Unix socket with no final symlink. `DBUS_SYSTEM_BUS_ADDRESS` and
+`DBUS_SESSION_BUS_ADDRESS` cannot redirect the connection.
+
+The helper uses one private EXTERNAL-authenticated connection and a fixed
+three-second deadline. It does not bypass inhibitors, request interactive
+authorization, enumerate inhibitors, use the PID 1 manager, call a shell,
+start a process, invoke a syscall, or use SysRq. The operation is serialized by
+the existing exclusive helper lock and never reads or writes RTC state.
+
+A successful reply means logind accepted the request, not that power-off is
+complete. Uncertain acceptance is never retried or compensated and is exposed
+only as the existing `operation_failed` protocol category. The helper source is
+not installed or wired into Atlas Manager.

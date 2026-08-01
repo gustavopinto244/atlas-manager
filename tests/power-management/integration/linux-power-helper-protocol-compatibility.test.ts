@@ -88,6 +88,16 @@ describe("cross-language Linux power-helper protocol corpus", () => {
     }
   });
 
+  it("accepts the canonical shutdown-success response fixture", () => {
+    const response = readFileSync(
+      join(corpus, "responses", "success", "request_shutdown_accepted.json"),
+      "utf8",
+    );
+    expect(parseLinuxPowerHelperResponse(response, "request_shutdown")).toEqual(
+      JSON.parse(response),
+    );
+  });
+
   it("rejects invalid read-success response fixtures", () => {
     const fixtures = [
       ["read_wake_alarm_scheduled_missing_timestamp.json", "read_wake_alarm"],
@@ -122,6 +132,30 @@ describe("cross-language Linux power-helper protocol corpus", () => {
       );
       expect(() =>
         parseLinuxPowerHelperResponse(response, operation),
+      ).toThrow();
+    }
+  });
+
+  it("rejects invalid shutdown-success response fixtures", () => {
+    const fixtures = [
+      "request_shutdown_rejected_acceptance.json",
+      "request_shutdown_missing_acceptance.json",
+      "request_shutdown_unknown_result_field.json",
+      "request_shutdown_primitive_result.json",
+      "request_shutdown_array_result.json",
+      "request_shutdown_with_code.json",
+      "request_shutdown_failure_with_result.json",
+      "read_wake_alarm_shutdown_result.json",
+      "schedule_wake_alarm_shutdown_result.json",
+      "request_shutdown_operation_mismatch.json",
+    ];
+    for (const name of fixtures) {
+      const response = readFileSync(
+        join(corpus, "responses", "invalid", name),
+        "utf8",
+      );
+      expect(() =>
+        parseLinuxPowerHelperResponse(response, "request_shutdown"),
       ).toThrow();
     }
   });
@@ -174,6 +208,37 @@ describe("cross-language Linux power-helper protocol corpus", () => {
           },
         );
       }
+    },
+  );
+
+  it.skipIf(!process.env.ATLAS_MANAGER_POWER_HELPER_FIXTURE)(
+    "round-trips shutdown requests through the deterministic Go fixture",
+    () => {
+      const fixture = process.env.ATLAS_MANAGER_POWER_HELPER_FIXTURE;
+      if (!fixture) {
+        throw new Error("fixture path is required");
+      }
+      const source = readFileSync(
+        join(corpus, "valid", "request_shutdown.json"),
+        "utf8",
+      );
+      const request = createLinuxPowerHelperRequest(
+        JSON.parse(source) as unknown,
+      );
+      const result = spawnSync(fixture, {
+        input: Buffer.from(serializeLinuxPowerHelperRequest(request), "utf8"),
+        encoding: "buffer",
+        maxBuffer: 16_384,
+        timeout: 5_000,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).toEqual(Buffer.alloc(0));
+      const expected =
+        '{"version":1,"operation":"request_shutdown","outcome":"success","result":{"accepted":true}}\n';
+      expect(result.stdout.toString("utf8")).toBe(expected);
+      expect(
+        parseLinuxPowerHelperResponse(result.stdout, "request_shutdown"),
+      ).toEqual(JSON.parse(expected));
     },
   );
 

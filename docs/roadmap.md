@@ -560,3 +560,13 @@ cross-process coordination, absolute epoch-only writes, read-before-write and
 read-after-write validation, idempotent outcomes, and explicit partial-effect
 failures. The helper is not installed or wired into Atlas Manager; shutdown
 and all HTTP behavior remain unchanged.
+
+## Issue #252 delivery notes
+
+Issue #252 advances v0.6 without completing it. ADR-008 adds the real helper
+source backend for orderly shutdown through the fixed systemd-logind D-Bus
+`PowerOff(false)` call. It adds fixed socket inspection, EXTERNAL
+authentication, a three-second deadline, exclusive operation locking, safe
+unsupported/rejected/failed mappings, and uncertain-acceptance handling. The
+helper is still not installed or production-wired; Atlas Manager remains
+mock-first and no HTTP or real host effect is activated.

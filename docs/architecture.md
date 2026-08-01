@@ -882,3 +882,25 @@ no write. Replacement writes `0\n`, verifies absence, then writes the new
 value under one lock. A failed replacement is not rolled back or retried.
 The production helper still does not implement shutdown, and the Node.js
 application continues using its mock-first composition.
+
+### Systemd-logind shutdown backend
+
+Issue #252 extends only the standalone helper:
+
+```text
+fixed exclusive operation lock
+        ↓
+fixed system-bus socket inspector
+        ↓
+private EXTERNAL-authenticated D-Bus connection
+        ↓
+org.freedesktop.login1.Manager.PowerOff(false)
+        ↓
+typed accepted or safe failure response
+```
+
+The requester owns a narrow project interface and hides concrete D-Bus types.
+The bus address, destination, object, interface, method, argument, and
+deadline are constants. No D-Bus work occurs after lock rejection, and the
+requester performs no RTC access. The production Node.js composition remains
+mock-first and does not construct or invoke this helper backend.
