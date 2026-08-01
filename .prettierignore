@@ -2,3 +2,6 @@ dist
 coverage
 node_modules
 package-lock.json
+
+# Protocol fixtures intentionally preserve canonical bytes and invalid syntax.
+power-helper/testdata/protocol/

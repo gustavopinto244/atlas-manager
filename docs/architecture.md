@@ -101,7 +101,8 @@ responses, inspects the fixed root-owned helper installation, and uses a
 bounded no-shell process transport. The only accepted executable path is
 `/usr/local/libexec/atlas-manager-power-helper`; callers cannot supply a path,
 arguments, environment, working directory, timeout, or output limit. The
-external helper is not implemented in this slice. Default power-management
+helper source is implemented separately by Issue #246 but is not installed or
+production-wired in this slice. Default power-management
 composition remains mock-first and production activation is gated by ADR-002
 authentication, authorization, confirmation, auditing, deployment, and
 security-review prerequisites.
@@ -807,3 +808,30 @@ and DELETE preserve authorization, started, effect, and terminal event order.
 A terminal audit failure leaves mock state authoritative and requires a later
 GET recheck; no retry or rollback is performed. No RTC hardware or machine
 power effect is enabled.
+
+### External helper executable foundation
+
+ADR-005 implements the executable side of the existing fixed transport as a
+separate `power-helper/` Go module. The intended deployment boundary is:
+
+```text
+unprivileged Atlas Manager
+        ↓ fixed no-argument transport
+/usr/local/libexec/atlas-manager-power-helper
+        ↓ deny-all version-one backend
+operation_unsupported
+```
+
+The compiled helper is intended to be root-owned, executable by the dedicated
+`atlas-manager-power` group, setuid-root, and mode `04750`. Its process model
+is one request per process. Startup checks reject non-Linux, non-root, wrong
+identity, and argument-bearing execution; request parsing is bounded and
+rejects duplicate fields, unknown fields, noncanonical timestamps, CRLF,
+multiple lines, and trailing data. Invalid input and startup failures never
+write diagnostics.
+
+The application-side installation inspector checks the exact mode, root
+ownership, nonzero group, process group membership, and root-owned safe parent
+directory. It does not repair state. No installation command, setuid change,
+helper wiring, or real backend is included. CI builds the Linux artifact only
+under the ignored `dist/power-helper/` directory.

@@ -2456,7 +2456,8 @@ The helper-backed RTC, wake-alarm, and shutdown adapters share one frozen
 transport bundle and can be supplied through existing narrow test overrides.
 Default `createPowerManagement` remains mock-first, with eleven capabilities;
 construction performs no helper inspection or process work. The privileged
-helper is not implemented or installed by this project slice, and no real RTC,
+helper source is implemented separately by Issue #246 but is not installed or
+production-wired by this project slice, and no real RTC,
 wake-alarm, filesystem, or machine-shutdown effect is enabled. Production
 activation waits for authenticated administration, authorization, destructive
 confirmation, persistent audit events, deployment validation, recovery
@@ -2479,3 +2480,23 @@ keeps the existing deny-all authenticator and performs no network request.
 Tokens, claims, emails, headers, and keys are never logged, persisted, or
 returned in authentication results. No shutdown route, cookie fallback, session,
 production helper activation, or real power effect is included.
+
+### External Linux power-helper executable foundation
+
+ADR-005 adds the standalone Go source and build support for the fixed helper
+executable. The intended operator-controlled installation is the root-owned,
+dedicated-group, setuid file `/usr/local/libexec/atlas-manager-power-helper`
+with mode `04750`; the application user must belong to the file's dedicated
+group. The application remains unprivileged, and no repository command or CI
+step runs `sudo`, `chown`, `chmod 4750`, or `setcap`.
+
+The helper is a pinned, `CGO_ENABLED=0` standard-library Go executable. It
+accepts exactly one bounded version-one JSON request with no arguments and
+returns one canonical response. Every currently valid operation is rejected
+with `operation_unsupported`. It performs no filesystem, device, process,
+shell, network, RTC, wake, or shutdown effect. Invalid input and startup
+failures produce safe fixed exit codes and no diagnostics on stderr.
+
+The helper is not installed, not wired into the production composition, and
+does not enable real power. Future read-only and mutating Linux backends need
+separate reviewed Issues.
