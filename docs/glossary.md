@@ -175,6 +175,51 @@ The planned graphical interface that will consume the administrative API.
 The dashboard is a client of Atlas Manager and must not bypass application,
 authorization, validation, or security rules.
 
+### Protected administrative HTTP route
+
+An explicitly activated HTTP delivery boundary that authenticates the request,
+authorizes one existing application capability, records the authorization
+decision, and maps the result into a safe HTTP response. The first route is the
+read-only `GET /admin/event-history` endpoint.
+
+### Route activation gate
+
+The strict deployment configuration that controls whether a protected
+administrative route is registered. The event-history route is disabled by
+default and requires loopback binding, Cloudflare Access configuration,
+persistent event history, and trusted read-capable role assignments.
+
+### Administrative event-history endpoint
+
+The bounded cursor-paginated `GET /admin/event-history` query. It uses the
+existing event-history query model and shared persistent store; it is not a
+power-operation endpoint.
+
+### Global process-local limiter
+
+A fixed in-memory admission control shared by all requests to the initial
+administrative route. It allows 60 admitted requests per 60-second window and
+does not use identity, client IP, forwarded headers, timers, or distributed
+coordination.
+
+### Administrative request concurrency limit
+
+The fixed maximum of four concurrently admitted event-history requests. A
+fifth request is rejected immediately rather than queued, and every admitted
+request releases its slot in a `finally` path.
+
+### Authorization-audited read
+
+An event-history query whose authorization decision is recorded in the same
+event-history instance before the target query runs. The new authorization
+event may therefore appear in the returned page.
+
+### Loopback-only administrative origin
+
+The initial deployment boundary in which protected administrative HTTP is
+enabled only when `HOST` is exactly `127.0.0.1`. Proxy forwarding and client IP
+values are not trusted by the application.
+
 ### Managed resource
 
 A resource known to Atlas Manager and eligible for approved monitoring or

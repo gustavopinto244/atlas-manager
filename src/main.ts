@@ -5,6 +5,19 @@ import {
 } from "./config/environment.js";
 import { createApp } from "./http/create-app.js";
 import {
+  FixedAdministrativeRequestAdmission,
+  type AdministrativeRequestClock,
+} from "./http/administrative-request-admission.js";
+import type { AdministrativeEventHistoryRouteDependencies } from "./http/administrative-event-history-route.js";
+import type { CloudflareAccessAssertionReader } from "./access-control/application/ports/cloudflare-access-assertion-reader.js";
+import type { AdministrativeEventHistoryPage } from "./event-history/domain/administrative-event-history-page.js";
+import { createCloudflareAccessAdministrativeAuthentication } from "./access-control/composition/create-cloudflare-access-administrative-authentication.js";
+import { createAdministrativeAccessControl } from "./access-control/composition/create-administrative-access-control.js";
+import { createProtectedAdministration } from "./access-control/composition/create-protected-administration.js";
+import { InMemoryAdministrativeRoleAssignmentReader } from "./access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
+import { createEventHistory } from "./event-history/composition/create-event-history.js";
+import { createPowerManagement } from "./power-management/composition/create-power-management.js";
+import {
   createGracefulShutdown,
   registerShutdownSignals,
   type RequestShutdown,
@@ -104,7 +117,17 @@ function start(): void {
       process.env,
       serviceManagementOverrides,
     );
-    const app = createApp({ logger, getServerHealth });
+    const administrativeEventHistory =
+      config.administrativeEventHistoryHttpEnabled
+        ? createAdministrativeEventHistoryRouteDependencies(config)
+        : undefined;
+    const app = createApp({
+      logger,
+      getServerHealth,
+      ...(administrativeEventHistory === undefined
+        ? {}
+        : { administrativeEventHistory }),
+    });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {
       process.exitCode = 1;
@@ -154,6 +177,68 @@ function start(): void {
     logUnexpectedStartupFailure(logger, error);
     process.exitCode = 1;
   }
+}
+
+function createAdministrativeEventHistoryRouteDependencies(
+  config: EnvironmentConfig,
+): AdministrativeEventHistoryRouteDependencies {
+  const filePath = config.administrativeEventHistoryFilePath;
+  const roleAssignments = config.administrativeRoleAssignments;
+  const cloudflareAccess = config.cloudflareAccess;
+  if (filePath === undefined || roleAssignments === undefined) {
+    throw new Error("Administrative event-history configuration is incomplete");
+  }
+  if (cloudflareAccess === undefined) {
+    throw new Error("Cloudflare Access configuration is incomplete");
+  }
+
+  const clock: AdministrativeRequestClock = Object.freeze({
+    now: () => new Date(),
+  });
+  const eventHistory = createEventHistory({ filePath });
+  const roleAssignmentReader = new InMemoryAdministrativeRoleAssignmentReader({
+    assignments: roleAssignments.map((assignment) => ({
+      principalId: assignment.principal.principalId,
+      roles: assignment.roles,
+    })),
+  });
+  const cloudflareAuthentication =
+    createCloudflareAccessAdministrativeAuthentication({
+      configuration: cloudflareAccess,
+      clock,
+    });
+  const powerManagement = createPowerManagement({
+    clock,
+    administrativeEventHistoryCapabilities: eventHistory,
+  });
+  const admission = new FixedAdministrativeRequestAdmission(clock);
+
+  return Object.freeze({
+    admission,
+    createProtectedEventHistoryQuery: (
+      reader: CloudflareAccessAssertionReader,
+    ) => {
+      const accessControl = createAdministrativeAccessControl({
+        authenticator:
+          cloudflareAuthentication.createAuthenticationProviderForRequest(
+            reader,
+          ),
+        roleAssignmentReader,
+      });
+      const protectedAdministration = createProtectedAdministration({
+        accessControl,
+        powerManagement,
+        eventHistory,
+        clock,
+      });
+      return Object.freeze({
+        execute: async (query: unknown) =>
+          (await protectedAdministration.getAdministrativeEventHistory.execute(
+            query,
+          )) as AdministrativeEventHistoryPage,
+      });
+    },
+  });
 }
 
 start();

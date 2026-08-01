@@ -9,17 +9,29 @@ import {
   type HttpErrorLogger,
 } from "./middleware/error-handler.js";
 import { notFoundHandler } from "./middleware/not-found.js";
+import {
+  registerAdministrativeEventHistoryRoute,
+  type AdministrativeEventHistoryRouteDependencies,
+} from "./administrative-event-history-route.js";
 
-interface CreateAppDependencies {
+export interface CreateAppDependencies {
   logger: HttpErrorLogger;
   getServerHealth: GetServerHealthCapability;
+  administrativeEventHistory?: AdministrativeEventHistoryRouteDependencies;
 }
 
 export function createApp({
   logger,
   getServerHealth,
+  administrativeEventHistory,
 }: CreateAppDependencies): Express {
   const app = express();
+
+  if (administrativeEventHistory !== undefined) {
+    app.disable("etag");
+    app.disable("x-powered-by");
+    registerAdministrativeEventHistoryRoute(app, administrativeEventHistory);
+  }
 
   app.get("/health/live", (_request, response) => {
     response.status(200).json({ status: "ok" });
