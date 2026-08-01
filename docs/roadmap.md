@@ -388,15 +388,15 @@ permissions, audited authorization decisions, protected power and event-history
 facades, and verified actor propagation. It does not complete production
 authentication or protected delivery.
 
-The default remains in memory and no HTTP event-history endpoint is exposed.
-File persistence is explicit and has fixed line and file bounds. Cross-process
-locking, cryptographic tamper evidence, retention, rotation, production
-authentication, and protected delivery remain future work. v0.8 remains
-active.
+The default remains in memory for non-HTTP compositions and file persistence
+is explicit with fixed line and file bounds. Cross-process locking,
+cryptographic tamper evidence, retention, and rotation remain future work.
+Issue #240 delivers the first protected, authenticated, and authorization-
+audited event-history HTTP read with bounded cursor filters and safe response
+mapping. v0.8 remains active.
 
 ### Remaining v0.8 scope
 
-- protected event-history delivery;
 - operational retention and export design;
 - tamper-evidence and multi-process persistence design when required.
 
@@ -426,19 +426,24 @@ The authentication strategy should be recorded through an ADR before
 implementation.
 
 ADR-003 and Issue #236 establish the mock-first foundation under this
-milestone, but v0.9 remains active. The next prerequisite is a reviewed
-production administrative identity mechanism, followed by protected HTTP
-delivery, verified transport/proxy configuration, deployment ownership, and
-operator recovery procedures.
+milestone, but v0.9 remains active. Issue #238 selects the production-shaped
+identity mechanism and Issue #240 delivers the first protected read-only HTTP
+route. Remaining work includes broader protected delivery, verified
+transport/proxy configuration, deployment ownership, and operator recovery
+procedures.
 
 Issue #238 delivers the production-shaped identity-verification foundation.
 Cloudflare Access application JWTs are checked at the application boundary
 with fixed issuer/audience binding, RS256 signatures, bounded JWKS retrieval,
 controlled key caching and refresh, temporal validation, and human-only UUID
-subjects. The request-scoped provider integrates with the existing principal
-and authorization boundaries. v0.9 remains active because protected HTTP
-delivery and deployment validation are deferred. v0.6 also remains active:
-no real helper or real power effect is enabled.
+subjects. Issue #240 adds the first protected HTTP endpoint, explicit route
+activation, loopback-only binding, request URL/body/query bounds, a global
+60-per-60-second admission limit, four-request concurrency control, and
+restrictive response headers. The route remains read-only and does not add
+CORS, trusted-proxy behavior, power routes, or real effects. v0.9 remains
+active because broader protected delivery and deployment validation are
+deferred. v0.6 also remains active: no real helper or real power effect is
+enabled.
 
 ## v1.0 — Initial stable release
 

@@ -200,10 +200,18 @@ class ExecuteProtectedAdministrativeOperation {
         "authorization_audit_unavailable",
       );
     }
-    if (decision.outcome === "denied")
+    if (decision.outcome === "denied") {
+      if (
+        decision.reason === "role_assignment_unavailable" ||
+        decision.reason === "authorization_policy_unavailable"
+      )
+        throw new AdministrativeAccessControlError(
+          "administrative_authorization_unavailable",
+        );
       throw new AdministrativeAccessControlError(
         "administrative_authorization_denied",
       );
+    }
     try {
       return await invoke(evaluatedAt, source);
     } catch (error) {

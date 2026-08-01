@@ -894,7 +894,52 @@ fetch cooldown. Required-key or provider failures return the safe
 `identity_provider_unavailable` outcome; they never authenticate or expose
 provider details. Missing configuration preserves deny-by-default behavior.
 
-This identity foundation is not a protected HTTP delivery mechanism. No
-administrative route, session, cookie authentication, rate limit, CORS policy,
-trusted-proxy policy, helper activation, or real machine effect is introduced
-by this slice.
+The identity foundation alone is not a complete protected HTTP delivery
+mechanism. The separate event-history route below is the first consumer; it
+does not add sessions, cookie authentication, trusted-proxy policy, helper
+activation, or real machine effects.
+
+## Protected administrative event-history HTTP delivery
+
+Issue #240 introduces one explicitly gated read-only route:
+`GET /admin/event-history`. The route is registered only when
+`ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true` and all trusted deployment
+configuration is valid. Enabled delivery requires the exact loopback host
+`127.0.0.1`, Cloudflare Access settings, a distinct absolute persistent event
+history path, and role assignments that include `event_history.read`.
+
+The request order is deliberately fixed:
+
+```text
+admission limits
+        ↓
+method, URL, and body bounds
+        ↓
+strict query validation
+        ↓
+request-scoped authentication
+        ↓
+authorization audit event
+        ↓
+bounded event-history query
+        ↓
+explicit safe response mapping
+```
+
+Malformed queries, overlong targets, and rate-limited requests do not create
+authorization events. Accepted requests use the existing Cloudflare JWT
+provider and protected facade. Authorization and the query share one
+persistent event-history instance, and the authorization event is written
+before the query. No direct reader bypass is permitted.
+
+The route rejects request bodies, does not enable Express `trust proxy`, and
+does not use client IP or forwarding headers for identity, authorization, or
+rate limiting. A fixed process-local global limiter admits 60 requests per
+60-second window and at most four concurrently; excess requests are rejected
+without authentication or audit work. Responses are bounded to 1 MiB and
+include `no-store`, `nosniff`, no-referrer, deny-framing, and restrictive CSP
+headers. CORS permissions and bearer challenges are intentionally absent.
+
+Only event-history reads are exposed. Wake, shutdown, preparation, execution,
+and scheduler routes remain absent, and no helper or real machine effect is
+activated by this delivery.

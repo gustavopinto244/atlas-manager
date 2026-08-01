@@ -83,8 +83,10 @@ Unknown key IDs cause one coalesced refresh. A five-second request timeout,
 65,536-byte streaming response limit, and thirty-second failed-fetch cooldown
 are fixed in code. Empty `sub` values reject service-token assertions.
 
-This ADR does not authorize administrative HTTP routes, sessions, cookie
-authentication, role persistence, helper activation, or real power effects.
+This ADR does not authorize administrative power HTTP routes, sessions, cookie
+authentication, role persistence, helper activation, or real power effects. A
+later bounded read-only event-history route may consume this provider only
+through the existing protected-administration facade.
 
 ## Consequences
 
@@ -104,7 +106,9 @@ through a separate security-reviewed Issue.
 
 Revisit this ADR before adding another identity mechanism, accepting service
 tokens, changing the issuer or audience model, accepting algorithms other than
-RS256, adding email-based role assignment, exposing administrative routes, or
-changing cache and network bounds. Protected HTTP delivery must separately
-review request limits, rate limiting, CORS, trusted-proxy behavior, security
-headers, deployment ownership, and recovery procedures.
+RS256, adding email-based role assignment, or changing cache and network
+bounds. The first protected event-history HTTP route is separately bounded by
+ADR-independent configuration and delivery tests: it requires exact loopback
+binding, has no trusted proxy or CORS permission, and uses fixed URL, body,
+rate, concurrency, and response limits. Any broader protected delivery,
+deployment ownership, or recovery procedure requires a separate review.

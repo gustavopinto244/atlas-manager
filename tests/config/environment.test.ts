@@ -7,6 +7,137 @@ import {
 } from "../../src/config/environment.js";
 
 describe("parseEnvironment", () => {
+  it("keeps administrative event-history HTTP disabled by default", () => {
+    expect(parseEnvironment({}).administrativeEventHistoryHttpEnabled).toBe(
+      false,
+    );
+  });
+
+  it.each(["1", "0", "yes", "no", "TRUE", "False", "", " true"])(
+    "rejects non-canonical administrative HTTP boolean %s",
+    (enabled) => {
+      expect(() =>
+        parseEnvironment({
+          ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: enabled,
+        }),
+      ).toThrow();
+    },
+  );
+
+  it("accepts complete loopback administrative HTTP configuration", () => {
+    const config = parseEnvironment({
+      HOST: "127.0.0.1",
+      CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+      CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: "true",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE:
+        "/var/lib/atlas-manager/admin-events.jsonl",
+      ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+        {
+          principalId: "00000000-0000-4000-8000-000000000001",
+          roles: ["auditor"],
+        },
+      ]),
+    });
+
+    expect(config.administrativeEventHistoryHttpEnabled).toBe(true);
+    expect(config.administrativeEventHistoryFilePath).toBe(
+      "/var/lib/atlas-manager/admin-events.jsonl",
+    );
+    expect(config.administrativeRoleAssignments).toEqual([
+      {
+        principal: {
+          principalId: "00000000-0000-4000-8000-000000000001",
+        },
+        roles: ["auditor"],
+      },
+    ]);
+  });
+
+  it.each([
+    ["missing Cloudflare configuration", { HOST: "127.0.0.1" }],
+    [
+      "missing event-history file",
+      {
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+      },
+    ],
+    [
+      "missing role assignments",
+      {
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+      },
+    ],
+    [
+      "non-loopback host",
+      {
+        HOST: "0.0.0.0",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          {
+            principalId: "00000000-0000-4000-8000-000000000001",
+            roles: ["auditor"],
+          },
+        ]),
+      },
+    ],
+    [
+      "no read-capable role",
+      {
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          {
+            principalId: "00000000-0000-4000-8000-000000000001",
+            roles: ["power_operator"],
+          },
+        ]),
+      },
+    ],
+  ])("rejects enabled configuration with %s", (_description, values) => {
+    expect(() =>
+      parseEnvironment({
+        ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: "true",
+        ...values,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects duplicate role principals and persistence paths", () => {
+    const assignment = {
+      principalId: "00000000-0000-4000-8000-000000000001",
+      roles: ["auditor"],
+    };
+    expect(() =>
+      parseEnvironment({
+        ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: "true",
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+        SERVICE_AVAILABILITY_OVERRIDE_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          assignment,
+          assignment,
+        ]),
+      }),
+    ).toThrow();
+  });
+
   it("uses the default host and port when values are absent", () => {
     const config = parseEnvironment({});
 
@@ -14,6 +145,7 @@ describe("parseEnvironment", () => {
       host: "127.0.0.1",
       port: 3000,
       logLevel: "info",
+      administrativeEventHistoryHttpEnabled: false,
     });
     expect(
       config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
@@ -34,6 +166,7 @@ describe("parseEnvironment", () => {
       host: "0.0.0.0",
       port: 8080,
       logLevel: "info",
+      administrativeEventHistoryHttpEnabled: false,
     });
   });
 

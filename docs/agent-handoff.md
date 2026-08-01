@@ -2,7 +2,36 @@
 
 ## Current work
 
-The active branch for Issue #238 is:
+The active branch for Issue #240 is:
+
+```text
+feat/protected-administrative-event-history-http
+```
+
+The authoritative merged PR #239 baseline is:
+
+```text
+6dfab4223e8d8e544c7669a0042d7f7fcd9cfa92
+```
+
+Issue #240 adds the explicitly gated `GET /admin/event-history` route. Enabled
+delivery requires `HOST=127.0.0.1`, paired Cloudflare Access configuration,
+`ADMINISTRATIVE_EVENT_HISTORY_FILE`, and strict JSON
+`ADMINISTRATIVE_ROLE_ASSIGNMENTS` containing an auditor or administrator.
+Authentication remains request-scoped; the JWKS provider, role reader, event
+history, clock, and mock-first power composition are shared. The handler calls
+only the protected administration facade, records authorization in the same
+file-backed history before querying, and maps strict event fields into a
+bounded response.
+
+The route is limited to 60 admitted requests per 60-second process-local
+window and four concurrent requests. It rejects bodies, overlong URLs,
+malformed raw queries, proxy/IP-based security, CORS, bearer challenges, and
+all methods other than GET. No power route, helper activation, or real machine
+effect was added. The next recommended delivery is the separately reviewed
+wake-alarm HTTP slice.
+
+Historical Issue #238 context:
 
 ```text
 feat/cloudflare-access-administrative-authentication
@@ -224,8 +253,8 @@ npm audit --omit=dev        PASS — 0 vulnerabilities
 ## Historical next-work note
 
 The earlier Issue #236 handoff recommended selecting the production identity
-mechanism. Issue #238 now records that decision in ADR-004 and delivers its
-verification foundation; protected HTTP delivery remains the next Issue.
+mechanism. Issue #238 recorded that decision in ADR-004, and Issue #240 now
+delivers the first protected read-only HTTP route.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.
@@ -253,3 +282,38 @@ No HTTP administrative route, production helper activation, real RTC
 mutation, real shutdown, session, cookie fallback, or trusted-proxy change
 was introduced. The next delivery is protected administrative HTTP delivery
 using this request-scoped provider and the existing protected facade.
+
+## Issue #240 final validation
+
+The Issue #240 validation supersedes the older historical totals above:
+
+```text
+Baseline                   6dfab4223e8d8e544c7669a0042d7f7fcd9cfa92
+Branch                     feat/protected-administrative-event-history-http
+Route                      GET /admin/event-history
+Activation                 ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true
+Binding                    HOST=127.0.0.1 only
+Query page                 default 50, maximum 100
+Rate limit                 60 requests / 60 seconds, process-local
+Concurrency                4 admitted requests
+Response bound             1 MiB
+Dependencies               unchanged
+Node.js                    24.18.0
+npm                        11.16.0
+nvm use                    unavailable — nvm is not installed in the shell
+Test files                 164 passed
+Tests                      2347 passed
+Production audit           0 vulnerabilities
+Next delivery              protected wake-alarm HTTP lifecycle
+```
+
+Validation commands passed: `npm ci`, `npm run format:check`, `npm run lint`,
+`npm run typecheck`, `npm test -- --maxWorkers=1`, `npm run build`, and
+`git diff --check`. `npm ci` reported the existing development-tree advisory
+and esbuild script approval warning; no audit-fix command was run. The
+production-only audit passed.
+
+Authorization events and event-history query results use the same persistent
+event-history instance. Successful reads can therefore include their own
+authorization event. Malformed queries and admission-limit rejections do not
+create authorization events.

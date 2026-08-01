@@ -165,8 +165,9 @@ permissions, sessions, or authorization policy. Verified authenticated actors
 are constructed internally as `administrator:<principalId>`; callers cannot
 provide actor fields. Scheduler-generated occurrence events remain
 `automated/machine-power-scheduler`, even when a protected administrator
-authorizes the scheduler tick. This boundary is not HTTP-exposed and does not
-implement production identity verification.
+authorizes the scheduler tick. This application boundary does not authorize
+delivery requests by itself; the Cloudflare identity adapter and the protected
+event-history route are layered above it.
 
 ## Feature-first modular organization
 
@@ -710,5 +711,41 @@ receives only a narrow assertion-reader port and never receives an Express
 request, cookie, session, or arbitrary headers. The issuer and JWKS URL are
 derived from trusted configuration; callers cannot select them. Infrastructure
 adapters verify identity and retrieve keys, but do not assign roles or make
-authorization decisions. Construction is lazy, and no route consumes this
-foundation yet.
+authorization decisions. Construction is lazy, and no route consumes the
+Cloudflare foundation unless the explicit administrative event-history
+configuration is complete.
+
+### Protected administrative event-history delivery
+
+Issue #240 adds the first protected administrative HTTP route, while keeping
+the target operation read-only:
+
+```text
+Express event-history handler
+        ↓
+request-scoped Cloudflare assertion reader
+        ↓
+request-scoped authentication provider
+        ↓
+request-scoped access-control composition
+        ↓
+protected administration facade
+        ↓
+shared file-backed event history
+```
+
+`GET /admin/event-history` is not registered by default. Explicit activation
+requires the loopback host, Cloudflare Access settings, a persistent event
+history path, and trusted role assignments. The handler parses the raw query
+string, enforces URL/body bounds, then creates the request-scoped provider and
+calls only `getAdministrativeEventHistory` on the protected facade. It does
+not import or invoke the event-history reader directly.
+
+Authorization is recorded in the same event-history instance before the query,
+so a successful authorization event can be included in its own response. The
+handler maps only strict event fields and applies a 60-per-60-second global
+process-local admission limit, four-request concurrency limit, a 1 MiB
+response bound, and restrictive no-store response headers. It does not enable
+Express `trust proxy`, use client IPs, add CORS, expose a bearer challenge, or
+register power-management routes. Health routes remain independent of this
+composition and of Cloudflare or event-history availability.

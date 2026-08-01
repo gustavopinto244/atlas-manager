@@ -1,4 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AdministrativePrincipal } from "../src/access-control/domain/administrative-principal.js";
+import type { AdministrativeRole } from "../src/access-control/domain/administrative-role.js";
 
 interface ControlledEnvironmentConfig {
   host: string;
@@ -7,6 +17,17 @@ interface ControlledEnvironmentConfig {
   serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   serviceAvailabilityOverrideFilePath?: string;
+  administrativeEventHistoryHttpEnabled?: boolean;
+  administrativeEventHistoryFilePath?: string;
+  administrativeRoleAssignments?: readonly {
+    principal: AdministrativePrincipal;
+    roles: readonly AdministrativeRole[];
+  }[];
+  cloudflareAccess?: Readonly<{
+    teamName: string;
+    issuer: string;
+    audience: string;
+  }>;
 }
 
 const controlled = vi.hoisted(() => {
@@ -25,6 +46,7 @@ const controlled = vi.hoisted(() => {
     overrideStores: [] as object[],
     overridePaths: [] as string[],
     createServiceManagement: vi.fn(),
+    createApp: vi.fn(),
   };
 });
 
@@ -96,7 +118,7 @@ vi.mock(
 );
 
 vi.mock("../src/http/create-app.js", () => ({
-  createApp: vi.fn(() => ({
+  createApp: controlled.createApp.mockImplementation(() => ({
     listen: vi.fn(() => ({
       once: vi.fn(),
       close: vi.fn(),
@@ -123,6 +145,25 @@ vi.mock("../src/logging/logger.js", () => ({
 }));
 
 describe("application persistence adapter selection", () => {
+  afterAll(() => {
+    for (const modulePath of [
+      "../src/config/environment.js",
+      "../src/server-health/application/get-server-health.js",
+      "../src/server-health/infrastructure/linux-coretemp-cpu-temperature-reader.js",
+      "../src/server-health/infrastructure/node-server-health-reader.js",
+      "../src/service-management/infrastructure/file-service-availability-override-store.js",
+      "../src/service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js",
+      "../src/service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js",
+      "../src/service-management/composition/create-service-management.js",
+      "../src/http/create-app.js",
+      "../src/lifecycle/graceful-shutdown.js",
+      "../src/lifecycle/service-availability-reconciliation-scheduler-runtime.js",
+      "../src/logging/logger.js",
+    ])
+      vi.doUnmock(modulePath);
+    vi.resetModules();
+  });
+
   beforeEach(() => {
     controlled.config = {
       host: "127.0.0.1",
@@ -135,6 +176,13 @@ describe("application persistence adapter selection", () => {
     controlled.claimPaths.length = 0;
     controlled.overrideStores.length = 0;
     controlled.overridePaths.length = 0;
+    controlled.createApp.mockReset();
+    controlled.createApp.mockImplementation(() => ({
+      listen: vi.fn(() => ({
+        once: vi.fn(),
+        close: vi.fn(),
+      })),
+    }));
     controlled.createServiceManagement.mockReset();
     controlled.createServiceManagement.mockReturnValue({
       serviceAvailabilityReconciliationSchedulerLoop: {
@@ -299,5 +347,34 @@ describe("application persistence adapter selection", () => {
         serviceAvailabilityOverrideStore: controlled.overrideStores[0],
       },
     );
+  });
+
+  it("constructs the protected route only for complete explicit activation", async () => {
+    const principalId = "00000000-0000-4000-8000-000000000001";
+    controlled.config = {
+      ...controlled.config,
+      administrativeEventHistoryHttpEnabled: true,
+      administrativeEventHistoryFilePath:
+        "/tmp/atlas-manager-administrative-events.jsonl",
+      administrativeRoleAssignments: [
+        {
+          principal: { principalId },
+          roles: ["auditor"],
+        },
+      ],
+      cloudflareAccess: {
+        teamName: "atlas",
+        issuer: "https://atlas.cloudflareaccess.com",
+        audience: "atlas-admin",
+      },
+    };
+
+    await import("../src/main.js");
+
+    expect(controlled.createApp).toHaveBeenCalledOnce();
+    const dependencies = controlled.createApp.mock.calls[0]?.[0] as {
+      administrativeEventHistory?: object;
+    };
+    expect(dependencies.administrativeEventHistory).toBeDefined();
   });
 });

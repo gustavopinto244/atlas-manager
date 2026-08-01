@@ -222,7 +222,9 @@ describe("administrative access-control foundation", () => {
 
     await expect(
       protectedAdministration.cancelWakeAlarm.execute(),
-    ).rejects.toMatchObject({ code: "administrative_authorization_denied" });
+    ).rejects.toMatchObject({
+      code: "administrative_authorization_unavailable",
+    });
     expect(roles.lookupPrincipalIds).toEqual([PRINCIPAL_ID]);
     const page = await history.getAdministrativeEventHistory.execute();
     expect(page.events[0]?.details).toMatchObject({

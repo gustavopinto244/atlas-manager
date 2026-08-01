@@ -22,9 +22,31 @@ v0.5 readiness audit. The older capability narrative later in this document
 contains historical design detail; statements about an earlier milestone do
 not override the current implementation or matrix.
 
-The administrative API and dashboard remain future delivery work. Existing
-HTTP endpoints are health-oriented; no unauthenticated administrative Docker
-endpoint has been added.
+The broader administrative API and dashboard remain future delivery work. The
+health endpoints remain unauthenticated, and the only administrative route is
+the explicitly protected, read-only event-history route described below; no
+administrative Docker endpoint has been added.
+
+The first protected administrative HTTP slice is now available behind an
+explicit deployment gate: `GET /admin/event-history`. It is disabled unless
+`ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true`, and enabled delivery requires
+`HOST=127.0.0.1`, Cloudflare Access configuration, a persistent event-history
+file, and trusted JSON role assignments containing at least an `auditor` or
+`administrator`. The route uses the request-scoped
+`Cf-Access-Jwt-Assertion` provider and the existing protected administration
+facade; it never reads the event-history store directly.
+
+The query supports bounded cursor pagination (`afterSequence`, `limit`) and
+the existing source, operation, status, attempt, and UTC time filters. Each
+authorized read records its authorization event in the same persistent store
+before querying, so that event may appear in the returned page. Responses are
+explicitly mapped, limited to 1 MiB, non-cacheable, and protected by
+restrictive security headers. The route admits at most 60 requests per
+60-second process-local window and four concurrently, without IP or proxy
+headers, and grants no CORS permission.
+
+Only event-history reads are exposed. There are still no HTTP power mutation
+routes, no helper activation, and no real RTC or machine power effect.
 
 ## v0.6 — Power management (active)
 
@@ -175,10 +197,10 @@ Protected administration records an authorization decision before invoking the
 underlying power or event-history capability. Authenticated events use the
 verified actor `administrator:<canonical-principal-uuid>`; unauthenticated
 attempts use `administrative/unauthenticated`. Authorization does not replace
-explicit shutdown confirmation. The feature has no HTTP routes, credentials,
-sessions, tokens, production identity provider, real helper activation, or real
-machine effects. The next prerequisite is selecting and implementing production
-administrative identity verification.
+explicit shutdown confirmation. The Issue #236 mock-first feature had no HTTP
+routes, credentials, sessions, tokens, production identity provider, real
+helper activation, or real machine effects; Issues #238 and #240 now add the
+Cloudflare identity foundation and the protected read-only event-history route.
 
 ## Capability history and planned work
 
@@ -1501,12 +1523,15 @@ Stop the development process with `Ctrl+C`.
 Atlas Manager validates its environment configuration before starting the HTTP
 server. The supported variables are optional:
 
-| Variable                   | Default     | Purpose                            |
-| -------------------------- | ----------- | ---------------------------------- |
-| `HOST`                     | `127.0.0.1` | Address used by the HTTP listener  |
-| `PORT`                     | `3000`      | TCP port used by the HTTP listener |
-| `LOG_LEVEL`                | `info`      | Minimum structured logging level   |
-| `REGISTERED_SERVICES_JSON` | `[]`        | Deployment-owned service allowlist |
+| Variable                                    | Default     | Purpose                                                      |
+| ------------------------------------------- | ----------- | ------------------------------------------------------------ |
+| `HOST`                                      | `127.0.0.1` | Address used by the HTTP listener                            |
+| `PORT`                                      | `3000`      | TCP port used by the HTTP listener                           |
+| `LOG_LEVEL`                                 | `info`      | Minimum structured logging level                             |
+| `REGISTERED_SERVICES_JSON`                  | `[]`        | Deployment-owned service allowlist                           |
+| `ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED` | `false`     | Explicitly enables the protected event-history route         |
+| `ADMINISTRATIVE_EVENT_HISTORY_FILE`         | —           | Absolute persistent event-history file required when enabled |
+| `ADMINISTRATIVE_ROLE_ASSIGNMENTS`           | —           | Strict JSON role assignments required when enabled           |
 
 The repository includes a safe `.env.example` documenting these variables. The
 application reads variables from the process environment; it does not load
@@ -1527,6 +1552,15 @@ HOST=0.0.0.0 PORT=8080 npm start
 
 `PORT` must be an integer from `1` through `65535`. Invalid configuration stops
 startup before the server begins listening.
+
+When the administrative event-history route is enabled, `HOST` must be exactly
+`127.0.0.1`; IPv6, LAN, and public bindings are rejected. The Cloudflare Access
+team and audience must be configured as a pair, and role assignments must use
+canonical lowercase UUID subjects with one to four fixed roles. At least one
+assignment must provide `event_history.read` through `auditor` or
+`administrator`. The application does not create the event-history parent
+directory while parsing configuration and does not fall back to in-memory
+history for enabled HTTP delivery.
 
 ### Registered-service catalog configuration
 
