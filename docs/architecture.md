@@ -859,3 +859,26 @@ mutation operations remain deny-all, and the backend is not wired into the
 Node.js power-management composition. A separate test executable injects
 fixed deterministic results for TypeScript/Go compatibility without reading
 CI hardware.
+
+### Linux wake-alarm mutation backend
+
+ADR-007 extends the fixed helper backend for the two safe mutation operations:
+
+```text
+exclusive fixed lock
+        ↓
+validated RTC time and current wake state
+        ↓
+bounded absolute epoch write to fixed wakealarm
+        ↓
+read-after-write verification
+        ↓
+typed mutation response
+```
+
+Reads use a shared lock; schedule and cancel use an exclusive nonblocking lock
+at `/run/atlas-manager-power-helper.lock`. Scheduling the same value performs
+no write. Replacement writes `0\n`, verifies absence, then writes the new
+value under one lock. A failed replacement is not rolled back or retried.
+The production helper still does not implement shutdown, and the Node.js
+application continues using its mock-first composition.

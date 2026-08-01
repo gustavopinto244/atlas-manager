@@ -43,6 +43,50 @@ changes; its existing development-tree advisory was not changed. Production
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.
 
+## Current work — Issue #250
+
+The active branch is:
+
+```text
+feat/linux-power-helper-wake-alarm-mutation-backend
+```
+
+The authoritative merged PR #249 baseline in this checkout is:
+
+```text
+3daf7c2aaad03479e6e06360d7fc4280b52041b4
+```
+
+Issue #250 adds ADR-007 and real fixed `rtc0` wake-alarm schedule/cancel
+source code to the standalone Go helper. Reads use a shared lock and
+mutations use an exclusive nonblocking lock at
+`/run/atlas-manager-power-helper.lock`; production lock files must be
+root-owned regular files with exact mode `0600`, one link, and no final
+symlink. The helper writes only absolute canonical epoch payloads capped at 32
+bytes or exactly `0\n` for cancellation.
+
+Scheduling validates aligned RTC time and current wake state, returns
+`scheduled`, `unchanged`, or `replaced`, and replacement performs cancel,
+verify absent, schedule, verify exact target under one lock. Cancellation is
+idempotent. Write failures and read-after-write mismatches return
+`operation_failed`; partial replacement effects remain authoritative with no
+retry, rollback, or compensation. `request_shutdown` remains unsupported and
+does not acquire the lock. The helper remains uninstalled and unwired; all
+Atlas Manager HTTP behavior remains mock-first.
+
+Final validation used Node.js 24.18.0, npm 11.16.0, and Go 1.23.0
+linux/amd64. The Node suite passed with 171 test files, 2,410 passing tests,
+and 2 skipped tests. The Go suite passed 73 tests; format, vet, Linux helper
+builds, TypeScript build, lint, typecheck, and `git diff --check` passed.
+`npm ci` completed successfully, npm and Go dependencies remain unchanged,
+and `npm audit --omit=dev` reported zero production vulnerabilities. `nvm use`
+remains unavailable in the shell; versions were verified directly. No helper
+was installed, no setuid or group change was applied, and no production
+wiring or real hardware effect was introduced.
+
+Do not reset, discard, commit, push, merge, or open a Pull Request without the
+project owner's approval.
+
 ## Current work — Issue #246
 
 The active branch is:

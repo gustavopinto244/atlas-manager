@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 
+	"github.com/atlas-manager/atlas-manager/power-helper/internal/lock"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/protocol"
 	"github.com/atlas-manager/atlas-manager/power-helper/internal/rtc"
 )
@@ -47,12 +48,79 @@ type RTCReader interface {
 	ReadWakeAlarm() (rtc.WakeAlarm, error)
 }
 
+type RTCMutator interface {
+	Schedule(string) (rtc.Mutation, error)
+	Cancel() (rtc.Mutation, error)
+}
+
+type LinuxOperations struct {
+	reader  RTCReader
+	mutator RTCMutator
+	lock    lock.OperationLock
+}
+
+func NewLinuxOperations(reader RTCReader, mutator RTCMutator, operationLock lock.OperationLock) LinuxOperations {
+	return LinuxOperations{reader: reader, mutator: mutator, lock: operationLock}
+}
+
+func (operations LinuxOperations) ReadRTCInformation(request protocol.Request) protocol.Response {
+	release, err := operations.lock.AcquireShared()
+	if err != nil {
+		return operationRejected(request)
+	}
+	defer release()
+	return readRTCInformationResponse(operations.reader, request)
+}
+
+func (operations LinuxOperations) ReadWakeAlarm(request protocol.Request) protocol.Response {
+	release, err := operations.lock.AcquireShared()
+	if err != nil {
+		return operationRejected(request)
+	}
+	defer release()
+	return readWakeAlarmResponse(operations.reader, request)
+}
+
+func (operations LinuxOperations) ScheduleWakeAlarm(request protocol.Request) protocol.Response {
+	release, err := operations.lock.AcquireExclusive()
+	if err != nil {
+		return operationRejected(request)
+	}
+	defer release()
+	mutation, err := operations.mutator.Schedule(request.ScheduledFor)
+	if err != nil {
+		return mutationFailure(request, err)
+	}
+	return scheduleMutationResponse(request, mutation)
+}
+
+func (operations LinuxOperations) CancelWakeAlarm(request protocol.Request) protocol.Response {
+	release, err := operations.lock.AcquireExclusive()
+	if err != nil {
+		return operationRejected(request)
+	}
+	defer release()
+	mutation, err := operations.mutator.Cancel()
+	if err != nil {
+		return mutationFailure(request, err)
+	}
+	return cancelMutationResponse(request, mutation)
+}
+
+func (LinuxOperations) RequestShutdown(request protocol.Request) protocol.Response {
+	return protocol.RejectingResponse(request)
+}
+
 func NewReadOnly(reader RTCReader) ReadOnly {
 	return ReadOnly{reader: reader}
 }
 
 func (operations ReadOnly) ReadRTCInformation(request protocol.Request) protocol.Response {
-	information, err := operations.reader.ReadRTCInformation()
+	return readRTCInformationResponse(operations.reader, request)
+}
+
+func readRTCInformationResponse(reader RTCReader, request protocol.Request) protocol.Response {
+	information, err := reader.ReadRTCInformation()
 	if err != nil {
 		return readFailure(request, err)
 	}
@@ -68,7 +136,11 @@ func (operations ReadOnly) ReadRTCInformation(request protocol.Request) protocol
 }
 
 func (operations ReadOnly) ReadWakeAlarm(request protocol.Request) protocol.Response {
-	wakeAlarm, err := operations.reader.ReadWakeAlarm()
+	return readWakeAlarmResponse(operations.reader, request)
+}
+
+func readWakeAlarmResponse(reader RTCReader, request protocol.Request) protocol.Response {
+	wakeAlarm, err := reader.ReadWakeAlarm()
 	if err != nil {
 		return readFailure(request, err)
 	}
@@ -104,6 +176,75 @@ func readFailure(request protocol.Request, err error) protocol.Response {
 
 func stateUnavailable(request protocol.Request) protocol.Response {
 	response, err := protocol.NewFailureResponse(request.Operation, "failed", "state_unavailable")
+	if err != nil {
+		return protocol.Response{}
+	}
+	return response
+}
+
+func operationRejected(request protocol.Request) protocol.Response {
+	response, err := protocol.NewFailureResponse(request.Operation, "rejected", "operation_rejected")
+	if err != nil {
+		return protocol.Response{}
+	}
+	return response
+}
+
+func mutationFailure(request protocol.Request, err error) protocol.Response {
+	if errors.Is(err, rtc.ErrUnsupported) {
+		return protocol.RejectingResponse(request)
+	}
+	if errors.Is(err, rtc.ErrOperationRejected) {
+		return operationRejected(request)
+	}
+	if errors.Is(err, rtc.ErrStateUnavailable) {
+		return stateUnavailable(request)
+	}
+	response, responseErr := protocol.NewFailureResponse(request.Operation, "failed", "operation_failed")
+	if responseErr != nil {
+		return protocol.Response{}
+	}
+	return response
+}
+
+func scheduleMutationResponse(request protocol.Request, mutation rtc.Mutation) protocol.Response {
+	before, after, err := mutationProtocolStates(mutation)
+	if err != nil {
+		return operationFailed(request)
+	}
+	response, err := protocol.NewScheduleWakeAlarmSuccess(before, after, mutation.Outcome)
+	if err != nil {
+		return operationFailed(request)
+	}
+	return response
+}
+
+func cancelMutationResponse(request protocol.Request, mutation rtc.Mutation) protocol.Response {
+	before, after, err := mutationProtocolStates(mutation)
+	if err != nil {
+		return operationFailed(request)
+	}
+	response, err := protocol.NewCancelWakeAlarmSuccess(before, after, mutation.Outcome)
+	if err != nil {
+		return operationFailed(request)
+	}
+	return response
+}
+
+func mutationProtocolStates(mutation rtc.Mutation) (protocol.WakeAlarmResult, protocol.WakeAlarmResult, error) {
+	before, err := protocol.NewWakeAlarmResult(mutation.Before.State, mutation.Before.ScheduledFor)
+	if err != nil {
+		return protocol.WakeAlarmResult{}, protocol.WakeAlarmResult{}, err
+	}
+	after, err := protocol.NewWakeAlarmResult(mutation.After.State, mutation.After.ScheduledFor)
+	if err != nil {
+		return protocol.WakeAlarmResult{}, protocol.WakeAlarmResult{}, err
+	}
+	return before, after, nil
+}
+
+func operationFailed(request protocol.Request) protocol.Response {
+	response, err := protocol.NewFailureResponse(request.Operation, "failed", "operation_failed")
 	if err != nil {
 		return protocol.Response{}
 	}

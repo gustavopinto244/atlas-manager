@@ -35,6 +35,10 @@ func (filesystem *fakeFileSystem) ReadWakeAlarm() ([]byte, error) {
 	return filesystem.wakeAlarm, filesystem.wakeAlarmErr
 }
 
+func (filesystem *fakeFileSystem) WriteWakeAlarm(payload []byte) error {
+	return nil
+}
+
 type fakeClock struct {
 	times []time.Time
 	index int

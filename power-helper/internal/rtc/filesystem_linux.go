@@ -43,6 +43,34 @@ func (LinuxFileSystem) ReadWakeAlarm() ([]byte, error) {
 	return value, err
 }
 
+func (LinuxFileSystem) WriteWakeAlarm(payload []byte) error {
+	if len(payload) == 0 || len(payload) > MaxWriteBytes {
+		return ErrOperationFailed
+	}
+	fd, err := syscall.Open(RTC_WAKE_ALARM, syscall.O_WRONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return ErrOperationFailed
+	}
+	defer syscall.Close(fd)
+	if err := writePayload(payload, func(value []byte) (int, error) {
+		return syscall.Write(fd, value)
+	}); err != nil {
+		return ErrOperationFailed
+	}
+	return nil
+}
+
+func writePayload(payload []byte, write func([]byte) (int, error)) error {
+	if len(payload) == 0 || len(payload) > MaxWriteBytes {
+		return ErrOperationFailed
+	}
+	written, err := write(payload)
+	if err != nil || written != len(payload) {
+		return ErrOperationFailed
+	}
+	return nil
+}
+
 func readFixedAttribute(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {

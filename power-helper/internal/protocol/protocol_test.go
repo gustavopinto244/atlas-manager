@@ -195,6 +195,110 @@ func TestReadSuccessConstructorsRejectInvalidStatesAndOperations(t *testing.T) {
 	}
 }
 
+func TestMutationSuccessConstructorsSerializeCanonicalResults(t *testing.T) {
+	notScheduled, err := NewWakeAlarmResult(WakeAlarmNotScheduled, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t1, err := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T09:00:00.000Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t2, err := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T10:00:00.000Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		response Response
+		want     string
+	}{
+		{"scheduled", mustScheduleResponse(t, notScheduled, t1, "scheduled"), "{\"version\":1,\"operation\":\"schedule_wake_alarm\",\"outcome\":\"success\",\"result\":{\"before\":{\"state\":\"not_scheduled\"},\"after\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"},\"outcome\":\"scheduled\"}}\n"},
+		{"replaced", mustScheduleResponse(t, t1, t2, "replaced"), "{\"version\":1,\"operation\":\"schedule_wake_alarm\",\"outcome\":\"success\",\"result\":{\"before\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"},\"after\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T10:00:00.000Z\"},\"outcome\":\"replaced\"}}\n"},
+		{"unchanged", mustScheduleResponse(t, t1, t1, "unchanged"), "{\"version\":1,\"operation\":\"schedule_wake_alarm\",\"outcome\":\"success\",\"result\":{\"before\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"},\"after\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"},\"outcome\":\"unchanged\"}}\n"},
+		{"cancelled", mustCancelResponse(t, t1, notScheduled, "cancelled"), "{\"version\":1,\"operation\":\"cancel_wake_alarm\",\"outcome\":\"success\",\"result\":{\"before\":{\"state\":\"scheduled\",\"scheduledFor\":\"2026-08-02T09:00:00.000Z\"},\"after\":{\"state\":\"not_scheduled\"},\"outcome\":\"cancelled\"}}\n"},
+		{"absent", mustCancelResponse(t, notScheduled, notScheduled, "not_scheduled"), "{\"version\":1,\"operation\":\"cancel_wake_alarm\",\"outcome\":\"success\",\"result\":{\"before\":{\"state\":\"not_scheduled\"},\"after\":{\"state\":\"not_scheduled\"},\"outcome\":\"not_scheduled\"}}\n"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			encoded, err := MarshalResponse(testCase.response)
+			if err != nil || string(encoded) != testCase.want {
+				t.Fatalf("got %s, error %v", encoded, err)
+			}
+		})
+	}
+}
+
+func TestMutationConstructorsRejectImpossibleTransitions(t *testing.T) {
+	notScheduled, _ := NewWakeAlarmResult(WakeAlarmNotScheduled, "")
+	scheduled, _ := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T09:00:00.000Z")
+	cases := []struct {
+		name string
+		make func() (Response, error)
+	}{
+		{"schedule cancelled", func() (Response, error) { return NewScheduleWakeAlarmSuccess(notScheduled, scheduled, "cancelled") }},
+		{"schedule replaced same", func() (Response, error) { return NewScheduleWakeAlarmSuccess(scheduled, scheduled, "replaced") }},
+		{"cancel scheduled after", func() (Response, error) { return NewCancelWakeAlarmSuccess(scheduled, scheduled, "cancelled") }},
+		{"cancel scheduled outcome", func() (Response, error) { return NewCancelWakeAlarmSuccess(notScheduled, notScheduled, "scheduled") }},
+		{"schedule unsupported", func() (Response, error) {
+			return NewScheduleWakeAlarmSuccess(WakeAlarmResult{State: WakeAlarmUnsupported}, scheduled, "scheduled")
+		}},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := testCase.make(); err == nil {
+				t.Fatal("impossible transition accepted")
+			}
+		})
+	}
+}
+
+func TestMutationSuccessFixturesMatchGoSerialization(t *testing.T) {
+	notScheduled, _ := NewWakeAlarmResult(WakeAlarmNotScheduled, "")
+	t1, _ := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T09:00:00.000Z")
+	t2, _ := NewWakeAlarmResult(WakeAlarmScheduled, "2026-08-02T10:00:00.000Z")
+	cases := []struct {
+		fixture  string
+		response Response
+	}{
+		{"schedule_wake_alarm_scheduled.json", mustScheduleResponse(t, notScheduled, t1, "scheduled")},
+		{"schedule_wake_alarm_replaced.json", mustScheduleResponse(t, t1, t2, "replaced")},
+		{"schedule_wake_alarm_unchanged.json", mustScheduleResponse(t, t1, t1, "unchanged")},
+		{"cancel_wake_alarm_cancelled.json", mustCancelResponse(t, t1, notScheduled, "cancelled")},
+		{"cancel_wake_alarm_not_scheduled.json", mustCancelResponse(t, notScheduled, notScheduled, "not_scheduled")},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.fixture, func(t *testing.T) {
+			encoded, err := MarshalResponse(testCase.response)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := mustRead(t, "../../testdata/protocol/responses/success/"+testCase.fixture)
+			if string(encoded) != string(want) {
+				t.Fatalf("fixture mismatch: %s", encoded)
+			}
+		})
+	}
+}
+
+func mustScheduleResponse(t *testing.T, before WakeAlarmResult, after WakeAlarmResult, outcome string) Response {
+	t.Helper()
+	response, err := NewScheduleWakeAlarmSuccess(before, after, outcome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
+func mustCancelResponse(t *testing.T, before WakeAlarmResult, after WakeAlarmResult, outcome string) Response {
+	t.Helper()
+	response, err := NewCancelWakeAlarmSuccess(before, after, outcome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	content, err := os.ReadFile(path)
