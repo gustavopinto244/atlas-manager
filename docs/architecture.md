@@ -685,3 +685,30 @@ when it affects:
 
 Existing ADRs should not be rewritten to hide previous decisions. A new ADR
 should supersede an earlier decision when necessary.
+
+### Cloudflare Access administrative identity boundary
+
+ADR-004 selects one request-scoped, application-side Cloudflare Access JWT
+verification boundary without adding an administrative route:
+
+```text
+Cloudflare Access
+        ↓
+HTTP assertion reader
+        ↓
+request-scoped authentication provider
+        ↓
+shared RS256 verifier and bounded JWKS provider
+        ↓
+AdministrativePrincipal
+        ↓
+existing protected administration
+```
+
+HTTP delivery owns raw header extraction. Access-control application code
+receives only a narrow assertion-reader port and never receives an Express
+request, cookie, session, or arbitrary headers. The issuer and JWKS URL are
+derived from trusted configuration; callers cannot select them. Infrastructure
+adapters verify identity and retrieve keys, but do not assign roles or make
+authorization decisions. Construction is lazy, and no route consumes this
+foundation yet.

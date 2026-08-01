@@ -874,3 +874,27 @@ Update this document when:
 
 Security documentation must remain consistent with accepted ADRs and formal
 requirements.
+
+## Cloudflare Access identity verification
+
+ADR-004 requires the application to independently verify a Cloudflare Access
+application JWT before creating an administrative principal. Only the bounded
+`Cf-Access-Jwt-Assertion` header is accepted; cookies and unsigned identity
+headers are ignored. Verification is bound to the configured team issuer and
+one exact application audience, accepts RS256 only, requires `type: app`, and
+requires a canonical lowercase UUID `sub`. Empty subjects therefore cannot
+authenticate service tokens as human administrators. Email is not an identity
+or role-assignment input.
+
+The fixed team JWKS endpoint is fetched with no credentials, no redirect
+following, a five-second timeout, and a 65,536-byte streaming limit. Validated
+keys are process-local and bounded, with ten-minute cache lifetime, one refresh
+for an unknown key, concurrent refresh coalescing, and a thirty-second failed
+fetch cooldown. Required-key or provider failures return the safe
+`identity_provider_unavailable` outcome; they never authenticate or expose
+provider details. Missing configuration preserves deny-by-default behavior.
+
+This identity foundation is not a protected HTTP delivery mechanism. No
+administrative route, session, cookie authentication, rate limit, CORS policy,
+trusted-proxy policy, helper activation, or real machine effect is introduced
+by this slice.

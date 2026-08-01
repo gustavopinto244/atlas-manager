@@ -2,11 +2,33 @@
 
 ## Current work
 
-The active branch is:
+The active branch for Issue #238 is:
 
 ```text
-feat/mock-administrative-access-control
+feat/cloudflare-access-administrative-authentication
 ```
+
+The authoritative merged PR #237 baseline is:
+
+```text
+4c50b54f4b9e101138f2b0d67337308b07033af6
+```
+
+Issue #238 accepts ADR-004: Cloudflare Access application JWTs are verified
+with the fixed team issuer and JWKS endpoint, RS256 only, one exact audience,
+`type: app`, and a canonical lowercase UUID subject. Configuration uses
+`CLOUDFLARE_ACCESS_TEAM_NAME` and `CLOUDFLARE_ACCESS_AUDIENCE` as a strict
+pair. The only assertion source is `Cf-Access-Jwt-Assertion`; no cookie,
+email header, session, or production route is accepted. Header assertions are
+bounded to 16 KiB, JWKS responses to 65,536 bytes, fetch timeout to five
+seconds, successful cache lifetime to ten minutes, and failed-fetch cooldown
+to thirty seconds. Unknown key refreshes are coalesced and limited to one.
+
+The request-scoped provider feeds the existing AdministrativePrincipal,
+role-assignment, authorization, audit, and protected-operation boundaries.
+Service-token assertions with an empty subject reject as invalid credentials.
+Missing configuration retains deny-all authentication and performs no network
+request. The only new runtime dependency is `jose` version `6.2.6`.
 
 Issue #236 starts from the authoritative merged PR #235 baseline:
 
@@ -53,18 +75,19 @@ Using Node.js 24.18.0 and npm 11.16.0:
 
 ```text
 nvm use                       NOT AVAILABLE — nvm is not installed in the shell
-npm ci                        PASS — lockfile unchanged; one pending esbuild script warning and one development-tree advisory
+npm ci                        PASS — jose 6.2.6 installed; existing esbuild script warning and one development-tree advisory
 npm run format:check          PASS
 npm run lint                  PASS — 0 errors, 0 warnings
 npm run typecheck             PASS
-npm test -- --maxWorkers=1    PASS — 160 files, 2264 tests
+npm test -- --maxWorkers=1    PASS — 162 files, 2306 tests
 npm run build                 PASS
 git diff --check              PASS
 npm audit --omit=dev          PASS — 0 production vulnerabilities
 ```
 
-No dependency changes were made. The development-tree advisory reported by
-`npm ci` was not fixed or changed; the production audit is clean.
+One runtime dependency was added: `jose` version `6.2.6`. The development-tree
+advisory reported by `npm ci` was not fixed or changed; the production audit is
+clean.
 
 ## Delivered capabilities
 
@@ -198,15 +221,35 @@ git diff --check            PASS
 npm audit --omit=dev        PASS — 0 vulnerabilities
 ```
 
-## Next recommended work
+## Historical next-work note
 
-The next recommended prerequisite after this issue is selecting and
-implementing the production administrative identity mechanism. It must define
-credential/assertion verification, protected HTTP delivery, transport and
-proxy validation, deployment ownership, recovery procedures, and
-operator-visible failures before any real helper activation. Deployment
-ownership, supported Linux verification, and helper security review remain
-separate prerequisites.
+The earlier Issue #236 handoff recommended selecting the production identity
+mechanism. Issue #238 now records that decision in ADR-004 and delivers its
+verification foundation; protected HTTP delivery remains the next Issue.
 
 Do not reset, discard, commit, push, merge, or open a Pull Request without the
 project owner's approval.
+
+## Issue #238 final validation
+
+The Issue #238 validation supersedes older historical totals in this handoff:
+
+```text
+Node.js                    24.18.0
+npm                        11.16.0
+nvm use                    unavailable — nvm is not installed in the shell
+npm ci                     PASS
+npm run format:check       PASS
+npm run lint               PASS
+npm run typecheck          PASS
+npm test -- --maxWorkers=1 PASS — 162 files, 2306 tests
+npm run build              PASS
+git diff --check           PASS
+npm audit --omit=dev       PASS — 0 vulnerabilities
+jose                      6.2.6
+```
+
+No HTTP administrative route, production helper activation, real RTC
+mutation, real shutdown, session, cookie fallback, or trusted-proxy change
+was introduced. The next delivery is protected administrative HTTP delivery
+using this request-scoped provider and the existing protected facade.

@@ -431,6 +431,15 @@ production administrative identity mechanism, followed by protected HTTP
 delivery, verified transport/proxy configuration, deployment ownership, and
 operator recovery procedures.
 
+Issue #238 delivers the production-shaped identity-verification foundation.
+Cloudflare Access application JWTs are checked at the application boundary
+with fixed issuer/audience binding, RS256 signatures, bounded JWKS retrieval,
+controlled key caching and refresh, temporal validation, and human-only UUID
+subjects. The request-scoped provider integrates with the existing principal
+and authorization boundaries. v0.9 remains active because protected HTTP
+delivery and deployment validation are deferred. v0.6 also remains active:
+no real helper or real power effect is enabled.
+
 ## v1.0 — Initial stable release
 
 ### Objective
