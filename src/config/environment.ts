@@ -164,10 +164,19 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
     ADMINISTRATIVE_EVENT_HISTORY_FILE:
       administrativeEventHistoryFileSchema.optional(),
     ADMINISTRATIVE_ROLE_ASSIGNMENTS:
       administrativeRoleAssignmentsSchema.optional(),
+    MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+      administrativeEventHistoryFileSchema.optional(),
+    MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+      administrativeEventHistoryFileSchema.optional(),
   })
   .superRefine((environment, context) => {
     const hasTeamName = environment.CLOUDFLARE_ACCESS_TEAM_NAME !== undefined;
@@ -233,8 +242,10 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true";
     const wakeAlarmHttpEnabled =
       environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true";
+    const shutdownHttpEnabled =
+      environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED === "true";
     const administrativeHttpEnabled =
-      eventHistoryHttpEnabled || wakeAlarmHttpEnabled;
+      eventHistoryHttpEnabled || wakeAlarmHttpEnabled || shutdownHttpEnabled;
     if (administrativeHttpEnabled) {
       if (environment.HOST !== "127.0.0.1")
         context.addIssue({
@@ -294,6 +305,19 @@ const environmentSchema = z
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include a power operator or administrator",
             });
+          if (
+            shutdownHttpEnabled &&
+            !assignments.some(
+              (assignment) =>
+                assignment.roles.includes("power_operator") ||
+                assignment.roles.includes("administrator"),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a power operator or administrator",
+            });
         } catch {
           // The field-level schema has already reported the safe category.
         }
@@ -305,6 +329,8 @@ const environmentSchema = z
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
       environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE,
+      environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
+      environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
     ].filter((value): value is string => value !== undefined);
     if (
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE !== undefined &&
@@ -314,6 +340,62 @@ const environmentSchema = z
         code: "custom",
         path: ["ADMINISTRATIVE_EVENT_HISTORY_FILE"],
         message: "must differ from every other persistence file",
+      });
+    const servicePersistencePaths = [
+      environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
+      environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
+      environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+    ].filter((value): value is string => value !== undefined);
+    for (const [variable, value] of [
+      [
+        "MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE",
+        environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
+      ],
+      [
+        "MACHINE_POWER_SCHEDULER_CURSOR_FILE",
+        environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
+      ],
+    ] as const)
+      if (value !== undefined && servicePersistencePaths.includes(value))
+        context.addIssue({
+          code: "custom",
+          path: [variable],
+          message: "must differ from service-management persistence files",
+        });
+
+    const claimFile = environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE;
+    const cursorFile = environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE;
+    if ((claimFile === undefined) !== (cursorFile === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: [
+          claimFile === undefined
+            ? "MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"
+            : "MACHINE_POWER_SCHEDULER_CURSOR_FILE",
+        ],
+        message: "must be configured together",
+      });
+    }
+    if (
+      shutdownHttpEnabled &&
+      (claimFile === undefined || cursorFile === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"],
+        message: "is required when shutdown administration is enabled",
+      });
+    }
+    if (
+      claimFile !== undefined &&
+      cursorFile !== undefined &&
+      claimFile === cursorFile &&
+      isValidPersistenceFilePath(claimFile)
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"],
+        message: "must differ from the scheduler cursor file path",
       });
   });
 
@@ -335,8 +417,11 @@ export interface EnvironmentConfig {
   }>;
   readonly administrativeEventHistoryHttpEnabled: boolean;
   readonly administrativeWakeAlarmHttpEnabled: boolean;
+  readonly administrativeShutdownHttpEnabled: boolean;
   readonly administrativeEventHistoryFilePath?: string;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
+  readonly machineShutdownOccurrenceClaimFilePath?: string;
+  readonly machinePowerSchedulerCursorFilePath?: string;
 }
 
 export type AdministrativeRoleAssignment = Readonly<{
@@ -379,6 +464,8 @@ export function parseEnvironment(
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
     administrativeWakeAlarmHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true",
+    administrativeShutdownHttpEnabled:
+      parsedEnvironment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED === "true",
     ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE ===
     undefined
       ? {}
@@ -409,6 +496,18 @@ export function parseEnvironment(
     ...(administrativeRoleAssignments === undefined
       ? {}
       : { administrativeRoleAssignments }),
+    ...(parsedEnvironment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE === undefined
+      ? {}
+      : {
+          machineShutdownOccurrenceClaimFilePath:
+            parsedEnvironment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
+        }),
+    ...(parsedEnvironment.MACHINE_POWER_SCHEDULER_CURSOR_FILE === undefined
+      ? {}
+      : {
+          machinePowerSchedulerCursorFilePath:
+            parsedEnvironment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
+        }),
   });
 }
 

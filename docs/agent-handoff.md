@@ -2,6 +2,43 @@
 
 ## Current work
 
+The active branch for Issue #244 is:
+
+```text
+feat/protected-administrative-shutdown-http
+```
+
+The authoritative merged PR #243 baseline is:
+
+```text
+40f050b1e35947204d783247a8b98067038cebe0
+```
+
+Issue #244 adds the disabled-by-default loopback-only shutdown workflow:
+`POST /admin/power/shutdown/preparations` and `POST
+/admin/power/shutdown/executions`. Activation requires the existing Cloudflare,
+role-assignment and persistent event-history settings plus paired distinct
+`MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE` and
+`MACHINE_POWER_SCHEDULER_CURSOR_FILE` paths. A configured principal must have
+`power_operator` or `administrator`.
+
+Preparation and execution use separate immutable request-owned confirmations:
+`confirm_shutdown_preparation` and `confirm_shutdown_execution`. Preparation
+may stop registered services through the shared dependency-aware
+service-management composition but never claims, schedules wake, or requests
+shutdown. Execution never performs automatic preparation; it performs fresh
+readiness, permanently claims the occurrence, schedules mock wake, and requests
+simulated shutdown. Direct `requestMachineShutdown` is not HTTP-exposed.
+
+The routes share the global 60 requests per 60 seconds/four concurrent
+administrative admission and the one-active-power-operation gate with the
+event-history and wake-alarm routes. Bodies are JSON-only and bounded to 1 KiB;
+targets are bounded to 4 KiB and offline intervals to seven days. Responses are
+explicitly mapped and bounded to 64 KiB, with restrictive no-store headers.
+Claims and partial effects are never released, retried, rolled back, or
+compensated; safe state-recheck errors require a later operator inspection.
+The backend remains mock/simulated with no helper, RTC, or real shutdown effect.
+
 The active branch for Issue #242 is:
 
 ```text

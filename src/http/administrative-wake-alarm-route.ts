@@ -13,7 +13,7 @@ import {
 } from "../event-history/application/administrative-audit-trail.js";
 import { createCloudflareAccessAssertionReader } from "./cloudflare-access-assertion-reader.js";
 import type { AdministrativeRequestAdmission } from "./administrative-request-admission.js";
-import type { AdministrativeWakeAlarmMutationGate } from "./administrative-wake-alarm-mutation-gate.js";
+import type { AdministrativePowerOperationGate } from "./administrative-power-operation-gate.js";
 import {
   mapAdministrativeAccessControlError,
   rejectAdministrativeQuery,
@@ -43,7 +43,7 @@ export interface ProtectedAdministrativeWakeAlarm {
 
 export interface AdministrativeWakeAlarmRouteDependencies {
   readonly admission: AdministrativeRequestAdmission;
-  readonly mutationGate: AdministrativeWakeAlarmMutationGate;
+  readonly mutationGate: AdministrativePowerOperationGate;
   readonly createProtectedAdministration: (
     reader: CloudflareAccessAssertionReader,
   ) => ProtectedAdministrativeWakeAlarm;

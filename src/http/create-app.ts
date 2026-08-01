@@ -17,12 +17,17 @@ import {
   registerAdministrativeWakeAlarmRoute,
   type AdministrativeWakeAlarmRouteDependencies,
 } from "./administrative-wake-alarm-route.js";
+import {
+  registerAdministrativeShutdownRoutes,
+  type AdministrativeShutdownRouteDependencies,
+} from "./administrative-shutdown-route.js";
 
 export interface CreateAppDependencies {
   logger: HttpErrorLogger;
   getServerHealth: GetServerHealthCapability;
   administrativeEventHistory?: AdministrativeEventHistoryRouteDependencies;
   administrativeWakeAlarm?: AdministrativeWakeAlarmRouteDependencies;
+  administrativeShutdown?: AdministrativeShutdownRouteDependencies;
 }
 
 export function createApp({
@@ -30,12 +35,14 @@ export function createApp({
   getServerHealth,
   administrativeEventHistory,
   administrativeWakeAlarm,
+  administrativeShutdown,
 }: CreateAppDependencies): Express {
   const app = express();
 
   if (
     administrativeEventHistory !== undefined ||
-    administrativeWakeAlarm !== undefined
+    administrativeWakeAlarm !== undefined ||
+    administrativeShutdown !== undefined
   ) {
     app.disable("etag");
     app.disable("x-powered-by");
@@ -45,6 +52,8 @@ export function createApp({
   }
   if (administrativeWakeAlarm !== undefined)
     registerAdministrativeWakeAlarmRoute(app, administrativeWakeAlarm);
+  if (administrativeShutdown !== undefined)
+    registerAdministrativeShutdownRoutes(app, administrativeShutdown);
 
   app.get("/health/live", (_request, response) => {
     response.status(200).json({ status: "ok" });

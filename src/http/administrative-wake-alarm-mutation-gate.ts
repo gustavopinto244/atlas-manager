@@ -1,22 +1,11 @@
-export interface AdministrativeWakeAlarmMutationGate {
-  tryAdmit(): (() => void) | undefined;
-}
+import {
+  FixedAdministrativePowerOperationGate,
+  type AdministrativePowerOperationGate,
+} from "./administrative-power-operation-gate.js";
 
-export class FixedAdministrativeWakeAlarmMutationGate implements AdministrativeWakeAlarmMutationGate {
-  #active = false;
+/** @deprecated Use the shared administrative power-operation gate. */
+export type AdministrativeWakeAlarmMutationGate =
+  AdministrativePowerOperationGate;
 
-  public constructor() {
-    Object.freeze(this);
-  }
-
-  public tryAdmit(): (() => void) | undefined {
-    if (this.#active) return undefined;
-    this.#active = true;
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      this.#active = false;
-    };
-  }
-}
+/** @deprecated Use FixedAdministrativePowerOperationGate. */
+export class FixedAdministrativeWakeAlarmMutationGate extends FixedAdministrativePowerOperationGate {}

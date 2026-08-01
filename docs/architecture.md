@@ -169,6 +169,32 @@ authorizes the scheduler tick. This application boundary does not authorize
 delivery requests by itself; the Cloudflare identity adapter and the protected
 event-history route are layered above it.
 
+### Protected shutdown HTTP boundary
+
+The two-stage shutdown delivery is intentionally operation-specific:
+
+```text
+shutdown HTTP handler
+        ↓
+request-scoped Cloudflare provider and confirmation
+        ↓
+request-scoped access-control composition
+        ↓
+protected administration facade
+        ↓
+shared service-management and mock-first power composition
+        ↓
+persistent event history and occurrence claims
+```
+
+`POST /admin/power/shutdown/preparations` may stop registered services when
+readiness identifies preparable blockers, but it never claims an occurrence or
+changes the wake alarm. `POST /admin/power/shutdown/executions` performs fresh
+readiness, claims the occurrence, schedules wake, and requests simulated
+shutdown. The HTTP layer never invokes the direct shutdown-controller
+capability. Preparation and execution use separate request-scoped confirmation
+values and execution never performs automatic preparation.
+
 ## Feature-first modular organization
 
 Code should be organized primarily around product capabilities instead of

@@ -220,6 +220,39 @@ The initial deployment boundary in which protected administrative HTTP is
 enabled only when `HOST` is exactly `127.0.0.1`. Proxy forwarding and client IP
 values are not trusted by the application.
 
+### Protected shutdown workflow
+
+The two-stage administrative process exposed by the preparation and execution
+routes. Preparation can perform dependency-aware service cleanup but cannot
+claim or execute an occurrence. Execution requires a fresh stage-specific
+confirmation and readiness evaluation before persistent claim, wake scheduling,
+and simulated shutdown.
+
+### Stage-specific shutdown confirmation
+
+The immutable request-owned value `confirm_shutdown_preparation` or
+`confirm_shutdown_execution`. The literals are not credentials, are not stored,
+and are never inferred from authentication, roles, local access, or previous
+requests.
+
+### Persistent occurrence claim
+
+The file-backed, permanent record that prevents the same shutdown occurrence
+from repeating wake or shutdown effects after replay or process restart. A
+claim is not automatically released after a later failure.
+
+### Fresh execution readiness
+
+The readiness evaluation performed by each execution request after its own
+authorization event. Preparation from an earlier request does not replace this
+evaluation, and execution never performs automatic preparation.
+
+### Administrative power-operation gate
+
+The process-local fail-fast gate allowing one active wake or shutdown mutation.
+It does not queue requests and does not authenticate or audit rejected busy
+requests.
+
 ### Managed resource
 
 A resource known to Atlas Manager and eligible for approved monitoring or
