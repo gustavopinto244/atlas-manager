@@ -346,13 +346,13 @@ operator-visible failures, and helper security review remain activation gates.
 Real RTC, wake-alarm, filesystem, and machine-shutdown effects remain
 deferred. v0.6 remains active.
 
-## v0.7 — Backup orchestration
+## v0.7 — Backup orchestration (completed by Issue #281)
 
 ### Objective
 
 Coordinate approved infrastructure and application backup operations.
 
-### Planned scope
+### Delivered scope
 
 - registered backup targets;
 - backup requests;
@@ -362,7 +362,20 @@ Coordinate approved infrastructure and application backup operations.
 - timeout and failure handling;
 - event recording;
 - retention-policy support when explicitly defined;
-- tests for backup orchestration.
+- immutable registered mock and filesystem-tree backup targets;
+- manual and scheduled execution with persistent claims and cursor;
+- atomic local artifacts with canonical manifests and SHA-256 metadata;
+- strict run-history reconstruction and interrupted-run classification;
+- bounded local retention with unknown-artifact fail-closed behavior;
+- protected backup APIs, overview data, dashboard visibility, and shutdown
+  backup-readiness integration;
+- deterministic sandbox validation without restore, remote storage, logical
+  database backup, or physical execution.
+
+### Completion status
+
+v0.7 is complete in software. Restoration, remote replication, logical
+database backup, and physical execution remain deferred.
 
 Initial backups should focus on approved files, directories, volumes, and
 application resources.

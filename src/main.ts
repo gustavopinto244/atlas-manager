@@ -44,6 +44,10 @@ import {
 import { FileServiceAvailabilityOverrideStore } from "./service-management/infrastructure/file-service-availability-override-store.js";
 import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "./service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js";
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "./service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
+import { createBackupManagement } from "./backup-management/composition/create-backup-management.js";
+import { FileBackupRunStore } from "./backup-management/infrastructure/file-backup-run-store.js";
+import { BackupSchedulerLoop } from "./backup-management/application/backup-scheduler-loop.js";
+import type { MachineReadinessState } from "./power-management/application/ports/machine-shutdown-readiness-readers.js";
 
 function start(): void {
   let config: EnvironmentConfig;
@@ -140,6 +144,28 @@ function start(): void {
       process.env,
       serviceManagementOverrides,
     );
+    const backupManagement =
+      config.administrativeBackupHttpEnabled === true ||
+      config.backupSchedulerEnabled === true
+        ? createBackupManagement({
+            targets: (
+              config.registeredBackupTargets ?? { list: () => [] }
+            ).list(),
+            ...(config.backupRunHistoryFilePath === undefined
+              ? {}
+              : {
+                  runStore: new FileBackupRunStore(
+                    config.backupRunHistoryFilePath,
+                  ),
+                }),
+            ...(config.backupOccurrenceClaimFilePath === undefined
+              ? {}
+              : { occurrenceClaimFile: config.backupOccurrenceClaimFilePath }),
+            ...(config.backupSchedulerCursorFilePath === undefined
+              ? {}
+              : { schedulerCursorFile: config.backupSchedulerCursorFilePath }),
+          })
+        : undefined;
     const administrativePowerEnabled =
       config.administrativeWakeAlarmHttpEnabled ||
       config.administrativeShutdownHttpEnabled;
@@ -150,7 +176,9 @@ function start(): void {
       config.administrativeServiceManagementHttpEnabled === true ||
       config.administrativeServiceAvailabilityHttpEnabled === true ||
       config.administrativeOverviewHttpEnabled === true ||
-      config.administrativeDashboardEnabled === true;
+      config.administrativeDashboardEnabled === true ||
+      config.administrativeBackupHttpEnabled === true ||
+      config.backupSchedulerEnabled;
     if (
       eventHistoryRequired &&
       config.administrativeEventHistoryFilePath === undefined
@@ -173,8 +201,19 @@ function start(): void {
               ? {
                   expectedHelperGroupId:
                     activationAdmission.runtimeIdentity.helperGroupId,
+                  ...(backupManagement === undefined
+                    ? {}
+                    : {
+                        machineShutdownBackupReadinessReader:
+                          createBackupReadinessReader(backupManagement),
+                      }),
                 }
-              : undefined,
+              : backupManagement === undefined
+                ? undefined
+                : {
+                    machineShutdownBackupReadinessReader:
+                      createBackupReadinessReader(backupManagement),
+                  },
           )
         : undefined;
     const administrativeRuntime =
@@ -184,12 +223,14 @@ function start(): void {
       config.administrativeServiceManagementHttpEnabled === true ||
       config.administrativeServiceAvailabilityHttpEnabled === true ||
       config.administrativeOverviewHttpEnabled === true ||
-      config.administrativeDashboardEnabled === true
+      config.administrativeDashboardEnabled === true ||
+      config.administrativeBackupHttpEnabled === true
         ? createAdministrativeRuntime(config, serviceManagement, {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
             getServerHealth,
             applicationVersion: "0.1.0",
+            ...(backupManagement === undefined ? {} : { backupManagement }),
           })
         : undefined;
     const machinePowerSchedulerLoop = config.machinePowerSchedulerEnabled
@@ -198,6 +239,12 @@ function start(): void {
           new NodeMachinePowerSchedulerTimer(),
         )
       : undefined;
+    const backupSchedulerLoop =
+      config.backupSchedulerEnabled === true
+        ? new BackupSchedulerLoop(() =>
+            backupManagement!.runBackupSchedulerTick(),
+          )
+        : undefined;
     const app = createApp({
       logger,
       getServerHealth,
@@ -225,6 +272,9 @@ function start(): void {
       ...(administrativeRuntime?.dashboard === undefined
         ? {}
         : { administrativeDashboard: administrativeRuntime.dashboard }),
+      ...(administrativeRuntime?.backups === undefined
+        ? {}
+        : { administrativeBackups: administrativeRuntime.backups }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {
@@ -240,6 +290,9 @@ function start(): void {
           ...(machinePowerSchedulerLoop === undefined
             ? []
             : [Promise.resolve().then(() => machinePowerSchedulerLoop.stop())]),
+          ...(backupSchedulerLoop === undefined
+            ? []
+            : [Promise.resolve().then(() => backupSchedulerLoop.stop())]),
         ];
         const results = await Promise.allSettled(stops);
         const failure = results.find(
@@ -287,6 +340,7 @@ function start(): void {
       void schedulerRuntime.start();
       if (machinePowerSchedulerRuntime !== undefined)
         void machinePowerSchedulerRuntime.start();
+      if (backupSchedulerLoop !== undefined) void backupSchedulerLoop.start();
     });
 
     server.once("error", (error) => {
@@ -301,3 +355,33 @@ function start(): void {
 }
 
 start();
+
+function createBackupReadinessReader(backupManagement: {
+  readonly readiness: {
+    read(): Promise<{
+      readonly state: "ready" | "active" | "interrupted" | "unavailable";
+    }>;
+  };
+}): {
+  read(
+    occurrence: unknown,
+    evaluatedAt: string,
+  ): Promise<MachineReadinessState>;
+} {
+  return {
+    read: async (occurrence: unknown, evaluatedAt: string) => {
+      void occurrence;
+      void evaluatedAt;
+      const state = await backupManagement.readiness.read();
+      if (state.state === "ready") return { area: "backups", state: "ready" };
+      return {
+        area: "backups",
+        state: "blocked",
+        reason:
+          state.state === "active"
+            ? "backup_in_progress"
+            : "backup_state_unknown",
+      };
+    },
+  };
+}

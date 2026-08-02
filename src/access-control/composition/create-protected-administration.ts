@@ -27,11 +27,13 @@ import { MachineShutdownOccurrenceExecutionError } from "../../power-management/
 import type { ServiceManagementCapabilities } from "../../service-management/composition/create-service-management.js";
 import { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
 import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
+import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
   readonly serviceManagement?: ServiceManagementCapabilities;
+  readonly backupManagement?: BackupManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
   readonly clock: PowerManagementClock;
   readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
@@ -83,6 +85,38 @@ export interface ProtectedAdministrationCapabilities {
   readonly getAdministrativeDashboard: Readonly<{
     execute(): Promise<unknown>;
   }>;
+  readonly getRegisteredBackupTargets: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly getRegisteredBackupTarget: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly getBackupRuns: Readonly<{
+    execute(query?: unknown): Promise<unknown>;
+  }>;
+  readonly getBackupRun: Readonly<{ execute(runId: string): Promise<unknown> }>;
+  readonly runRegisteredBackup: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly getBackupSchedule: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly setBackupSchedule: Readonly<{
+    execute(targetId: string, value: unknown): Promise<unknown>;
+  }>;
+  readonly removeBackupSchedule: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly getBackupRetention: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly setBackupRetention: Readonly<{
+    execute(targetId: string, value: unknown): Promise<unknown>;
+  }>;
+  readonly pruneBackupRetention: Readonly<{
+    execute(targetId: string): Promise<unknown>;
+  }>;
+  readonly runBackupSchedulerTick: Readonly<{ execute(): Promise<unknown> }>;
 }
 
 export function createProtectedAdministration(
@@ -193,6 +227,11 @@ export function createProtectedAdministration(
     if (input.serviceManagement === undefined)
       throw new Error("Service-management composition is unavailable");
     return input.serviceManagement;
+  };
+  const requireBackups = (): BackupManagementCapabilities => {
+    if (input.backupManagement === undefined)
+      throw new Error("Backup-management composition is unavailable");
+    return input.backupManagement;
   };
   const readService = async (serviceId: string): Promise<unknown> => {
     const services = requireServices();
@@ -336,6 +375,160 @@ export function createProtectedAdministration(
           ),
       ),
   });
+  const runBackupMutation = (
+    operation:
+      | "run_registered_backup"
+      | "update_backup_schedule"
+      | "remove_backup_schedule"
+      | "update_backup_retention"
+      | "run_backup_retention_prune",
+    targetId: string,
+    invoke: () => Promise<unknown>,
+  ): Promise<unknown> =>
+    runner.run(operation, async (occurredAt, source) => {
+      const attempt = await operationAudit.begin({
+        occurredAt,
+        source,
+        target: Object.freeze({ kind: "machine", id: "atlas" }),
+        operation,
+        details: Object.freeze({ targetId }),
+      });
+      try {
+        const result = await invoke();
+        try {
+          await operationAudit.complete(
+            attempt,
+            "succeeded",
+            Object.freeze({ targetId, outcome: "succeeded" }),
+          );
+        } catch {
+          throw new AdministrativeAuditPartialEffectError(
+            "audit_failed_after_backup_operation",
+            result,
+          );
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof AdministrativeAuditPartialEffectError) throw error;
+        try {
+          await operationAudit.complete(
+            attempt,
+            "failed",
+            Object.freeze({ targetId, failureCode: "backup_operation_failed" }),
+          );
+        } catch {
+          throw new AdministrativeAuditTrailError(
+            "administrative_audit_failed",
+          );
+        }
+        throw error;
+      }
+    });
+  const getRegisteredBackupTargets = Object.freeze({
+    execute: () =>
+      runner.run("read_registered_backup_targets", () =>
+        Promise.resolve(requireBackups().listRegisteredBackupTargets()),
+      ),
+  });
+  const getRegisteredBackupTarget = Object.freeze({
+    execute: (targetId: string) =>
+      runner.run("read_registered_backup_target", () => {
+        const target = requireBackups().getRegisteredBackupTarget(targetId);
+        if (target === null)
+          throw new Error("registered_backup_target_not_found");
+        return Promise.resolve(target);
+      }),
+  });
+  const getBackupRuns = Object.freeze({
+    execute: (query?: unknown) =>
+      runner.run("read_backup_runs", () =>
+        requireBackups().getBackupRuns(query as never),
+      ),
+  });
+  const getBackupRun = Object.freeze({
+    execute: (runId: string) =>
+      runner.run("read_backup_run", async () => {
+        const run = await requireBackups().getBackupRun(runId);
+        if (run === null) throw new Error("backup_run_not_found");
+        return run;
+      }),
+  });
+  const runRegisteredBackup = Object.freeze({
+    execute: (targetId: string) =>
+      runBackupMutation("run_registered_backup", targetId, () =>
+        requireBackups().runRegisteredBackup({ targetId, trigger: "manual" }),
+      ),
+  });
+  const getBackupSchedule = Object.freeze({
+    execute: (targetId: string) =>
+      runner.run("read_backup_schedule", () =>
+        Promise.resolve(requireBackups().getBackupSchedule(targetId)),
+      ),
+  });
+  const setBackupSchedule = Object.freeze({
+    execute: (targetId: string, value: unknown) =>
+      runBackupMutation("update_backup_schedule", targetId, () =>
+        Promise.resolve(requireBackups().setBackupSchedule(targetId, value)),
+      ),
+  });
+  const removeBackupSchedule = Object.freeze({
+    execute: (targetId: string) =>
+      runBackupMutation("remove_backup_schedule", targetId, () =>
+        Promise.resolve(requireBackups().removeBackupSchedule(targetId)),
+      ),
+  });
+  const getBackupRetention = Object.freeze({
+    execute: (targetId: string) =>
+      runner.run("read_backup_retention", () =>
+        Promise.resolve(requireBackups().getBackupRetention(targetId)),
+      ),
+  });
+  const setBackupRetention = Object.freeze({
+    execute: (targetId: string, value: unknown) =>
+      runBackupMutation("update_backup_retention", targetId, () =>
+        Promise.resolve(requireBackups().setBackupRetention(targetId, value)),
+      ),
+  });
+  const pruneBackupRetention = Object.freeze({
+    execute: (targetId: string) =>
+      runBackupMutation("run_backup_retention_prune", targetId, () =>
+        requireBackups().pruneBackupRetention(targetId),
+      ),
+  });
+  const runBackupSchedulerTick = Object.freeze({
+    execute: () =>
+      runner.run("run_backup_scheduler_tick", async (occurredAt, source) => {
+        const attempt = await operationAudit.begin({
+          occurredAt,
+          source,
+          target: Object.freeze({ kind: "machine", id: "atlas" }),
+          operation: "run_backup_scheduler_tick",
+          details: Object.freeze({}),
+        });
+        try {
+          const result = await requireBackups().runBackupSchedulerTick();
+          await operationAudit.complete(
+            attempt,
+            "succeeded",
+            Object.freeze({ outcome: "succeeded" }),
+          );
+          return result;
+        } catch (error) {
+          try {
+            await operationAudit.complete(
+              attempt,
+              "failed",
+              Object.freeze({ failureCode: "backup_operation_failed" }),
+            );
+          } catch {
+            throw new AdministrativeAuditTrailError(
+              "administrative_audit_failed",
+            );
+          }
+          throw error;
+        }
+      }),
+  });
   const getOperationsOverview = Object.freeze({
     execute: () =>
       runner.run("read_operations_overview", async (observedAt) => {
@@ -355,6 +548,12 @@ export function createProtectedAdministration(
           availabilityCounts[entry.effectiveAvailability] =
             (availabilityCounts[entry.effectiveAvailability] ?? 0) + 1;
         }
+        const backupRuns =
+          input.backupManagement === undefined
+            ? []
+            : await input.backupManagement.getBackupRuns({ limit: 100 });
+        const backupTargets =
+          input.backupManagement?.listRegisteredBackupTargets() ?? [];
         return Object.freeze({
           observedAt,
           services: Object.freeze({
@@ -367,6 +566,29 @@ export function createProtectedAdministration(
             effects: "disabled",
             machineScheduler: "disabled",
             helper: "unused",
+          }),
+          backups: Object.freeze({
+            registeredTargets: backupTargets.length,
+            enabledTargets: backupTargets.filter(
+              (target) => target.schedule.mode !== "disabled",
+            ).length,
+            scheduledTargets: backupTargets.filter(
+              (target) => target.schedule.mode === "scheduled",
+            ).length,
+            activeRuns: backupRuns.filter((run) => run.status === "started")
+              .length,
+            interruptedRuns: backupRuns.filter(
+              (run) => run.status === "interrupted",
+            ).length,
+            lastSuccessfulAt:
+              backupRuns
+                .filter((run) => run.status === "succeeded")
+                .map((run) => run.completedAt)
+                .filter((value): value is string => value !== null)
+                .sort()
+                .at(-1) ?? null,
+            schedulerState:
+              input.backupManagement === undefined ? "disabled" : "available",
           }),
         });
       }),
@@ -416,6 +638,18 @@ export function createProtectedAdministration(
     removeRegisteredServiceAvailability,
     getOperationsOverview,
     getAdministrativeDashboard,
+    getRegisteredBackupTargets,
+    getRegisteredBackupTarget,
+    getBackupRuns,
+    getBackupRun,
+    runRegisteredBackup,
+    getBackupSchedule,
+    setBackupSchedule,
+    removeBackupSchedule,
+    getBackupRetention,
+    setBackupRetention,
+    pruneBackupRetention,
+    runBackupSchedulerTick,
   });
 }
 
@@ -520,7 +754,12 @@ class ExecuteProtectedAdministrativeOperation {
         throw error;
       if (
         error instanceof Error &&
-        error.message === "registered_service_not_found"
+        (error.message === "registered_service_not_found" ||
+          error.message === "registered_backup_target_not_found" ||
+          error.message === "backup_run_not_found" ||
+          error.message === "backup_target_disabled" ||
+          error.message === "backup_target_not_scheduled" ||
+          error.message === "backup_operation_busy")
       )
         throw error;
       if (error instanceof RegisteredServiceNotFoundError) throw error;

@@ -16,6 +16,7 @@ import {
   type MachineOperatingPolicy,
 } from "../power-management/domain/machine-operating-policy.js";
 import { parseStrictJson } from "./strict-json.js";
+import { createBackupTargetCatalogFromEnvironment } from "../backup-management/infrastructure/environment-backup-target-catalog.js";
 
 export const LOG_LEVELS = [
   "trace",
@@ -224,6 +225,11 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    BACKUP_SCHEDULER_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
     MACHINE_POWER_EFFECTS_ACTIVATION: z
       .enum(["disabled", "linux_helper"], {
         error: "must be exactly disabled or linux_helper",
@@ -274,6 +280,15 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_BACKUP_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
+    REGISTERED_BACKUP_TARGETS_JSON: z.string().default("[]"),
+    BACKUP_RUN_HISTORY_FILE: persistenceFilePathSchema.optional(),
+    BACKUP_SCHEDULER_CURSOR_FILE: persistenceFilePathSchema.optional(),
+    BACKUP_OCCURRENCE_CLAIM_FILE: persistenceFilePathSchema.optional(),
     ADMINISTRATIVE_EVENT_HISTORY_FILE:
       administrativeEventHistoryFileSchema.optional(),
     ADMINISTRATIVE_ROLE_ASSIGNMENTS:
@@ -357,6 +372,10 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED === "true";
     const dashboardEnabled =
       environment.ADMINISTRATIVE_DASHBOARD_ENABLED === "true";
+    const backupHttpEnabled =
+      environment.ADMINISTRATIVE_BACKUP_HTTP_ENABLED === "true";
+    const backupSchedulerEnabled =
+      environment.BACKUP_SCHEDULER_ENABLED === "true";
     const administrativeHttpEnabled =
       eventHistoryHttpEnabled ||
       wakeAlarmHttpEnabled ||
@@ -364,7 +383,8 @@ const environmentSchema = z
       serviceManagementHttpEnabled ||
       serviceAvailabilityHttpEnabled ||
       overviewHttpEnabled ||
-      dashboardEnabled;
+      dashboardEnabled ||
+      backupHttpEnabled;
     const effectCapableSurfaceEnabled =
       wakeAlarmHttpEnabled ||
       shutdownHttpEnabled ||
@@ -542,6 +562,19 @@ const environmentSchema = z
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include a dashboard reader",
             });
+          if (
+            backupHttpEnabled &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(role, "backups.targets.read"),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a backup reader",
+            });
         } catch {
           // The field-level schema has already reported the safe category.
         }
@@ -555,6 +588,9 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE,
       environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
       environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
+      environment.BACKUP_RUN_HISTORY_FILE,
+      environment.BACKUP_SCHEDULER_CURSOR_FILE,
+      environment.BACKUP_OCCURRENCE_CLAIM_FILE,
     ].filter((value): value is string => value !== undefined);
     if (
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE !== undefined &&
@@ -642,6 +678,55 @@ const environmentSchema = z
           message: "is required when the machine-power scheduler is enabled",
         });
     }
+    if (backupHttpEnabled && environment.BACKUP_RUN_HISTORY_FILE === undefined)
+      context.addIssue({
+        code: "custom",
+        path: ["BACKUP_RUN_HISTORY_FILE"],
+        message: "is required when backup administration is enabled",
+      });
+    if (backupSchedulerEnabled) {
+      if (environment.BACKUP_RUN_HISTORY_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["BACKUP_RUN_HISTORY_FILE"],
+          message: "is required when backup scheduling is enabled",
+        });
+      if (environment.BACKUP_SCHEDULER_CURSOR_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["BACKUP_SCHEDULER_CURSOR_FILE"],
+          message: "is required when backup scheduling is enabled",
+        });
+      if (environment.BACKUP_OCCURRENCE_CLAIM_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["BACKUP_OCCURRENCE_CLAIM_FILE"],
+          message: "is required when backup scheduling is enabled",
+        });
+      try {
+        const targets =
+          createBackupTargetCatalogFromEnvironment(environment).list();
+        if (!targets.some((target) => target.schedule.mode === "scheduled"))
+          context.addIssue({
+            code: "custom",
+            path: ["REGISTERED_BACKUP_TARGETS_JSON"],
+            message: "must include a scheduled backup target",
+          });
+      } catch {
+        /* the field is reported by parseEnvironment */
+      }
+    }
+    if (backupHttpEnabled) {
+      try {
+        createBackupTargetCatalogFromEnvironment(environment);
+      } catch {
+        context.addIssue({
+          code: "custom",
+          path: ["REGISTERED_BACKUP_TARGETS_JSON"],
+          message: "must be a valid backup target catalog",
+        });
+      }
+    }
   });
 
 function isValidPersistenceFilePath(value: string): boolean {
@@ -671,6 +756,14 @@ export interface EnvironmentConfig {
   readonly administrativeServiceAvailabilityHttpEnabled?: boolean;
   readonly administrativeOverviewHttpEnabled?: boolean;
   readonly administrativeDashboardEnabled?: boolean;
+  readonly administrativeBackupHttpEnabled?: boolean;
+  readonly backupSchedulerEnabled?: boolean;
+  readonly registeredBackupTargets?: ReturnType<
+    typeof createBackupTargetCatalogFromEnvironment
+  >;
+  readonly backupRunHistoryFilePath?: string;
+  readonly backupSchedulerCursorFilePath?: string;
+  readonly backupOccurrenceClaimFilePath?: string;
   readonly administrativeEventHistoryFilePath?: string;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
   readonly machineShutdownOccurrenceClaimFilePath?: string;
@@ -708,6 +801,13 @@ export function parseEnvironment(
       : parseAdministrativeRoleAssignments(
           parsedEnvironment.ADMINISTRATIVE_ROLE_ASSIGNMENTS,
         );
+  const registeredBackupTargets =
+    createBackupTargetCatalogFromEnvironment(parsedEnvironment);
+  const backupConfigurationProvided =
+    Object.hasOwn(environment, "BACKUP_SCHEDULER_ENABLED") ||
+    Object.hasOwn(environment, "REGISTERED_BACKUP_TARGETS_JSON") ||
+    Object.hasOwn(environment, "ADMINISTRATIVE_BACKUP_HTTP_ENABLED") ||
+    Object.hasOwn(environment, "BACKUP_RUN_HISTORY_FILE");
 
   return Object.freeze({
     host: parsedEnvironment.HOST,
@@ -744,6 +844,34 @@ export function parseEnvironment(
       : {}),
     ...(parsedEnvironment.ADMINISTRATIVE_DASHBOARD_ENABLED === "true"
       ? { administrativeDashboardEnabled: true }
+      : {}),
+    ...(parsedEnvironment.ADMINISTRATIVE_BACKUP_HTTP_ENABLED === "true"
+      ? { administrativeBackupHttpEnabled: true }
+      : {}),
+    ...(backupConfigurationProvided
+      ? {
+          backupSchedulerEnabled:
+            parsedEnvironment.BACKUP_SCHEDULER_ENABLED === "true",
+          registeredBackupTargets,
+          ...(parsedEnvironment.BACKUP_RUN_HISTORY_FILE === undefined
+            ? {}
+            : {
+                backupRunHistoryFilePath:
+                  parsedEnvironment.BACKUP_RUN_HISTORY_FILE,
+              }),
+          ...(parsedEnvironment.BACKUP_SCHEDULER_CURSOR_FILE === undefined
+            ? {}
+            : {
+                backupSchedulerCursorFilePath:
+                  parsedEnvironment.BACKUP_SCHEDULER_CURSOR_FILE,
+              }),
+          ...(parsedEnvironment.BACKUP_OCCURRENCE_CLAIM_FILE === undefined
+            ? {}
+            : {
+                backupOccurrenceClaimFilePath:
+                  parsedEnvironment.BACKUP_OCCURRENCE_CLAIM_FILE,
+              }),
+        }
       : {}),
     ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE ===
     undefined

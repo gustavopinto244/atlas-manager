@@ -1883,3 +1883,27 @@ and disabled administrative routes.
 The operator-run boundary that controls only `atlas-manager.service` through
 fixed systemd commands, verifies loopback health and runtime identity, and can
 roll activation back without changing deployment or identities.
+
+### Backup target
+
+An immutable project-owned registration that resolves to one approved `mock` or
+`filesystem_tree` backup adapter. A caller never supplies its source or
+destination path.
+
+### Backup run
+
+Persistent metadata for one manual or scheduled backup attempt. A started run
+without a terminal record reconstructs as interrupted and cannot be treated as
+successful.
+
+### Backup artifact
+
+A private local directory published atomically after copying, manifest creation,
+synchronization, and verification. Artifact contents are never delivered by
+the administrative API or dashboard.
+
+### Backup readiness
+
+The bounded shutdown-facing state `ready`, `active`, `interrupted`, or
+`unavailable`. It does not expose backup paths or contents and does not perform
+backup effects.

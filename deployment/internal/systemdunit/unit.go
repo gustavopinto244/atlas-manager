@@ -21,7 +21,7 @@ KillSignal=SIGTERM
 TimeoutStartSec=30s
 TimeoutStopSec=30s
 UMask=0027
-StateDirectory=atlas-manager
+StateDirectory=atlas-manager atlas-manager-backups
 StateDirectoryMode=0750
 RuntimeDirectory=atlas-manager
 RuntimeDirectoryMode=0750
@@ -34,7 +34,7 @@ RestrictRealtime=true
 LockPersonality=true
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/atlas-manager
+ReadWritePaths=/var/lib/atlas-manager /var/lib/atlas-manager-backups
 
 [Install]
 WantedBy=multi-user.target
@@ -45,7 +45,7 @@ func Validate(value string) bool {
 		"User=atlas-manager", "Group=atlas-manager", "SupplementaryGroups=atlas-manager-power",
 		"ExecStart=/usr/bin/node /opt/atlas-manager/current/dist/main.js",
 		"WorkingDirectory=/var/lib/atlas-manager", "EnvironmentFile=/etc/atlas-manager/atlas-manager.env",
-		"Restart=no", "StateDirectory=atlas-manager", "RuntimeDirectory=atlas-manager", "UMask=0027",
+		"Restart=no", "StateDirectory=atlas-manager atlas-manager-backups", "RuntimeDirectory=atlas-manager", "UMask=0027",
 	} {
 		if !strings.Contains(value, required) {
 			return false

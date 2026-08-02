@@ -1304,3 +1304,19 @@ nonblocking lock, and same-process rollback. Health verification rejects
 redirects and proxies, checks route absence with `404`, and reuses the exact
 runtime identity contract. No helper, RTC, D-Bus, scheduler, or power effect is
 reachable through this profile.
+
+## Backup orchestration security boundary
+
+Backup targets are immutable configuration and HTTP callers can provide only a
+registered target ID. Source and destination paths, commands, adapter details,
+file names, manifests, and contents remain outside public responses. The local
+filesystem adapter rejects symbolic links, hard-linked files, special files,
+unsafe paths, and changing sources; successful artifacts are private and
+published atomically.
+
+Backup runs, scheduled claims, cursor state, and retention metadata are
+project-owned persistence. Interrupted or corrupt state fails closed. Unknown
+artifacts are never adopted or deleted. Shutdown readiness consumes only
+`ready`, `active`, `interrupted`, or `unavailable` and never starts, cancels, or
+prunes a backup. Restore, remote storage, logical database backup, and physical
+execution are not enabled by v0.7.

@@ -1347,3 +1347,30 @@ Linux amd64 deployment executables build with `CGO_ENABLED=0`, `GOOS=linux`,
 with SHA-256
 `15b27fd25692e9a349e462eef2fd0381caeda5a883459bfea11939592355993d`;
 inspection and new executable manifest/checksum coverage pass.
+
+## Current work — Issue #281
+
+The active branch is `feat/backup-orchestration-protected-delivery-dashboard`.
+The authoritative baseline is
+`2722e7d043a3e819cdbe772020b5008cc14e6428`.
+
+Issue #281 implements v0.7 controlled backup orchestration in sandbox-only
+software boundaries: immutable mock and filesystem-tree targets, bounded
+limits, atomic checksummed artifacts, persistent run history, interrupted-run
+reconstruction, scheduler claims and cursor, retention validation, protected
+backup APIs, dashboard visibility, and shutdown backup readiness. Restore,
+remote storage, logical database backup, and physical execution remain
+deferred. No real source, account, systemd, helper, RTC, D-Bus, host, VM, or
+power resource may be touched during validation.
+
+The current working branch is
+`feat/backup-orchestration-protected-delivery-dashboard`; baseline is
+`2722e7d043a3e819cdbe772020b5008cc14e6428`. The backup policy state is also
+persisted atomically beside the fixed backup root. Node and Go validation pass;
+the full Node suite has 189 files, 2,630 tests, and 3 intentional skips; the
+focused backup rehearsal has 5 files and 12 tests; deployment Go has 52
+passing test cases and power-helper Go has 64. The reproducible bundle
+digest is
+`99ec094370ecd40f373b520ca93a8b5c19717c4217cf5b5e259245e169483c13` for both
+builds; the packaged mock-only smoke test passes. No real backup source, account command, systemd operation, helper,
+Cloudflare endpoint, RTC, D-Bus, host, VM, or power effect was used.

@@ -323,6 +323,11 @@ func isAdministrativeProfile(data []byte) bool {
 			return false
 		}
 	}
+	for _, required := range []string{"ADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\n", "BACKUP_SCHEDULER_ENABLED=false\n", "REGISTERED_BACKUP_TARGETS_JSON="} {
+		if !strings.Contains(value, required) {
+			return false
+		}
+	}
 	return true
 }
 
