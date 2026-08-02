@@ -2652,3 +2652,20 @@ startup. The preflight never executes the helper and never repairs or enrolls
 users. Failure is fail-closed with no fallback to mock. Installation,
 physical-host qualification, application-user enrollment, and real-effect
 certification remain deployment gates.
+
+### Exact Linux runtime identity
+
+ADR-016 adds a second read-only admission check for Linux power effects. The
+process must already run as the dedicated `atlas-manager` account, with
+primary group `atlas-manager`, home `/var/lib/atlas-manager`, shell
+`/usr/sbin/nologin`, and supplementary membership in
+`atlas-manager-power`. Numeric IDs remain host-assigned but must resolve
+uniquely from the fixed, root-owned `/etc/passwd` and `/etc/group` files.
+
+The helper file's group ownership is bound to the exact admitted
+`atlas-manager-power` GID at startup and at each helper-backed operation.
+Root, another account, duplicate or unsafe account records, missing
+membership, and helper ownership by another group fail closed. Disabled,
+mock, and inert Linux configurations do not inspect account files and do not
+require these accounts. Account creation, group enrollment, deployment, and
+host qualification remain operator-controlled deferred gates.

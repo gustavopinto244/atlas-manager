@@ -640,3 +640,17 @@ activation failures do not fall back to mock.
 The physical Atlas deployment, helper installation, application-user
 enrollment, host qualification, firmware wake certification, and real shutdown
 certification remain deferred.
+
+## Issue #268 delivery notes
+
+Issue #268 adds exact Linux runtime identity admission. Linux effects now
+require the fixed `atlas-manager` service account, primary group
+`atlas-manager`, home `/var/lib/atlas-manager`, shell
+`/usr/sbin/nologin`, and the exact `atlas-manager-power` supplementary
+group. Account files are read only through bounded fixed-path inspection, and
+the admitted helper-group GID binds startup and operation-time helper
+validation.
+
+Account and group creation, application enrollment, systemd service
+configuration, the Atlas deployment bundle, host qualification, and
+real-effect certification remain deferred.

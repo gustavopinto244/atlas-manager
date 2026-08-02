@@ -22,6 +22,7 @@ export interface ConfiguredPowerManagementInfrastructure {
 }
 
 export interface ConfiguredPowerManagementInfrastructureDependencies {
+  readonly expectedHelperGroupId?: number;
   readonly createLinuxPowerHelperAdapters?: (
     dependencies?: LinuxPowerHelperAdapterFactoryDependencies,
   ) => LinuxPowerHelperAdapterBundle;
@@ -50,7 +51,12 @@ export function createConfiguredPowerManagementInfrastructure(
   const createAdapters =
     dependencies.createLinuxPowerHelperAdapters ??
     createLinuxPowerHelperAdapters;
-  const bundle = createAdapters();
+  const bundle =
+    dependencies.expectedHelperGroupId === undefined
+      ? createAdapters()
+      : createAdapters({
+          expectedHelperGroupId: dependencies.expectedHelperGroupId,
+        });
   if (!isCompleteLinuxAdapterBundle(bundle)) {
     throw new PowerManagementInfrastructureError(
       "invalid_linux_helper_adapters",

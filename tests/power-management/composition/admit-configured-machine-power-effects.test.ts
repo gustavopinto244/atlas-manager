@@ -6,26 +6,40 @@ import {
   MachinePowerEffectsAdmissionError,
 } from "../../../src/power-management/composition/admit-configured-machine-power-effects.js";
 import { LinuxPowerHelperInstallationPreflightError } from "../../../src/power-management/infrastructure/linux-power-helper-installation-preflight.js";
+import { LinuxPowerRuntimeIdentityError } from "../../../src/power-management/infrastructure/linux-power-runtime-identity-inspector.js";
 
 const DIGEST = "a".repeat(64);
 
 describe("configured machine power-effects admission", () => {
   it("keeps mock and inert Linux selection disabled without preflight", () => {
     const preflight = { inspect: vi.fn() };
+    const runtimeIdentityInspector = { inspect: vi.fn() };
     expect(
-      admitConfiguredMachinePowerEffects(parseEnvironment({}), { preflight }),
+      admitConfiguredMachinePowerEffects(parseEnvironment({}), {
+        preflight,
+        runtimeIdentityInspector,
+      }),
     ).toEqual({ kind: "disabled" });
     expect(
       admitConfiguredMachinePowerEffects(
         parseEnvironment({ POWER_MANAGEMENT_BACKEND: "linux_helper" }),
-        { preflight },
+        { preflight, runtimeIdentityInspector },
       ),
     ).toEqual({ kind: "disabled" });
     expect(preflight.inspect).not.toHaveBeenCalled();
+    expect(runtimeIdentityInspector.inspect).not.toHaveBeenCalled();
   });
 
   it("runs exactly one preflight for admitted Linux effects", () => {
     const preflight = { inspect: vi.fn() };
+    const runtimeIdentity = Object.freeze({
+      userId: 1001,
+      primaryGroupId: 1001,
+      helperGroupId: 1002,
+    });
+    const runtimeIdentityInspector = {
+      inspect: vi.fn(() => runtimeIdentity),
+    };
     const config = parseEnvironment({
       POWER_MANAGEMENT_BACKEND: "linux_helper",
       MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
@@ -39,11 +53,15 @@ describe("configured machine power-effects admission", () => {
       ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
     });
 
-    const admission = admitConfiguredMachinePowerEffects(config, { preflight });
+    const admission = admitConfiguredMachinePowerEffects(config, {
+      preflight,
+      runtimeIdentityInspector,
+    });
 
-    expect(admission).toEqual({ kind: "linux_helper" });
+    expect(admission).toEqual({ kind: "linux_helper", runtimeIdentity });
     expect(Object.isFrozen(admission)).toBe(true);
-    expect(preflight.inspect).toHaveBeenCalledExactlyOnceWith(DIGEST);
+    expect(runtimeIdentityInspector.inspect).toHaveBeenCalledOnce();
+    expect(preflight.inspect).toHaveBeenCalledExactlyOnceWith(DIGEST, 1002);
   });
 
   it("maps preflight failures without fallback", () => {
@@ -52,6 +70,52 @@ describe("configured machine power-effects admission", () => {
         throw new LinuxPowerHelperInstallationPreflightError(
           "helper_hash_mismatch",
         );
+      }),
+    };
+    const runtimeIdentityInspector = {
+      inspect: vi.fn(() =>
+        Object.freeze({
+          userId: 1001,
+          primaryGroupId: 1001,
+          helperGroupId: 1002,
+        }),
+      ),
+    };
+    const config = parseEnvironment({
+      POWER_MANAGEMENT_BACKEND: "linux_helper",
+      ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "true",
+      HOST: "127.0.0.1",
+      CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+      CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
+      ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+        {
+          principalId: "00000000-0000-4000-8000-000000000001",
+          roles: ["power_operator"],
+        },
+      ]),
+      MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+      MACHINE_POWER_EFFECTS_CONFIRMATION: "confirm_linux_helper_power_effects",
+      LINUX_POWER_HELPER_EXPECTED_SHA256: DIGEST,
+      MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+        "/var/lib/atlas-manager/shutdown-claims.json",
+      MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+        "/var/lib/atlas-manager/shutdown-cursor.json",
+    });
+
+    expect(() =>
+      admitConfiguredMachinePowerEffects(config, {
+        preflight,
+        runtimeIdentityInspector,
+      }),
+    ).toThrow(new MachinePowerEffectsAdmissionError("helper_hash_mismatch"));
+  });
+
+  it("requires identity before hashing and fails closed", () => {
+    const preflight = { inspect: vi.fn() };
+    const runtimeIdentityInspector = {
+      inspect: vi.fn(() => {
+        throw new LinuxPowerRuntimeIdentityError("runtime_user_root");
       }),
     };
     const config = parseEnvironment({
@@ -77,7 +141,12 @@ describe("configured machine power-effects admission", () => {
     });
 
     expect(() =>
-      admitConfiguredMachinePowerEffects(config, { preflight }),
-    ).toThrow(new MachinePowerEffectsAdmissionError("helper_hash_mismatch"));
+      admitConfiguredMachinePowerEffects(config, {
+        preflight,
+        runtimeIdentityInspector,
+      }),
+    ).toThrow(new MachinePowerEffectsAdmissionError("runtime_user_root"));
+    expect(runtimeIdentityInspector.inspect).toHaveBeenCalledOnce();
+    expect(preflight.inspect).not.toHaveBeenCalled();
   });
 });

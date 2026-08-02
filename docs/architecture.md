@@ -1021,3 +1021,25 @@ Backend selection, effect-capable surface activation, machine policy,
 scheduler activation, HTTP authentication/authorization, request confirmation,
 policy confirmation, readiness, host qualification, user enrollment, and
 real-effect certification remain independent gates.
+
+### Exact Linux runtime identity admission
+
+ADR-016 extends Linux power-effects admission with a fixed runtime identity
+contract. The process must resolve to `atlas-manager`, primary group
+`atlas-manager`, home `/var/lib/atlas-manager`, shell
+`/usr/sbin/nologin`, and membership in `atlas-manager-power`. UID and GID
+values are host-assigned facts, but they must be positive, non-root, equal
+across real/effective APIs, and unambiguous in the fixed local account files.
+
+The identity inspector reads only bounded, root-owned, non-writable
+`/etc/passwd` and `/etc/group` files through injectable infrastructure. It
+does not use NSS commands, environment usernames, shells, or account
+mutation. The admitted helper-group GID is passed to both startup preflight
+and operation-time installation inspection, so another non-root group cannot
+substitute for `atlas-manager-power`.
+
+Disabled, mock, and inert Linux configurations do not inspect account files.
+Identity failure happens before helper hashing, power composition, HTTP
+creation, and scheduler startup. Account creation, group enrollment, systemd
+configuration, deployment, host qualification, and real-effect certification
+remain separate gates.

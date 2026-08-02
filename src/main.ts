@@ -16,13 +16,18 @@ import { MachinePowerSchedulerLoop } from "./power-management/application/machin
 import { NodeMachinePowerSchedulerTimer } from "./power-management/infrastructure/node-machine-power-scheduler-timer.js";
 import { createEventHistory } from "./event-history/composition/create-event-history.js";
 import { createConfiguredPowerManagementRuntime } from "./power-management/composition/create-configured-power-management-runtime.js";
-import { admitConfiguredMachinePowerEffects } from "./power-management/composition/admit-configured-machine-power-effects.js";
+import {
+  admitConfiguredMachinePowerEffects,
+  isRuntimeIdentityAdmissionError,
+} from "./power-management/composition/admit-configured-machine-power-effects.js";
 import type { PowerManagementCapabilities } from "./power-management/composition/create-power-management.js";
 import {
   createLogger,
   logMachinePowerEffectsActivationAdmitted,
   logMachinePowerEffectsActivationBlocked,
   logMachinePowerEffectsActivationDisabled,
+  logMachinePowerRuntimeIdentityAdmitted,
+  logMachinePowerRuntimeIdentityBlocked,
   logHttpServerStarted,
   logUnexpectedStartupFailure,
 } from "./logging/logger.js";
@@ -65,7 +70,9 @@ function start(): void {
     try {
       activationAdmission = admitConfiguredMachinePowerEffects(config);
     } catch (error) {
-      logMachinePowerEffectsActivationBlocked(logger, error);
+      if (isRuntimeIdentityAdmissionError(error))
+        logMachinePowerRuntimeIdentityBlocked(logger, error);
+      else logMachinePowerEffectsActivationBlocked(logger, error);
       throw error;
     }
     if (activationAdmission.kind === "disabled") {
@@ -76,6 +83,7 @@ function start(): void {
         administrativeShutdownEnabled: config.administrativeShutdownHttpEnabled,
         schedulerEnabled: config.machinePowerSchedulerEnabled,
       });
+      logMachinePowerRuntimeIdentityAdmitted(logger);
     }
     const cpuTemperatureReader = new LinuxCoretempCpuTemperatureReader();
     const serverHealthReader = new NodeServerHealthReader(
@@ -157,6 +165,12 @@ function start(): void {
             config,
             serviceManagement,
             eventHistory!,
+            activationAdmission.kind === "linux_helper"
+              ? {
+                  expectedHelperGroupId:
+                    activationAdmission.runtimeIdentity.helperGroupId,
+                }
+              : undefined,
           )
         : undefined;
     const administrativeRuntime =

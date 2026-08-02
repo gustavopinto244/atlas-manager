@@ -46,9 +46,11 @@ describe("NodeLinuxPowerHelperTransport", () => {
 
   it("uses the fixed executable, no arguments, no shell, fixed cwd, and minimal environment", async () => {
     const child = new FakeChild();
+    const inspector = createInspector();
     const spawnProcess = vi.fn(() => child);
     const transport = new NodeLinuxPowerHelperTransport({
-      inspector: createInspector(),
+      inspector,
+      expectedHelperGroupId: 2000,
       platform: "linux",
       spawn: spawnProcess as never,
     });
@@ -73,6 +75,7 @@ describe("NodeLinuxPowerHelperTransport", () => {
         stdio: ["pipe", "pipe", "pipe"],
       }),
     );
+    expect(inspector.inspect).toHaveBeenCalledWith(2000);
   });
 
   it("translates nonzero exits without exposing process details", async () => {
