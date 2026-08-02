@@ -4,7 +4,11 @@ import { createCloudflareAccessAdministrativeAuthentication } from "../access-co
 import { createProtectedAdministration } from "../access-control/composition/create-protected-administration.js";
 import { InMemoryAdministrativeRoleAssignmentReader } from "../access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
 import { createEventHistory } from "../event-history/composition/create-event-history.js";
-import { createPowerManagement } from "../power-management/composition/create-power-management.js";
+import {
+  createPowerManagement,
+  type PowerManagementCapabilities,
+  type PowerManagementCompositionOverrides,
+} from "../power-management/composition/create-power-management.js";
 import {
   createConfiguredPowerManagementInfrastructure,
   type ConfiguredPowerManagementInfrastructureDependencies,
@@ -28,10 +32,16 @@ export interface AdministrativeRuntime {
   readonly shutdown?: AdministrativeShutdownRouteDependencies;
 }
 
+export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementInfrastructureDependencies {
+  readonly createPowerManagement?: (
+    overrides: PowerManagementCompositionOverrides,
+  ) => PowerManagementCapabilities;
+}
+
 export function createAdministrativeRuntime(
   config: EnvironmentConfig,
   serviceManagement?: ServiceManagementCapabilities,
-  compositionDependencies: ConfiguredPowerManagementInfrastructureDependencies = {},
+  compositionDependencies: AdministrativeRuntimeCompositionDependencies = {},
 ): AdministrativeRuntime {
   const filePath = config.administrativeEventHistoryFilePath;
   const roleAssignments = config.administrativeRoleAssignments;
@@ -60,9 +70,12 @@ export function createAdministrativeRuntime(
     config.powerManagementBackend,
     compositionDependencies,
   );
-  const powerManagement = createPowerManagement({
+  const createCapabilities =
+    compositionDependencies.createPowerManagement ?? createPowerManagement;
+  const powerManagement = createCapabilities({
     clock,
     administrativeEventHistoryCapabilities: eventHistory,
+    machineOperatingPolicy: config.machineOperatingPolicy,
     ...powerInfrastructure.adapters,
     ...(config.machineShutdownOccurrenceClaimFilePath === undefined ||
     config.machinePowerSchedulerCursorFilePath === undefined

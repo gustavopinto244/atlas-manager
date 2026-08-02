@@ -2590,3 +2590,18 @@ environment-selected paths, and runtime switching cannot change it. HTTP
 route flags and the machine-power scheduler remain independent. The Atlas
 host has not been drilled, the helper has not been installed or executed, and
 Atlas Manager remains mock-first by default.
+
+### Configured machine operating policy
+
+ADR-012 adds the strict startup variable
+`MACHINE_OPERATING_POLICY`. It defaults to `{"mode":"always_on"}` and also
+accepts `manual` or a scheduled weekly policy using only
+`America/Sao_Paulo`. The JSON is bounded, duplicate-key checked, validated by
+the existing immutable policy domain, and parsed once into `EnvironmentConfig`.
+Invalid explicit input fails startup without falling back to always-on.
+
+Policy selection is independent from `POWER_MANAGEMENT_BACKEND`, HTTP route
+flags, and scheduler lifecycle. A scheduled policy affects only planning and
+explicitly invoked scheduler ticks; no scheduler loop, helper request, RTC
+operation, D-Bus request, wake mutation, or shutdown is started by parsing or
+composition.

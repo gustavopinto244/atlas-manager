@@ -595,3 +595,13 @@ to mock behavior. Administrative HTTP activation and scheduler execution are
 independent. Host deployment, disabled-installation qualification, application
 user enrollment, real helper activation, and real-effect certification remain
 deferred.
+
+## Issue #260 delivery notes
+
+Issue #260 delivers strict production machine operating policy configuration.
+`always_on` remains the default, `manual` disables automatic schedule
+planning, and `scheduled` uses immutable canonical weekly windows in
+`America/Sao_Paulo`. Policy selection is independent from helper backend,
+administrative HTTP activation, and scheduler lifecycle. No automatic
+machine-power scheduler exists yet; Atlas deployment, user enrollment, and
+real-effect certification remain deferred.

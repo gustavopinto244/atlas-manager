@@ -1130,3 +1130,18 @@ scheduler execution, host qualification, installation, application-user
 enrollment, and real-effect certification are independent gates. A successful
 Linux shutdown means `accepted` by logind, not completed power-off; the mock
 backend continues to report `simulated`.
+
+## Machine operating policy configuration
+
+ADR-012 accepts one bounded `MACHINE_OPERATING_POLICY` JSON object and passes
+its immutable canonical domain value through startup composition. Absent input
+means `always_on`; explicit invalid input fails startup and never falls back.
+Only `always_on`, `manual`, and scheduled windows in `America/Sao_Paulo` are
+accepted. Duplicate JSON keys, unknown fields, malformed roots, surrounding
+whitespace, BOM, NUL, trailing data, and oversized input reject.
+
+The policy is not selected by HTTP, reloaded at runtime, or changed by a
+request. A scheduled policy does not select `linux_helper`, grant any user
+access, enable administrative routes, or start a scheduler. Configuration and
+composition perform no helper, RTC, D-Bus, wake, shutdown, filesystem, or
+background scheduler effect.

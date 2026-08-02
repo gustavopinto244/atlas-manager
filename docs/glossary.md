@@ -1734,3 +1734,16 @@ The Linux helper domain result produced after systemd-logind returns a
 successful `PowerOff(false)` reply. It records acceptance of the request, not
 completion of host power-off. Mock shutdowns retain the distinct
 `simulated` outcome.
+
+### Machine operating policy
+
+The immutable startup policy that describes whether the machine is always on,
+manual, or operating within canonical weekly windows. It is configured by
+`MACHINE_OPERATING_POLICY` and does not itself activate a scheduler or power
+effect.
+
+### Strict machine policy JSON
+
+The bounded configuration format for `MACHINE_OPERATING_POLICY`. It is one
+JSON object with duplicate-key detection, no unknown fields, no arbitrary
+timezone, and validation through the existing machine-policy domain.
