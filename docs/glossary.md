@@ -1779,3 +1779,18 @@ A read-only startup inspection of the fixed installed helper. It reuses the
 installation inspector and verifies safe file identity, ownership, group,
 04750 mode, setuid, link count, parent directories, process group membership,
 and an exact streaming SHA-256. It never executes or repairs the helper.
+
+### Linux power runtime identity
+
+The fixed dedicated service identity required by ADR-016 for admitted Linux
+power effects: user `atlas-manager`, primary group `atlas-manager`, home
+`/var/lib/atlas-manager`, shell `/usr/sbin/nologin`, and supplementary
+membership in `atlas-manager-power`. Numeric IDs are host-assigned but must
+be resolved uniquely from fixed local account files.
+
+### Exact helper-group binding
+
+The relationship in which the local `atlas-manager-power` GID, the running
+process supplementary membership, the startup helper preflight, and every
+operation-time helper inspection all use the same admitted numeric GID. A
+different positive non-root group cannot authorize the helper.

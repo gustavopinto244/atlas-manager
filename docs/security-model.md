@@ -1197,3 +1197,26 @@ request confirmation, scheduler policy confirmation, readiness, preparation,
 or permanent occurrence claims. Physical Atlas deployment, application-user
 enrollment, host qualification, and real-effect certification remain separate
 gates. No host or VM drill occurred for this delivery.
+
+### Dedicated runtime identity
+
+Linux power effects require the process to run as the exact dedicated
+`atlas-manager` service identity. The fixed contract is primary group
+`atlas-manager`, home `/var/lib/atlas-manager`, shell
+`/usr/sbin/nologin`, and supplementary membership in
+`atlas-manager-power`. Root execution, UID/GID mismatch, account ambiguity,
+unsafe account files, missing helper-group membership, and helper ownership by
+another non-root group reject startup or the next helper operation.
+
+The identity inspector validates only fixed local `/etc/passwd` and
+`/etc/group` resources using bounded reads and safe metadata checks. It does
+not trust `USER`, `LOGNAME`, or similar environment values, does not use
+NSS commands, and never creates or modifies accounts, groups, memberships,
+permissions, ownership, or privileges. Numeric IDs are internal facts and are
+not logged or exposed through HTTP.
+
+Disabled, mock, and inert configurations do not inspect account files. The
+exact admitted helper-group GID is shared by startup preflight and
+operation-time transport inspection. Enrollment, systemd configuration,
+deployment, host qualification, and real-effect certification remain
+deferred.

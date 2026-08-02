@@ -21,12 +21,14 @@ const MAX_STDERR_BYTES = 4_096;
 
 export interface NodeLinuxPowerHelperTransportDependencies {
   readonly inspector?: LinuxPowerHelperInstallationInspector;
+  readonly expectedHelperGroupId?: number;
   readonly platform?: NodeJS.Platform;
   readonly spawn?: typeof spawn;
 }
 
 export class NodeLinuxPowerHelperTransport implements LinuxPowerHelperTransport {
   readonly #inspector: LinuxPowerHelperInstallationInspector;
+  readonly #expectedHelperGroupId: number | undefined;
   readonly #platform: NodeJS.Platform;
   readonly #spawn: typeof spawn;
   #tail: Promise<void> = Promise.resolve();
@@ -36,6 +38,7 @@ export class NodeLinuxPowerHelperTransport implements LinuxPowerHelperTransport 
   ) {
     this.#inspector =
       dependencies.inspector ?? new NodeLinuxPowerHelperInstallationInspector();
+    this.#expectedHelperGroupId = dependencies.expectedHelperGroupId;
     this.#platform = dependencies.platform ?? process.platform;
     this.#spawn = dependencies.spawn ?? spawn;
     Object.freeze(this);
@@ -69,7 +72,7 @@ export class NodeLinuxPowerHelperTransport implements LinuxPowerHelperTransport 
     }
 
     try {
-      this.#inspector.inspect();
+      this.#inspector.inspect(this.#expectedHelperGroupId);
     } catch (error) {
       if (error instanceof LinuxPowerHelperInstallationError) {
         return Promise.reject(new LinuxPowerHelperTransportError(error.code));

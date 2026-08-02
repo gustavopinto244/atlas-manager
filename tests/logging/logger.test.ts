@@ -8,6 +8,8 @@ import {
   logMachinePowerEffectsActivationAdmitted,
   logMachinePowerEffectsActivationBlocked,
   logMachinePowerEffectsActivationDisabled,
+  logMachinePowerRuntimeIdentityAdmitted,
+  logMachinePowerRuntimeIdentityBlocked,
   logMachinePowerSchedulerObserverFailed,
   logMachinePowerSchedulerStarted,
   logMachinePowerSchedulerStopped,
@@ -172,5 +174,36 @@ describe("application logger", () => {
     expect(output.join("")).not.toContain("stack");
     expect(output.join("")).not.toContain("cursor");
     expect(output.join("")).not.toContain("report");
+  });
+
+  it("writes bounded runtime-identity admission events", () => {
+    const output: string[] = [];
+    const destination = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        output.push(chunk.toString());
+        callback();
+      },
+    });
+    const logger = createLogger("info", destination);
+
+    logMachinePowerRuntimeIdentityAdmitted(logger);
+    logMachinePowerRuntimeIdentityBlocked(
+      logger,
+      new Error("private account line and numeric UID"),
+    );
+
+    const entries = output.map((entry): unknown => JSON.parse(entry));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        event: "machine_power_runtime_identity_admitted",
+        identityKind: "dedicated_service_account",
+      }),
+      expect.objectContaining({
+        event: "machine_power_runtime_identity_blocked",
+        errorType: "Error",
+      }),
+    ]);
+    expect(output.join(" ")).not.toContain("private account line");
+    expect(output.join(" ")).not.toContain("numeric UID");
   });
 });

@@ -184,3 +184,28 @@ export function logMachinePowerEffectsActivationBlocked(
     "Machine power-effects activation blocked",
   );
 }
+
+export function logMachinePowerRuntimeIdentityAdmitted(
+  logger: PinoLogger,
+): void {
+  logger.info(
+    {
+      event: "machine_power_runtime_identity_admitted",
+      identityKind: "dedicated_service_account",
+    },
+    "Machine power runtime identity admitted",
+  );
+}
+
+export function logMachinePowerRuntimeIdentityBlocked(
+  logger: PinoLogger,
+  error: unknown,
+): void {
+  logger.error(
+    {
+      event: "machine_power_runtime_identity_blocked",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    },
+    "Machine power runtime identity blocked",
+  );
+}

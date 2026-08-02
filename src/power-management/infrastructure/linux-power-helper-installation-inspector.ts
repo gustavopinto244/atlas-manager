@@ -31,7 +31,7 @@ export class LinuxPowerHelperInstallationError extends Error {
 }
 
 export interface LinuxPowerHelperInstallationInspector {
-  inspect(): void;
+  inspect(expectedHelperGroupId?: number): void;
 }
 
 export interface LinuxPowerHelperFileStats {
@@ -57,7 +57,7 @@ export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelp
     Object.freeze(this);
   }
 
-  public inspect(): void {
+  public inspect(expectedHelperGroupId?: number): void {
     let helper: LinuxPowerHelperFileStats;
     try {
       helper = this.#fileSystem.lstat(LINUX_POWER_HELPER_PATH);
@@ -83,6 +83,12 @@ export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelp
       throw new LinuxPowerHelperInstallationError("helper_setuid_required");
     }
     if (helper.gid <= 0) {
+      throw new LinuxPowerHelperInstallationError("helper_group_invalid");
+    }
+    if (
+      expectedHelperGroupId !== undefined &&
+      helper.gid !== expectedHelperGroupId
+    ) {
       throw new LinuxPowerHelperInstallationError("helper_group_invalid");
     }
     if ((helper.mode & 0o7777) !== 0o4750) {

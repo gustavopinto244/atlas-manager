@@ -192,6 +192,7 @@ export interface LinuxPowerHelperAdapterBundle {
 export interface LinuxPowerHelperAdapterFactoryDependencies {
   readonly transport?: LinuxPowerHelperTransport;
   readonly installationInspector?: LinuxPowerHelperInstallationInspector;
+  readonly expectedHelperGroupId?: number;
   readonly transportDependencies?: NodeLinuxPowerHelperTransportDependencies;
 }
 
@@ -206,6 +207,9 @@ export function createLinuxPowerHelperAdapters(
     new NodeLinuxPowerHelperTransport({
       inspector: installationInspector,
       ...dependencies.transportDependencies,
+      ...(dependencies.expectedHelperGroupId === undefined
+        ? {}
+        : { expectedHelperGroupId: dependencies.expectedHelperGroupId }),
     });
   return Object.freeze({
     rtcInformationReader: new LinuxPowerHelperRtcInformationReader(transport),

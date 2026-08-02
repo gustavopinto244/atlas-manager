@@ -48,7 +48,7 @@ export interface LinuxPowerHelperSha256Hasher {
 }
 
 export interface LinuxPowerHelperInstallationPreflight {
-  inspect(expectedSha256: string): void;
+  inspect(expectedSha256: string, expectedHelperGroupId: number): void;
 }
 
 export interface NodeLinuxPowerHelperInstallationPreflightDependencies {
@@ -73,7 +73,7 @@ export class NodeLinuxPowerHelperInstallationPreflight implements LinuxPowerHelp
     Object.freeze(this);
   }
 
-  public inspect(expectedSha256: string): void {
+  public inspect(expectedSha256: string, expectedHelperGroupId: number): void {
     if (this.#platform !== "linux") {
       throw new LinuxPowerHelperInstallationPreflightError(
         "unsupported_platform",
@@ -81,7 +81,7 @@ export class NodeLinuxPowerHelperInstallationPreflight implements LinuxPowerHelp
     }
 
     try {
-      this.#inspector.inspect();
+      this.#inspector.inspect(expectedHelperGroupId);
     } catch (error) {
       throw mapInstallationError(error);
     }
@@ -98,7 +98,7 @@ export class NodeLinuxPowerHelperInstallationPreflight implements LinuxPowerHelp
     }
 
     try {
-      this.#inspector.inspect();
+      this.#inspector.inspect(expectedHelperGroupId);
     } catch (error) {
       throw mapInstallationError(error);
     }

@@ -29,10 +29,16 @@ describe("configured power-management infrastructure", () => {
     const createAdapters = vi.fn(() => bundle);
     const infrastructure = createConfiguredPowerManagementInfrastructure(
       "linux_helper",
-      { createLinuxPowerHelperAdapters: createAdapters },
+      {
+        createLinuxPowerHelperAdapters: createAdapters,
+        expectedHelperGroupId: 2002,
+      },
     );
 
     expect(createAdapters).toHaveBeenCalledOnce();
+    expect(createAdapters).toHaveBeenCalledWith({
+      expectedHelperGroupId: 2002,
+    });
     expect(infrastructure.backend).toBe("linux_helper");
     expect(infrastructure.adapters.rtcInformationReader).toBe(
       bundle.rtcInformationReader,

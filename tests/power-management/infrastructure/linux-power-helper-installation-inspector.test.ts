@@ -51,6 +51,16 @@ describe("Linux power-helper installation inspection", () => {
     expect(fileSystem.lstat).toHaveBeenNthCalledWith(4, "/usr/local/libexec");
   });
 
+  it("requires the admitted helper-group GID when one is supplied", () => {
+    expect(() =>
+      new NodeLinuxPowerHelperInstallationInspector(createFileSystem()).inspect(
+        3000,
+      ),
+    ).toThrowError(
+      new LinuxPowerHelperInstallationError("helper_group_invalid"),
+    );
+  });
+
   it.each([
     ["helper_symbolic_link_rejected", { ...validFile, isSymbolicLink: true }],
     ["helper_not_regular_file", { ...validFile, isRegularFile: false }],

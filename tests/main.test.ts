@@ -171,6 +171,7 @@ vi.mock(
   () => ({
     admitConfiguredMachinePowerEffects:
       controlled.admitConfiguredMachinePowerEffects,
+    isRuntimeIdentityAdmissionError: vi.fn(() => false),
   }),
 );
 
@@ -204,6 +205,8 @@ vi.mock("../src/logging/logger.js", () => ({
   logMachinePowerEffectsActivationAdmitted: vi.fn(),
   logMachinePowerEffectsActivationBlocked: vi.fn(),
   logMachinePowerEffectsActivationDisabled: vi.fn(),
+  logMachinePowerRuntimeIdentityAdmitted: vi.fn(),
+  logMachinePowerRuntimeIdentityBlocked: vi.fn(),
   logUnexpectedStartupFailure: vi.fn(),
 }));
 

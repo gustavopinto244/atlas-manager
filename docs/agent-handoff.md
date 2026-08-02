@@ -967,3 +967,66 @@ No Atlas host or VM drill was used. No helper was installed or executed, no
 group or user membership or setuid state changed, no real RTC or D-Bus power
 request occurred, and no wake, reboot, shutdown, or other real power effect
 occurred.
+
+## Current work — Issue #268
+
+The active branch is:
+
+`feat/exact-linux-power-runtime-identity-admission`
+
+The authoritative merged PR #267 baseline for this delivery is:
+
+`9a76f016f2bb2092fc2ef3c72834c9e7d64d74f6`
+
+Issue #268 adds ADR-016 and exact Linux runtime identity admission. Admitted
+Linux effects require the fixed `atlas-manager` user, primary group
+`atlas-manager`, home `/var/lib/atlas-manager`, shell
+`/usr/sbin/nologin`, and process membership in `atlas-manager-power`.
+Numeric IDs remain host-assigned but are resolved uniquely from bounded, safe
+fixed `/etc/passwd` and `/etc/group` inspection.
+
+The immutable identity is inspected only for admitted Linux effects. Disabled,
+mock, and inert Linux configurations do not inspect account files. The
+resolved helper-group GID is passed to both startup hash preflight and
+operation-time helper transport inspection, so another non-root group cannot
+substitute for `atlas-manager-power`.
+
+No account, group, membership, ownership, permission, or setuid state was
+changed. No helper, host, VM, RTC, D-Bus, wake, reboot, shutdown, or real power
+effect was used.
+
+Final validation for Issue #268:
+
+```text
+baseline                          → 9a76f016f2bb2092fc2ef3c72834c9e7d64d74f6
+branch                            → feat/exact-linux-power-runtime-identity-admission
+Node.js                           → 24.18.0
+npm                               → 11.16.0
+Node test files                   → 181 passed
+Node tests                        → 2,607 passed
+Node skipped tests                → 3
+Go                                → 1.23.0 linux/amd64
+Go tests                          → 111 individual tests
+format                            → passed
+lint                              → passed
+typecheck                         → passed
+build                             → passed
+go format                         → passed
+go mod verify                     → passed
+go vet                            → passed
+npm audit --omit=dev              → 0 production vulnerabilities
+git diff --check                  → passed
+dependencies                      → unchanged
+local helper/archive artifacts    → none
+```
+
+The three skipped tests remain the deterministic fixture compatibility checks
+listed above and require `ATLAS_MANAGER_POWER_HELPER_FIXTURE`; the standard
+suite intentionally does not set that variable.
+
+Identity inspection is read-only and is not performed for disabled, mock, or
+inert Linux configurations. No account files were inspected on the real host,
+and no account or group was created or modified. The exact resolved helper GID
+is shared by startup preflight and operation-time inspection. No host or VM
+drill, helper execution, real RTC/D-Bus operation, wake effect, reboot, or
+shutdown occurred.

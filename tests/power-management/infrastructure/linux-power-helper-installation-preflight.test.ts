@@ -20,9 +20,11 @@ describe("Linux power-helper installation preflight", () => {
       inspector,
       hasher,
       platform: "linux",
-    }).inspect(EXPECTED);
+    }).inspect(EXPECTED, 2000);
 
     expect(inspector.inspect).toHaveBeenCalledTimes(2);
+    expect(inspector.inspect).toHaveBeenNthCalledWith(1, 2000);
+    expect(inspector.inspect).toHaveBeenNthCalledWith(2, 2000);
     expect(hasher.hash).toHaveBeenCalledOnce();
   });
 
@@ -31,7 +33,7 @@ describe("Linux power-helper installation preflight", () => {
 
     let thrown: unknown;
     try {
-      preflight.inspect(EXPECTED);
+      preflight.inspect(EXPECTED, 2000);
     } catch (error: unknown) {
       thrown = error;
     }
@@ -66,7 +68,7 @@ describe("Linux power-helper installation preflight", () => {
       platform: "linux",
     });
 
-    expect(() => preflight.inspect(EXPECTED)).toThrow(
+    expect(() => preflight.inspect(EXPECTED, 2000)).toThrow(
       new LinuxPowerHelperInstallationPreflightError(expected),
     );
   });
@@ -78,7 +80,7 @@ describe("Linux power-helper installation preflight", () => {
         inspector,
         hasher: createHasher(EXPECTED),
         platform: "darwin",
-      }).inspect(EXPECTED),
+      }).inspect(EXPECTED, 2000),
     ).toThrow(
       new LinuxPowerHelperInstallationPreflightError("unsupported_platform"),
     );
@@ -89,7 +91,7 @@ describe("Linux power-helper installation preflight", () => {
         hashError: new LinuxPowerHelperInstallationPreflightError(
           "helper_size_invalid",
         ),
-      }).inspect(EXPECTED),
+      }).inspect(EXPECTED, 2000),
     ).toThrow(
       new LinuxPowerHelperInstallationPreflightError("helper_size_invalid"),
     );
@@ -107,7 +109,7 @@ describe("Linux power-helper installation preflight", () => {
         inspector: changingInspector,
         hasher: createHasher(EXPECTED),
         platform: "linux",
-      }).inspect(EXPECTED),
+      }).inspect(EXPECTED, 2000),
     ).toThrow(
       new LinuxPowerHelperInstallationPreflightError("helper_mode_invalid"),
     );
