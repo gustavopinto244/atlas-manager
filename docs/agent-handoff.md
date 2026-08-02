@@ -890,3 +890,80 @@ No scheduler loop was exercised against a real host. No Atlas or VM drill
 occurred; no helper was installed or executed; no group or user membership or
 setuid state changed; no RTC, wake, D-Bus, reboot, shutdown, or other real
 power effect occurred.
+
+## Current work — Issue #266
+
+The active branch is:
+
+feat/linux-power-effects-activation-admission
+
+The authoritative merged PR #265 baseline for this delivery is:
+
+c397132c8fbb0c4bc2ebb6a890b31a6e65a614f0
+
+Issue #266 adds ADR-015 and a disabled-by-default, hash-bound Linux
+power-effects startup admission boundary. Exact activation requires
+MACHINE_POWER_EFFECTS_ACTIVATION=linux_helper,
+MACHINE_POWER_EFFECTS_CONFIRMATION=confirm_linux_helper_power_effects, an
+exact lowercase installed-helper SHA-256, and a read-only fixed-path
+preflight. Mock operation remains valid without activation; inert Linux
+backend selection remains possible when no effect-capable surface is enabled.
+
+The preflight reuses the existing installation inspector, validates safe
+parents, root ownership, the reviewed non-root group, mode 04750, setuid,
+single link count, process group membership, bounded file size, and a
+streaming built-in SHA-256. It performs no helper request, RTC access, D-Bus
+power request, wake mutation, repair, installation, or group modification.
+Preflight failure occurs before HTTP listening and scheduler startup and never
+falls back to mock.
+
+This delivery does not install or execute the helper, change groups or setuid,
+access a real RTC, connect to the real system D-Bus for a power request, run a
+host or VM drill, reboot, or shut down. Physical deployment, host
+qualification, application-user enrollment, firmware wake certification, and
+real shutdown certification remain deferred.
+
+Final validation for Issue #266:
+
+```text
+baseline                          → c397132c8fbb0c4bc2ebb6a890b31a6e65a614f0
+branch                            → feat/linux-power-effects-activation-admission
+Node.js                           → 24.18.0
+npm                               → 11.16.0
+Node test files                   → 180 passed
+Node tests                        → 2,568 passed
+Node skipped tests                → 3
+Go                                → 1.23.0 linux/amd64
+Go tests                          → 111 individual tests
+format                            → passed
+lint                              → passed
+typecheck                         → passed
+build                             → passed
+go format                         → passed
+go mod verify                     → passed
+go vet                            → passed
+npm audit --omit=dev              → 0 production vulnerabilities
+git diff --check                  → passed
+dependencies                      → unchanged
+```
+
+The three skipped tests are the conditional compatibility checks in
+`tests/power-management/integration/linux-power-helper-protocol-compatibility.test.ts`:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They are skipped because the ordinary test command does not set
+`ATLAS_MANAGER_POWER_HELPER_FIXTURE`. The dedicated compatibility workflow
+provides the separately built nonproduction fixture path. This prevents the
+standard suite from selecting or executing a helper binary implicitly; the
+tests do not depend on host RTC, D-Bus, installation, privilege, or power
+operation availability.
+
+No Atlas host or VM drill was used. No helper was installed or executed, no
+group or user membership or setuid state changed, no real RTC or D-Bus power
+request occurred, and no wake, reboot, shutdown, or other real power effect
+occurred.

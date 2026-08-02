@@ -144,3 +144,43 @@ export function logMachinePowerSchedulerObserverFailed(
     "Machine-power scheduler observer failed",
   );
 }
+
+export function logMachinePowerEffectsActivationDisabled(
+  logger: PinoLogger,
+): void {
+  logger.info(
+    { event: "machine_power_effects_activation_disabled" },
+    "Machine power-effects activation disabled",
+  );
+}
+
+export function logMachinePowerEffectsActivationAdmitted(
+  logger: PinoLogger,
+  context: Readonly<{
+    administrativeWakeEnabled: boolean;
+    administrativeShutdownEnabled: boolean;
+    schedulerEnabled: boolean;
+  }>,
+): void {
+  logger.info(
+    {
+      event: "machine_power_effects_activation_admitted",
+      activationKind: "linux_helper",
+      ...context,
+    },
+    "Machine power-effects activation admitted",
+  );
+}
+
+export function logMachinePowerEffectsActivationBlocked(
+  logger: PinoLogger,
+  error: unknown,
+): void {
+  logger.error(
+    {
+      event: "machine_power_effects_activation_blocked",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    },
+    "Machine power-effects activation blocked",
+  );
+}

@@ -1000,3 +1000,24 @@ The scheduler and administrative power surfaces share one immutable production
 power capability bundle and event-history bundle. Route activation, helper
 backend selection, and policy selection remain independent. No scheduler loop,
 helper request, or real power effect is created by default.
+
+### Linux power-effects startup admission
+
+ADR-015 adds a startup admission boundary after environment parsing and before
+power composition, HTTP server creation, or scheduler startup. The default
+MACHINE_POWER_EFFECTS_ACTIVATION=disabled is immutable. Linux effects require
+the exact activation value, explicit operator confirmation, an exact reviewed
+installed-helper SHA-256, and one read-only preflight through the fixed
+installation inspector.
+
+The preflight uses Node's built-in streaming SHA-256 support and validates the
+fixed helper path, regular-file identity, root ownership, non-root group,
+04750 mode, setuid bit, single hard link, safe parent directories, process
+group membership, and digest. It makes no helper protocol request and does not
+touch RTC, wake-alarm, D-Bus, group, ownership, or permission state. Failure
+prevents HTTP listening and scheduler startup; it never falls back to mock.
+
+Backend selection, effect-capable surface activation, machine policy,
+scheduler activation, HTTP authentication/authorization, request confirmation,
+policy confirmation, readiness, host qualification, user enrollment, and
+real-effect certification remain independent gates.

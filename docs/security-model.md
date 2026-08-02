@@ -1173,3 +1173,27 @@ fail-closed through coordinated shutdown. Administrative HTTP flags,
 `POWER_MANAGEMENT_BACKEND`, policy selection, helper installation, and user
 enrollment do not activate the loop. No host or VM drill, helper execution,
 RTC access, D-Bus request, wake mutation, reboot, or shutdown was performed.
+
+### Hash-bound Linux effects admission
+
+Linux power effects have an additional startup gate. The exact
+MACHINE_POWER_EFFECTS_ACTIVATION=linux_helper value is required only when a
+Linux backend has an enabled effect-capable surface. It must be paired with
+the exact operator confirmation and one lowercase 64-character SHA-256 digest
+for the installed helper. Disabled activation rejects contradictory dormant
+confirmation or digest values, and Linux activation without an effect surface
+is rejected.
+
+The startup preflight is read-only and fixed-path. It reuses the installation
+inspector, streams the helper hash with built-in Node APIs, rejects symlinks,
+unsafe parents, incorrect ownership, mode, setuid, group membership, link
+count, size, or digest, and does not execute the helper. It performs no RTC,
+wake-alarm, D-Bus, shutdown, group, ownership, permission, or installation
+mutation. Any failure stops startup before HTTP listening and scheduler work;
+there is no fallback to mock or automatic repair.
+
+The activation confirmation does not replace authentication, authorization,
+request confirmation, scheduler policy confirmation, readiness, preparation,
+or permanent occurrence claims. Physical Atlas deployment, application-user
+enrollment, host qualification, and real-effect certification remain separate
+gates. No host or VM drill occurred for this delivery.

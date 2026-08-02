@@ -16,9 +16,13 @@ import { MachinePowerSchedulerLoop } from "./power-management/application/machin
 import { NodeMachinePowerSchedulerTimer } from "./power-management/infrastructure/node-machine-power-scheduler-timer.js";
 import { createEventHistory } from "./event-history/composition/create-event-history.js";
 import { createConfiguredPowerManagementRuntime } from "./power-management/composition/create-configured-power-management-runtime.js";
+import { admitConfiguredMachinePowerEffects } from "./power-management/composition/admit-configured-machine-power-effects.js";
 import type { PowerManagementCapabilities } from "./power-management/composition/create-power-management.js";
 import {
   createLogger,
+  logMachinePowerEffectsActivationAdmitted,
+  logMachinePowerEffectsActivationBlocked,
+  logMachinePowerEffectsActivationDisabled,
   logHttpServerStarted,
   logUnexpectedStartupFailure,
 } from "./logging/logger.js";
@@ -56,6 +60,23 @@ function start(): void {
   const logger = createLogger(config.logLevel);
 
   try {
+    let activationAdmission:
+      ReturnType<typeof admitConfiguredMachinePowerEffects> | undefined;
+    try {
+      activationAdmission = admitConfiguredMachinePowerEffects(config);
+    } catch (error) {
+      logMachinePowerEffectsActivationBlocked(logger, error);
+      throw error;
+    }
+    if (activationAdmission.kind === "disabled") {
+      logMachinePowerEffectsActivationDisabled(logger);
+    } else {
+      logMachinePowerEffectsActivationAdmitted(logger, {
+        administrativeWakeEnabled: config.administrativeWakeAlarmHttpEnabled,
+        administrativeShutdownEnabled: config.administrativeShutdownHttpEnabled,
+        schedulerEnabled: config.machinePowerSchedulerEnabled,
+      });
+    }
     const cpuTemperatureReader = new LinuxCoretempCpuTemperatureReader();
     const serverHealthReader = new NodeServerHealthReader(
       "/",

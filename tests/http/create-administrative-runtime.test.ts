@@ -15,6 +15,7 @@ function shutdownConfig(): EnvironmentConfig {
     port: 3000,
     logLevel: "info",
     powerManagementBackend: "mock",
+    machinePowerEffectsActivation: Object.freeze({ kind: "disabled" }),
     machinePowerSchedulerEnabled: false,
     machineOperatingPolicy: createMachineOperatingPolicy({ mode: "always_on" }),
     administrativeEventHistoryHttpEnabled: false,

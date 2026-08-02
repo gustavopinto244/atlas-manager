@@ -628,3 +628,15 @@ fail-closed on blocked, incomplete, conflict, or failed outcomes. The default
 remains disabled and mock-first; helper deployment, application-user
 enrollment, Atlas host qualification, and real-effect certification remain
 deferred.
+
+## Issue #266 delivery notes
+
+Issue #266 adds Linux power-effects activation admission. Linux effects remain
+disabled by default and require exact operator confirmation, a reviewed
+installed-helper SHA-256, and a read-only startup preflight before HTTP or
+scheduler startup. The preflight does not execute or repair the helper and
+activation failures do not fall back to mock.
+
+The physical Atlas deployment, helper installation, application-user
+enrollment, host qualification, firmware wake certification, and real shutdown
+certification remain deferred.

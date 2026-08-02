@@ -2633,3 +2633,22 @@ The scheduler shares the configured power and event-history capability bundles
 with administrative surfaces but does not enable HTTP routes, select the Linux
 helper, or start because a scheduled policy exists. No Atlas or VM drill was
 performed and no helper, RTC, D-Bus, wake, reboot, or shutdown effect occurred.
+
+### Linux power-effects admission
+
+Linux power effects remain disabled by default. Selecting
+POWER_MANAGEMENT_BACKEND=linux_helper does not by itself activate an
+effect-capable route or scheduler. When an effect-capable surface is enabled,
+startup additionally requires the exact
+MACHINE_POWER_EFFECTS_ACTIVATION=linux_helper value, the confirmation
+MACHINE_POWER_EFFECTS_CONFIRMATION=confirm_linux_helper_power_effects, and
+one reviewed lowercase helper SHA-256 in
+LINUX_POWER_HELPER_EXPECTED_SHA256.
+
+Admission performs one read-only preflight of the fixed installed helper. It
+checks the reviewed ownership, mode, setuid, group membership, safe parents,
+link count, and installed-file hash before HTTP listening or scheduler
+startup. The preflight never executes the helper and never repairs or enrolls
+users. Failure is fail-closed with no fallback to mock. Installation,
+physical-host qualification, application-user enrollment, and real-effect
+certification remain deployment gates.

@@ -33,6 +33,13 @@ export const POWER_MANAGEMENT_BACKENDS = ["mock", "linux_helper"] as const;
 
 export type PowerManagementBackend = (typeof POWER_MANAGEMENT_BACKENDS)[number];
 
+export type MachinePowerEffectsActivation =
+  | Readonly<{ kind: "disabled" }>
+  | Readonly<{
+      kind: "linux_helper";
+      expectedHelperSha256: string;
+    }>;
+
 const persistenceFilePathSchema = z.string().superRefine((value, context) => {
   if (value.length === 0) {
     context.addIssue({
@@ -217,6 +224,13 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    MACHINE_POWER_EFFECTS_ACTIVATION: z
+      .enum(["disabled", "linux_helper"], {
+        error: "must be exactly disabled or linux_helper",
+      })
+      .default("disabled"),
+    MACHINE_POWER_EFFECTS_CONFIRMATION: z.string().optional(),
+    LINUX_POWER_HELPER_EXPECTED_SHA256: z.string().optional(),
     MACHINE_OPERATING_POLICY: machineOperatingPolicySchema,
     SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
       persistenceFilePathSchema.optional(),
@@ -317,6 +331,72 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED === "true";
     const administrativeHttpEnabled =
       eventHistoryHttpEnabled || wakeAlarmHttpEnabled || shutdownHttpEnabled;
+    const effectCapableSurfaceEnabled =
+      wakeAlarmHttpEnabled ||
+      shutdownHttpEnabled ||
+      environment.MACHINE_POWER_SCHEDULER_ENABLED === "true";
+    if (environment.POWER_MANAGEMENT_BACKEND === "mock") {
+      if (environment.MACHINE_POWER_EFFECTS_ACTIVATION === "linux_helper")
+        context.addIssue({
+          code: "custom",
+          path: ["MACHINE_POWER_EFFECTS_ACTIVATION"],
+          message: "linux_helper activation requires the linux_helper backend",
+        });
+    }
+    if (
+      environment.POWER_MANAGEMENT_BACKEND === "linux_helper" &&
+      effectCapableSurfaceEnabled &&
+      environment.MACHINE_POWER_EFFECTS_ACTIVATION === "disabled"
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["MACHINE_POWER_EFFECTS_ACTIVATION"],
+        message: "must admit Linux power effects for enabled power surfaces",
+      });
+    if (
+      environment.MACHINE_POWER_EFFECTS_ACTIVATION === "linux_helper" &&
+      !effectCapableSurfaceEnabled
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["MACHINE_POWER_EFFECTS_ACTIVATION"],
+        message: "requires at least one enabled power surface",
+      });
+    if (environment.MACHINE_POWER_EFFECTS_ACTIVATION === "linux_helper") {
+      if (
+        environment.MACHINE_POWER_EFFECTS_CONFIRMATION !==
+        "confirm_linux_helper_power_effects"
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["MACHINE_POWER_EFFECTS_CONFIRMATION"],
+          message: "must be the exact Linux power-effects confirmation",
+        });
+      const digest = environment.LINUX_POWER_HELPER_EXPECTED_SHA256;
+      if (
+        digest === undefined ||
+        !/^[0-9a-f]{64}$/u.test(digest) ||
+        /^0{64}$/u.test(digest)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["LINUX_POWER_HELPER_EXPECTED_SHA256"],
+          message: "must be a nonzero lowercase SHA-256 digest",
+        });
+    } else {
+      if (environment.MACHINE_POWER_EFFECTS_CONFIRMATION !== undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["MACHINE_POWER_EFFECTS_CONFIRMATION"],
+          message: "must be omitted when Linux power effects are disabled",
+        });
+      if (environment.LINUX_POWER_HELPER_EXPECTED_SHA256 !== undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["LINUX_POWER_HELPER_EXPECTED_SHA256"],
+          message: "must be omitted when Linux power effects are disabled",
+        });
+    }
     if (administrativeHttpEnabled) {
       if (environment.HOST !== "127.0.0.1")
         context.addIssue({
@@ -500,6 +580,7 @@ export interface EnvironmentConfig {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly powerManagementBackend: PowerManagementBackend;
+  readonly machinePowerEffectsActivation: MachinePowerEffectsActivation;
   readonly machinePowerSchedulerEnabled: boolean;
   readonly machineOperatingPolicy: MachineOperatingPolicy;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
@@ -556,6 +637,14 @@ export function parseEnvironment(
     port: parsedEnvironment.PORT,
     logLevel: parsedEnvironment.LOG_LEVEL,
     powerManagementBackend: parsedEnvironment.POWER_MANAGEMENT_BACKEND,
+    machinePowerEffectsActivation:
+      parsedEnvironment.MACHINE_POWER_EFFECTS_ACTIVATION === "disabled"
+        ? Object.freeze({ kind: "disabled" as const })
+        : Object.freeze({
+            kind: "linux_helper" as const,
+            expectedHelperSha256:
+              parsedEnvironment.LINUX_POWER_HELPER_EXPECTED_SHA256!,
+          }),
     machinePowerSchedulerEnabled:
       parsedEnvironment.MACHINE_POWER_SCHEDULER_ENABLED === "true",
     machineOperatingPolicy: parsedEnvironment.MACHINE_OPERATING_POLICY,
