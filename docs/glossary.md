@@ -1763,3 +1763,19 @@ machine-power scheduler tick. It starts after HTTP listening only when the
 exact activation flag is `true`, uses one non-overlapping one-shot timer with
 a fixed 60-second delay, and terminates fail-closed on blocked, incomplete,
 conflict, or failed outcomes.
+
+### Linux power-effects activation admission
+
+The immutable startup boundary introduced by ADR-015. It admits real Linux
+helper effects only when an effect-capable surface, exact operator
+confirmation, expected installed-helper SHA-256, and read-only installation
+preflight all agree. It is independent from backend selection, machine policy,
+HTTP authentication, request confirmation, scheduler policy confirmation,
+readiness, installation, enrollment, and real-effect certification.
+
+### Helper installation preflight
+
+A read-only startup inspection of the fixed installed helper. It reuses the
+installation inspector and verifies safe file identity, ownership, group,
+04750 mode, setuid, link count, parent directories, process group membership,
+and an exact streaming SHA-256. It never executes or repairs the helper.

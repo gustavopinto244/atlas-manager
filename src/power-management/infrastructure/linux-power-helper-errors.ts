@@ -8,6 +8,7 @@ export type LinuxPowerHelperTransportErrorCode =
   | "helper_group_invalid"
   | "helper_process_group_missing"
   | "helper_mode_invalid"
+  | "helper_link_count_invalid"
   | "helper_permissions_unsafe"
   | "helper_not_executable"
   | "helper_parent_invalid"

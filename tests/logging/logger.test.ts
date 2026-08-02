@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   createLogger,
   logHttpServerStarted,
+  logMachinePowerEffectsActivationAdmitted,
+  logMachinePowerEffectsActivationBlocked,
+  logMachinePowerEffectsActivationDisabled,
   logMachinePowerSchedulerObserverFailed,
   logMachinePowerSchedulerStarted,
   logMachinePowerSchedulerStopped,
@@ -86,6 +89,45 @@ describe("application logger", () => {
       }),
     ]);
     expect(output.join(" ")).not.toContain("secret scheduler path");
+  });
+
+  it("writes bounded Linux power-effects admission events", () => {
+    const output: string[] = [];
+    const destination = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        output.push(chunk.toString());
+        callback();
+      },
+    });
+    const logger = createLogger("info", destination);
+
+    logMachinePowerEffectsActivationDisabled(logger);
+    logMachinePowerEffectsActivationAdmitted(logger, {
+      administrativeWakeEnabled: false,
+      administrativeShutdownEnabled: true,
+      schedulerEnabled: false,
+    });
+    logMachinePowerEffectsActivationBlocked(
+      logger,
+      new Error("secret helper hash and path"),
+    );
+
+    const entries = output.map((entry): unknown => JSON.parse(entry));
+    expect(entries).toEqual([
+      expect.objectContaining({
+        event: "machine_power_effects_activation_disabled",
+      }),
+      expect.objectContaining({
+        event: "machine_power_effects_activation_admitted",
+        activationKind: "linux_helper",
+        administrativeShutdownEnabled: true,
+      }),
+      expect.objectContaining({
+        event: "machine_power_effects_activation_blocked",
+        errorType: "Error",
+      }),
+    ]);
+    expect(output.join(" ")).not.toContain("secret helper hash and path");
   });
 
   it("writes safe structured scheduler lifecycle events", () => {

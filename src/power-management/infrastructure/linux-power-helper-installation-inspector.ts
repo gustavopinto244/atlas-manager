@@ -12,6 +12,7 @@ export type LinuxPowerHelperInstallationErrorCode =
   | "helper_group_invalid"
   | "helper_process_group_missing"
   | "helper_mode_invalid"
+  | "helper_link_count_invalid"
   | "helper_permissions_unsafe"
   | "helper_not_executable"
   | "helper_parent_invalid"
@@ -40,6 +41,7 @@ export interface LinuxPowerHelperFileStats {
   readonly uid: number;
   readonly gid: number;
   readonly mode: number;
+  readonly nlink: number;
 }
 
 export interface LinuxPowerHelperFileSystem {
@@ -86,32 +88,37 @@ export class NodeLinuxPowerHelperInstallationInspector implements LinuxPowerHelp
     if ((helper.mode & 0o7777) !== 0o4750) {
       throw new LinuxPowerHelperInstallationError("helper_mode_invalid");
     }
+    if (helper.nlink !== 1) {
+      throw new LinuxPowerHelperInstallationError("helper_link_count_invalid");
+    }
     if (!this.#fileSystem.getProcessGroups().includes(helper.gid)) {
       throw new LinuxPowerHelperInstallationError(
         "helper_process_group_missing",
       );
     }
 
-    let parent: LinuxPowerHelperFileStats;
-    try {
-      parent = this.#fileSystem.lstat("/usr/local/libexec");
-    } catch (error) {
-      if (isNotFoundError(error)) {
+    for (const parentPath of ["/usr", "/usr/local", "/usr/local/libexec"]) {
+      let parent: LinuxPowerHelperFileStats;
+      try {
+        parent = this.#fileSystem.lstat(parentPath);
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          throw new LinuxPowerHelperInstallationError("helper_parent_invalid");
+        }
+        throw new LinuxPowerHelperInstallationError("helper_inspection_failed");
+      }
+      if (
+        parent.isSymbolicLink ||
+        !parent.isDirectory ||
+        (parent.mode & 0o022) !== 0
+      ) {
         throw new LinuxPowerHelperInstallationError("helper_parent_invalid");
       }
-      throw new LinuxPowerHelperInstallationError("helper_inspection_failed");
-    }
-    if (
-      parent.isSymbolicLink ||
-      !parent.isDirectory ||
-      (parent.mode & 0o022) !== 0
-    ) {
-      throw new LinuxPowerHelperInstallationError("helper_parent_invalid");
-    }
-    if (parent.uid !== 0) {
-      throw new LinuxPowerHelperInstallationError(
-        "helper_parent_owner_invalid",
-      );
+      if (parent.uid !== 0) {
+        throw new LinuxPowerHelperInstallationError(
+          "helper_parent_owner_invalid",
+        );
+      }
     }
   }
 }
@@ -126,6 +133,7 @@ const nodeFileSystem: LinuxPowerHelperFileSystem = Object.freeze({
       uid: stats.uid,
       gid: stats.gid,
       mode: stats.mode,
+      nlink: stats.nlink,
     });
   },
   getProcessGroups(): readonly number[] {

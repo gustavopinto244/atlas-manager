@@ -22,6 +22,10 @@ interface ControlledEnvironmentConfig {
   administrativeShutdownHttpEnabled?: boolean;
   administrativeEventHistoryFilePath?: string;
   machinePowerSchedulerEnabled?: boolean;
+  machinePowerEffectsActivation?: Readonly<
+    | { kind: "disabled" }
+    | { kind: "linux_helper"; expectedHelperSha256: string }
+  >;
   machinePowerSchedulerCursorFilePath?: string;
   machineShutdownOccurrenceClaimFilePath?: string;
   administrativeRoleAssignments?: readonly {
@@ -51,6 +55,7 @@ const controlled = vi.hoisted(() => {
     overrideStores: [] as object[],
     overridePaths: [] as string[],
     createServiceManagement: vi.fn(),
+    admitConfiguredMachinePowerEffects: vi.fn(() => ({ kind: "disabled" })),
     createApp: vi.fn(),
     createConfiguredPowerManagementRuntime: vi.fn(),
     machineSchedulerLoops: [] as object[],
@@ -162,6 +167,14 @@ vi.mock(
 );
 
 vi.mock(
+  "../src/power-management/composition/admit-configured-machine-power-effects.js",
+  () => ({
+    admitConfiguredMachinePowerEffects:
+      controlled.admitConfiguredMachinePowerEffects,
+  }),
+);
+
+vi.mock(
   "../src/power-management/application/machine-power-scheduler-loop.js",
   () => ({
     MachinePowerSchedulerLoop: class {
@@ -188,6 +201,9 @@ vi.mock("../src/lifecycle/machine-power-scheduler-runtime.js", () => ({
 vi.mock("../src/logging/logger.js", () => ({
   createLogger: vi.fn(() => ({})),
   logHttpServerStarted: vi.fn(),
+  logMachinePowerEffectsActivationAdmitted: vi.fn(),
+  logMachinePowerEffectsActivationBlocked: vi.fn(),
+  logMachinePowerEffectsActivationDisabled: vi.fn(),
   logUnexpectedStartupFailure: vi.fn(),
 }));
 
@@ -248,6 +264,10 @@ describe("application persistence adapter selection", () => {
         start: vi.fn(() => Promise.resolve(Object.freeze({ kind: "stopped" }))),
         stop: vi.fn(() => Promise.resolve(Object.freeze({ kind: "stopped" }))),
       },
+    });
+    controlled.admitConfiguredMachinePowerEffects.mockReset();
+    controlled.admitConfiguredMachinePowerEffects.mockReturnValue({
+      kind: "disabled",
     });
     vi.resetModules();
   });
@@ -465,5 +485,22 @@ describe("application persistence adapter selection", () => {
 
     controlled.serverListeners.get("listening")?.();
     expect(controlled.machineSchedulerRuntimeStarts).toBe(1);
+  });
+
+  it("blocks startup before HTTP composition when activation admission fails", async () => {
+    controlled.admitConfiguredMachinePowerEffects.mockImplementation(() => {
+      throw new Error("bounded admission failure");
+    });
+
+    await import("../src/main.js");
+
+    expect(controlled.createServiceManagement).not.toHaveBeenCalled();
+    expect(
+      controlled.createConfiguredPowerManagementRuntime,
+    ).not.toHaveBeenCalled();
+    expect(controlled.createApp).not.toHaveBeenCalled();
+    expect(controlled.machineSchedulerLoops).toHaveLength(0);
+    expect(controlled.machineSchedulerRuntimeStarts).toBe(0);
+    expect(process.exitCode).toBe(1);
   });
 });

@@ -13,6 +13,7 @@ const validFile: LinuxPowerHelperFileStats = {
   uid: 0,
   gid: 2000,
   mode: 0o4750,
+  nlink: 1,
 };
 const validParent: LinuxPowerHelperFileStats = {
   isSymbolicLink: false,
@@ -21,6 +22,7 @@ const validParent: LinuxPowerHelperFileStats = {
   uid: 0,
   gid: 0,
   mode: 0o755,
+  nlink: 1,
 };
 
 function createFileSystem(
@@ -44,7 +46,9 @@ describe("Linux power-helper installation inspection", () => {
       1,
       LINUX_POWER_HELPER_PATH,
     );
-    expect(fileSystem.lstat).toHaveBeenNthCalledWith(2, "/usr/local/libexec");
+    expect(fileSystem.lstat).toHaveBeenNthCalledWith(2, "/usr");
+    expect(fileSystem.lstat).toHaveBeenNthCalledWith(3, "/usr/local");
+    expect(fileSystem.lstat).toHaveBeenNthCalledWith(4, "/usr/local/libexec");
   });
 
   it.each([
@@ -55,6 +59,7 @@ describe("Linux power-helper installation inspection", () => {
     ["helper_group_invalid", { ...validFile, gid: 0 }],
     ["helper_mode_invalid", { ...validFile, mode: 0o4755 }],
     ["helper_process_group_missing", { ...validFile, gid: 3000 }],
+    ["helper_link_count_invalid", { ...validFile, nlink: 2 }],
   ] as const)("rejects unsafe helper files with %s", (code, file) => {
     expect(() =>
       new NodeLinuxPowerHelperInstallationInspector(

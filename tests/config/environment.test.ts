@@ -87,6 +87,158 @@ describe("parseEnvironment", () => {
     expect(config.machinePowerSchedulerEnabled).toBe(false);
   });
 
+  it("defaults Linux power-effects activation to an immutable disabled state", () => {
+    const config = parseEnvironment({});
+
+    expect(config.machinePowerEffectsActivation).toEqual({ kind: "disabled" });
+    expect(Object.isFrozen(config.machinePowerEffectsActivation)).toBe(true);
+  });
+
+  it("accepts exact Linux activation only with confirmation and a digest", () => {
+    const config = parseEnvironment({
+      POWER_MANAGEMENT_BACKEND: "linux_helper",
+      MACHINE_POWER_SCHEDULER_ENABLED: "true",
+      MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+        "/var/lib/atlas-manager/power-cursor.json",
+      MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+        "/var/lib/atlas-manager/power-claims.json",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
+      MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+      MACHINE_POWER_EFFECTS_CONFIRMATION: "confirm_linux_helper_power_effects",
+      LINUX_POWER_HELPER_EXPECTED_SHA256: "a".repeat(64),
+    });
+
+    expect(config.machinePowerEffectsActivation).toEqual({
+      kind: "linux_helper",
+      expectedHelperSha256: "a".repeat(64),
+    });
+    expect(Object.isFrozen(config.machinePowerEffectsActivation)).toBe(true);
+    expect(Object.keys(config)).not.toContain(
+      "MACHINE_POWER_EFFECTS_CONFIRMATION",
+    );
+    expect(JSON.stringify(config)).not.toContain(
+      "confirm_linux_helper_power_effects",
+    );
+  });
+
+  it.each([
+    "DISABLED",
+    "LINUX_HELPER",
+    "linux-helper",
+    "armed",
+    "enabled",
+    "true",
+    "false",
+    "1",
+    "0",
+    "",
+    " disabled",
+    "linux_helper ",
+    "unknown",
+  ])("rejects non-canonical activation value %s", (value) => {
+    expect(() =>
+      parseEnvironment({ MACHINE_POWER_EFFECTS_ACTIVATION: value }),
+    ).toThrow();
+  });
+
+  it.each([
+    undefined,
+    "confirm_linux_helper_power_effects ",
+    "Confirm_linux_helper_power_effects",
+    "confirm_linux_helper_power",
+  ])("rejects invalid Linux activation confirmation", (confirmation) => {
+    expect(() =>
+      parseEnvironment({
+        POWER_MANAGEMENT_BACKEND: "linux_helper",
+        ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "true",
+        HOST: "127.0.0.1",
+        CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
+        CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+        ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
+          {
+            principalId: "00000000-0000-4000-8000-000000000001",
+            roles: ["power_operator"],
+          },
+        ]),
+        MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+        ...(confirmation === undefined
+          ? {}
+          : { MACHINE_POWER_EFFECTS_CONFIRMATION: confirmation }),
+        LINUX_POWER_HELPER_EXPECTED_SHA256: "a".repeat(64),
+      }),
+    ).toThrow();
+  });
+
+  it.each([
+    "A".repeat(64),
+    "sha256:" + "a".repeat(64),
+    "a".repeat(63),
+    "a".repeat(65),
+    "0".repeat(64),
+  ])("rejects invalid expected helper digest", (digest) => {
+    expect(() =>
+      parseEnvironment({
+        POWER_MANAGEMENT_BACKEND: "linux_helper",
+        MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+        MACHINE_POWER_EFFECTS_CONFIRMATION:
+          "confirm_linux_helper_power_effects",
+        LINUX_POWER_HELPER_EXPECTED_SHA256: digest,
+        MACHINE_POWER_SCHEDULER_ENABLED: "true",
+        MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+          "/var/lib/atlas-manager/power-cursor.json",
+        MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+          "/var/lib/atlas-manager/power-claims.json",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects contradictory activation values and preserves inert Linux selection", () => {
+    expect(() =>
+      parseEnvironment({
+        POWER_MANAGEMENT_BACKEND: "mock",
+        MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+        MACHINE_POWER_EFFECTS_CONFIRMATION:
+          "confirm_linux_helper_power_effects",
+        LINUX_POWER_HELPER_EXPECTED_SHA256: "a".repeat(64),
+      }),
+    ).toThrow();
+
+    const inert = parseEnvironment({
+      POWER_MANAGEMENT_BACKEND: "linux_helper",
+      MACHINE_POWER_EFFECTS_ACTIVATION: "disabled",
+    });
+    expect(inert.machinePowerEffectsActivation).toEqual({ kind: "disabled" });
+  });
+
+  it("rejects Linux effects without activation or without an effect surface", () => {
+    expect(() =>
+      parseEnvironment({
+        POWER_MANAGEMENT_BACKEND: "linux_helper",
+        MACHINE_POWER_SCHEDULER_ENABLED: "true",
+        MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+          "/var/lib/atlas-manager/power-cursor.json",
+        MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+          "/var/lib/atlas-manager/power-claims.json",
+        ADMINISTRATIVE_EVENT_HISTORY_FILE:
+          "/var/lib/atlas-manager/events.jsonl",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseEnvironment({
+        POWER_MANAGEMENT_BACKEND: "linux_helper",
+        MACHINE_POWER_EFFECTS_ACTIVATION: "linux_helper",
+        MACHINE_POWER_EFFECTS_CONFIRMATION:
+          "confirm_linux_helper_power_effects",
+        LINUX_POWER_HELPER_EXPECTED_SHA256: "a".repeat(64),
+      }),
+    ).toThrow();
+  });
+
   it.each([{ mode: "always_on" }, { mode: "manual" }, scheduledPolicy])(
     "accepts a strict machine operating policy",
     (policy) => {
@@ -574,6 +726,7 @@ describe("parseEnvironment", () => {
       port: 3000,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machinePowerEffectsActivation: { kind: "disabled" },
       machinePowerSchedulerEnabled: false,
       machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
@@ -600,6 +753,7 @@ describe("parseEnvironment", () => {
       port: 8080,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machinePowerEffectsActivation: { kind: "disabled" },
       machinePowerSchedulerEnabled: false,
       machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
