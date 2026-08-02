@@ -15,6 +15,15 @@ export const ADMINISTRATIVE_PERMISSIONS = Object.freeze([
   "services.availability.write",
   "operations.read",
   "dashboard.read",
+  "backups.targets.read",
+  "backups.runs.read",
+  "backups.run",
+  "backups.schedule.read",
+  "backups.schedule.write",
+  "backups.retention.read",
+  "backups.retention.write",
+  "backups.retention.prune",
+  "backups.scheduler.tick",
 ] as const);
 
 export type AdministrativePermission =

@@ -3,7 +3,7 @@ package administrativeconfiguration
 import "testing"
 
 func TestValidateInputRejectsDuplicateAndUnknownFields(t *testing.T) {
-	valid := []byte(`{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"audience","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]}],"registeredServices":[]}`)
+	valid := ExampleInputBytes()
 	if _, err := ValidateInput(valid); err != nil {
 		t.Fatalf("valid input rejected: %v", err)
 	}

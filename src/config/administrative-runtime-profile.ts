@@ -11,6 +11,8 @@ export interface MockAdministrativeInput {
     readonly roles: readonly string[];
   }>[];
   readonly registeredServices: readonly unknown[];
+  readonly backupSchedulerEnabled: boolean;
+  readonly backupTargets: readonly unknown[];
 }
 
 export function parseMockAdministrativeInput(
@@ -19,12 +21,14 @@ export function parseMockAdministrativeInput(
   const parsed = parseStrictJson(value);
   if (
     !isRecord(parsed) ||
-    Reflect.ownKeys(parsed).length !== 5 ||
+    Reflect.ownKeys(parsed).length !== 7 ||
     parsed.schemaVersion !== 1 ||
     typeof parsed.cloudflareTeamName !== "string" ||
     typeof parsed.cloudflareAudience !== "string" ||
     !Array.isArray(parsed.roleAssignments) ||
-    !Array.isArray(parsed.registeredServices)
+    !Array.isArray(parsed.registeredServices) ||
+    typeof parsed.backupSchedulerEnabled !== "boolean" ||
+    !Array.isArray(parsed.backupTargets)
   )
     throw new Error("administrative_input_invalid");
   const roleAssignments = parsed.roleAssignments.map((assignment) => {
@@ -52,6 +56,8 @@ export function parseMockAdministrativeInput(
     cloudflareAudience: parsed.cloudflareAudience,
     roleAssignments: Object.freeze(roleAssignments),
     registeredServices: Object.freeze(parsed.registeredServices),
+    backupSchedulerEnabled: parsed.backupSchedulerEnabled,
+    backupTargets: Object.freeze(parsed.backupTargets),
   });
 }
 
@@ -81,6 +87,18 @@ export function createMockAdministrativeEnvironment(
     CLOUDFLARE_ACCESS_AUDIENCE: input.cloudflareAudience,
     ADMINISTRATIVE_ROLE_ASSIGNMENTS: roleAssignments,
     REGISTERED_SERVICES_JSON: services,
+    ADMINISTRATIVE_BACKUP_HTTP_ENABLED: "true",
+    REGISTERED_BACKUP_TARGETS_JSON: JSON.stringify(input.backupTargets),
+    BACKUP_SCHEDULER_ENABLED: input.backupSchedulerEnabled ? "true" : "false",
+    BACKUP_RUN_HISTORY_FILE: "/var/lib/atlas-manager-backups/runs.jsonl",
+    ...(input.backupSchedulerEnabled
+      ? {
+          BACKUP_SCHEDULER_CURSOR_FILE:
+            "/var/lib/atlas-manager-backups/scheduler-cursor.json",
+          BACKUP_OCCURRENCE_CLAIM_FILE:
+            "/var/lib/atlas-manager-backups/occurrence-claims.jsonl",
+        }
+      : {}),
   });
   parseEnvironment(environment);
   createRegisteredServiceCatalogFromEnvironment(environment);

@@ -17,6 +17,18 @@ administrative control is enabled, but wake/shutdown routes, Linux effects,
 and the machine-power scheduler remain disabled. Service activation and power
 activation are independent boundaries, and no physical host or VM was used.
 
+## Controlled backup orchestration
+
+ADR-023 adds a project-owned backup-management boundary. Registered targets are
+immutable and resolve only to the `mock` or `filesystem_tree` adapters. The
+filesystem adapter traverses an approved configured tree with standard-library
+APIs, rejects links and special files, writes a private candidate, computes a
+canonical manifest, and publishes atomically. Run history, scheduled claims,
+cursor advancement, and retention are separate persistent boundaries. HTTP and
+dashboard responses expose only bounded target and run metadata; backup content
+and paths remain private. Shutdown readiness consumes only a bounded backup
+state and never starts or cancels a backup.
+
 ## Reproducible helper installation boundary
 
 Issue #254 adds a separate release/build boundary around the helper:

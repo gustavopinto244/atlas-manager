@@ -29,6 +29,8 @@ import type { AdministrativeServiceAvailabilityRouteDependencies } from "./admin
 import type { AdministrativeOverviewRouteDependencies } from "./administrative-overview-route.js";
 import type { AdministrativeDashboardRouteDependencies } from "./administrative-dashboard-route.js";
 import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
+import type { BackupManagementCapabilities } from "../backup-management/composition/create-backup-management.js";
+import type { AdministrativeBackupsRouteDependencies } from "./administrative-backups-route.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
@@ -38,6 +40,7 @@ export interface AdministrativeRuntime {
   readonly availability?: AdministrativeServiceAvailabilityRouteDependencies;
   readonly overview?: AdministrativeOverviewRouteDependencies;
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
+  readonly backups?: AdministrativeBackupsRouteDependencies;
 }
 
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
@@ -45,6 +48,7 @@ export interface AdministrativeRuntimeCompositionDependencies extends Configured
   readonly powerManagement?: PowerManagementCapabilities;
   readonly getServerHealth?: GetServerHealthCapability;
   readonly applicationVersion?: string;
+  readonly backupManagement?: BackupManagementCapabilities;
 }
 
 export function createAdministrativeRuntime(
@@ -108,6 +112,9 @@ export function createAdministrativeRuntime(
       eventHistory,
       clock,
       ...(serviceManagement === undefined ? {} : { serviceManagement }),
+      ...(compositionDependencies.backupManagement === undefined
+        ? {}
+        : { backupManagement: compositionDependencies.backupManagement }),
       ...(confirmationReader === undefined
         ? {}
         : { machineShutdownConfirmationReader: confirmationReader }),
@@ -197,6 +204,17 @@ export function createAdministrativeRuntime(
       ? {
           dashboard: Object.freeze({
             admission,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeBackupHttpEnabled ?? false)
+      ? {
+          backups: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
             createProtectedAdministration: (
               reader: CloudflareAccessAssertionReader,
             ) => createProtected(reader),

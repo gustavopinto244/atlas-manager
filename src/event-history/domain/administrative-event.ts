@@ -20,6 +20,12 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "restart_registered_service",
   "update_registered_service_availability",
   "remove_registered_service_availability",
+  "run_registered_backup",
+  "update_backup_schedule",
+  "remove_backup_schedule",
+  "update_backup_retention",
+  "run_backup_retention_prune",
+  "run_backup_scheduler_tick",
 ] as const);
 export const ADMINISTRATIVE_EVENT_STATUSES = Object.freeze([
   "started",
@@ -85,6 +91,7 @@ export type AdministrativeAuthorizationReasonCode =
   (typeof ADMINISTRATIVE_AUTHORIZATION_REASON_CODES)[number];
 
 export type AdministrativeEventFailureCode =
+  | "backup_operation_failed"
   | "administrative_audit_failed"
   | "audit_failed_after_wake_alarm_mutation"
   | "audit_failed_after_shutdown_request"
@@ -358,6 +365,12 @@ function createDetails(
       "read_registered_service_availability",
       "update_registered_service_availability",
       "remove_registered_service_availability",
+      "run_registered_backup",
+      "update_backup_schedule",
+      "remove_backup_schedule",
+      "update_backup_retention",
+      "run_backup_retention_prune",
+      "run_backup_scheduler_tick",
       "read_operations_overview",
       "read_administrative_dashboard",
     ].includes(requestedOperation as string);
@@ -378,6 +391,15 @@ function createDetails(
       "services.availability.write",
       "operations.read",
       "dashboard.read",
+      "backups.targets.read",
+      "backups.runs.read",
+      "backups.run",
+      "backups.schedule.read",
+      "backups.schedule.write",
+      "backups.retention.read",
+      "backups.retention.write",
+      "backups.retention.prune",
+      "backups.scheduler.tick",
     ].includes(permission as string);
     const expected = {
       read_wake_alarm: "power.wake.read",
@@ -396,6 +418,12 @@ function createDetails(
       read_registered_service_availability: "services.availability.read",
       update_registered_service_availability: "services.availability.write",
       remove_registered_service_availability: "services.availability.write",
+      run_registered_backup: "backups.run",
+      update_backup_schedule: "backups.schedule.write",
+      remove_backup_schedule: "backups.schedule.write",
+      update_backup_retention: "backups.retention.write",
+      run_backup_retention_prune: "backups.retention.prune",
+      run_backup_scheduler_tick: "backups.scheduler.tick",
       read_operations_overview: "operations.read",
       read_administrative_dashboard: "dashboard.read",
     } as Record<string, string>;
@@ -427,6 +455,65 @@ function createDetails(
       decision,
       reasonCode,
     });
+  }
+  if (
+    operation === "run_registered_backup" ||
+    operation === "update_backup_schedule" ||
+    operation === "remove_backup_schedule" ||
+    operation === "update_backup_retention" ||
+    operation === "run_backup_retention_prune"
+  ) {
+    const targetId = record["targetId"];
+    if (
+      typeof targetId !== "string" ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(targetId) ||
+      targetId.length > 64
+    )
+      throw new AdministrativeEventValidationError("invalid_details");
+    if (status === "started") {
+      if (!hasExactFields(record, ["targetId"]))
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ targetId });
+    }
+    if (status === "succeeded") {
+      if (
+        !hasExactFields(record, ["targetId", "outcome"]) ||
+        record["outcome"] !== "succeeded"
+      )
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ targetId, outcome: "succeeded" as const });
+    }
+    if (status === "failed") {
+      if (
+        !hasExactFields(record, ["targetId", "failureCode"]) ||
+        typeof record["failureCode"] !== "string" ||
+        !SAFE_FAILURE_CODES.has(record["failureCode"])
+      )
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ targetId, failureCode: record["failureCode"] });
+    }
+    throw new AdministrativeEventValidationError("invalid_details");
+  }
+  if (operation === "run_backup_scheduler_tick") {
+    if (status === "started") {
+      if (!hasExactFields(record, []))
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({});
+    }
+    if (
+      status === "succeeded" &&
+      hasExactFields(record, ["outcome"]) &&
+      typeof record["outcome"] === "string"
+    )
+      return Object.freeze({ outcome: record["outcome"] });
+    if (
+      status === "failed" &&
+      hasExactFields(record, ["failureCode"]) &&
+      typeof record["failureCode"] === "string" &&
+      SAFE_FAILURE_CODES.has(record["failureCode"])
+    )
+      return Object.freeze({ failureCode: record["failureCode"] });
+    throw new AdministrativeEventValidationError("invalid_details");
   }
   if (
     operation === "start_registered_service" ||
@@ -915,6 +1002,7 @@ function freezeDefined(
 }
 
 const SAFE_FAILURE_CODES = new Set<string>([
+  "backup_operation_failed",
   "administrative_audit_failed",
   "audit_failed_after_wake_alarm_mutation",
   "audit_failed_after_shutdown_request",

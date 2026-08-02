@@ -1,0 +1,14 @@
+{
+  "id": "example-backup",
+  "displayName": "Example backup",
+  "kind": "mock",
+  "schedule": { "mode": "manual" },
+  "retention": { "keepLastSuccessful": 7 },
+  "limits": {
+    "maxFiles": 1000,
+    "maxTotalBytes": 1073741824,
+    "maxFileBytes": 268435456,
+    "maxDepth": 16,
+    "maxRelativePathBytes": 4096
+  }
+}

@@ -280,6 +280,14 @@ helper activation, or real machine effects; Issues #238 and #240 now add the
 Cloudflare identity foundation, protected event-history delivery, and the
 mock-first wake-alarm route.
 
+## v0.7 — Backup orchestration (completed)
+
+Backup orchestration uses registered mock or approved filesystem-tree targets,
+atomic local artifacts, persistent checksummed run metadata, scheduled
+occurrence claims, bounded retention, protected APIs, dashboard visibility,
+and authoritative shutdown readiness. Restore, remote replication, logical
+database backup, and physical execution remain future scope.
+
 ## Capability history and planned work
 
 The planned initial release includes:

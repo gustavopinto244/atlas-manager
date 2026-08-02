@@ -15,6 +15,23 @@ const input = JSON.stringify({
     },
   ],
   registeredServices: [],
+  backupSchedulerEnabled: false,
+  backupTargets: [
+    {
+      id: "example-backup",
+      displayName: "Example backup",
+      kind: "mock",
+      schedule: { mode: "manual" },
+      retention: { keepLastSuccessful: 1 },
+      limits: {
+        maxFiles: 1000,
+        maxTotalBytes: 1073741824,
+        maxFileBytes: 268435456,
+        maxDepth: 16,
+        maxRelativePathBytes: 4096,
+      },
+    },
+  ],
 });
 
 describe("mock administrative runtime profile", () => {

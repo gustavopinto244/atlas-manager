@@ -578,3 +578,11 @@ The following capabilities may be considered after the first stable release:
 
 Future-scope items are not requirements for version `1.0.0` unless they are
 explicitly promoted into the roadmap.
+
+# v0.7 backup orchestration delivery
+
+Issue #281 completes registered backup targets, protected manual and scheduled
+execution, persistent run metadata, atomic local filesystem artifacts,
+checksums, bounded retention, administrative audit integration, shutdown
+backup readiness, and dashboard visibility. Restoration, remote replication,
+logical database backup, and physical execution remain out of scope.

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "result": "completed",
+  "baselineCommit": "<40 lowercase hexadecimal characters>",
+  "bundleSha256": "<64 lowercase hexadecimal characters>",
+  "targetScenarios": [],
+  "manualRunScenarios": [],
+  "schedulerScenarios": [],
+  "retentionScenarios": [],
+  "authorizationScenarios": [],
+  "shutdownReadinessScenarios": [],
+  "finalState": "deactivated"
+}

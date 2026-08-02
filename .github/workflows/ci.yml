@@ -48,6 +48,10 @@ jobs:
         working-directory: deployment
         run: go test ./...
 
+      - name: Run backup orchestration rehearsal tests
+        working-directory: deployment
+        run: go test ./internal/rehearsal -run 'Backup|Rehearsal' -count=1
+
       - name: Run deterministic disabled deployment rehearsal
         working-directory: deployment
         run: go test ./internal/rehearsal -count=1
@@ -161,6 +165,7 @@ jobs:
           test -f "$bundle_root/dashboard/index.html"
           test -f "$bundle_root/dashboard/styles.css"
           test -f "$bundle_root/dashboard/app.js"
+          test -f "$bundle_root/dashboard/backup.js"
           test ! -e "$bundle_root/atlas-manager.mock-admin.input.json"
           grep -q 'atlas-manager-runtime-configuration' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-service-lifecycle' "$bundle_root/MANIFEST.json"
@@ -168,6 +173,9 @@ jobs:
           grep -q 'atlas-manager-service-lifecycle' "$bundle_root/SHA256SUMS"
           grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/SHA256SUMS"
+          grep -q 'application/dist/backup-management' "$bundle_root/MANIFEST.json"
+          grep -q 'dashboard/backup.js' "$bundle_root/MANIFEST.json"
+          grep -q 'dashboard/backup.js' "$bundle_root/SHA256SUMS"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
             --application-root "$GITHUB_WORKSPACE/$bundle_root/application"
@@ -194,10 +202,17 @@ jobs:
       - name: Check types
         run: npm run typecheck
 
+      - name: Run deterministic backup orchestration rehearsal
+        run: npm test -- --maxWorkers=1 tests/backup-management
+
       - name: Run tests
         run: npm test
         env:
           ATLAS_MANAGER_POWER_HELPER_FIXTURE: ${{ github.workspace }}/dist/power-helper-test/atlas-manager-power-helper-fixture
+
+      - name: Verify backup test boundaries
+        run: |
+          if rg -n '(/usr/sbin/(groupadd|groupdel|useradd|userdel)|/usr/bin/systemctl|\b(docker|pm2|tar|rsync|cp)\b)' src/backup-management tests/backup-management; then exit 1; fi
 
       - name: Build production application
         run: npm run build

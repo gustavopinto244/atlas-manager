@@ -10,8 +10,10 @@ import {
   type PowerManagementCapabilities,
   type PowerManagementCompositionOverrides,
 } from "./create-power-management.js";
+import type { MachineShutdownBackupReadinessReader } from "../application/ports/machine-shutdown-readiness-readers.js";
 
 export interface ConfiguredPowerManagementRuntimeDependencies extends ConfiguredPowerManagementInfrastructureDependencies {
+  readonly machineShutdownBackupReadinessReader?: MachineShutdownBackupReadinessReader;
   readonly createPowerManagement?: (
     overrides: PowerManagementCompositionOverrides,
   ) => PowerManagementCapabilities;
@@ -56,6 +58,12 @@ export function createConfiguredPowerManagementRuntime(
           },
           serviceManagementPreparationCapabilities:
             serviceManagement.orchestrateRegisteredServicesStop,
+        }),
+    ...(dependencies.machineShutdownBackupReadinessReader === undefined
+      ? {}
+      : {
+          machineShutdownBackupReadinessReader:
+            dependencies.machineShutdownBackupReadinessReader,
         }),
   });
 }
