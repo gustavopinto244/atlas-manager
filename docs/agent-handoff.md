@@ -1283,3 +1283,37 @@ pass. Go validation is pending because the current development environment
 does not provide \`go\` or \`gofmt\`; CI must run deployment formatting,
 verification, vet, tests, and the dedicated rehearsal. Generated bundle
 archives and rehearsal evidence remain outside the repository.
+
+## Current work — Issue #278
+
+The active branch is:
+
+`feat/mock-only-production-activation-readiness`
+
+The authoritative merged baseline is:
+
+`fb1540a1702fbf5836a528661f10bfcb402a1bd3`
+
+Issue #278 adds separate runtime-configuration and service-lifecycle
+executables. The fixed configuration is loopback-only, uses the mock backend,
+keeps Linux effects and the scheduler disabled, uses an always-on policy, an
+empty registered-service catalog, and disables administrative routes. The
+service lifecycle uses fixed systemctl arguments, private state and journals,
+nonblocking locks, loopback/runtime-identity verification, and bounded
+same-process rollback.
+
+The deterministic rehearsal composes disabled installation, configuration
+installation/removal, service activation/deactivation, route absence, health
+verification, and final disabled-deployment verification with fake systemd and
+injected health dependencies. No real account command, systemd command,
+application, helper, production path, RTC, D-Bus, host, or VM is used.
+
+Final validation: Node format, lint, typecheck, build, the full Node suite
+(182 files, 2,609 tests, 3 intentional skips), production audit, and
+`git diff --check` pass. Deployment and power-helper Go formatting, module
+verification, vet, and tests pass with Go 1.23 from `/usr/local/go/bin`. The
+Linux amd64 deployment executables build with `CGO_ENABLED=0`, `GOOS=linux`,
+`GOARCH=amd64`, and `GOAMD64=v1`. Two isolated bundle builds are byte-identical
+with SHA-256
+`15b27fd25692e9a349e462eef2fd0381caeda5a883459bfea11939592355993d`;
+inspection and new executable manifest/checksum coverage pass.

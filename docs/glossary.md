@@ -1852,3 +1852,15 @@ Bounded canonical JSON containing release digests, step classifications,
 filesystem mutation classifications, and a deterministic report hash chain.
 It is integrity evidence for the sandbox rehearsal, not release authenticity
 or production deployment approval.
+
+### Mock-only activation profile
+
+The fixed first-service configuration: loopback HTTP, mock power backend,
+disabled Linux effects and scheduler, always-on policy, empty service catalog,
+and disabled administrative routes.
+
+### Service lifecycle boundary
+
+The operator-run boundary that controls only `atlas-manager.service` through
+fixed systemd commands, verifies loopback health and runtime identity, and can
+roll activation back without changing deployment or identities.

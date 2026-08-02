@@ -26,18 +26,20 @@ const (
 )
 
 type Config struct {
-	Version               string
-	SourceCommit          string
-	SourceDateEpoch       int64
-	SourceRoot            string
-	OutputDir             string
-	NodeVersion           string
-	NPMVersion            string
-	GoVersion             string
-	InstallerPath         string
-	QualificationPath     string
-	IdentityInstallerPath string
-	Runner                Runner
+	Version                  string
+	SourceCommit             string
+	SourceDateEpoch          int64
+	SourceRoot               string
+	OutputDir                string
+	NodeVersion              string
+	NPMVersion               string
+	GoVersion                string
+	InstallerPath            string
+	QualificationPath        string
+	IdentityInstallerPath    string
+	RuntimeConfigurationPath string
+	ServiceLifecyclePath     string
+	Runner                   Runner
 }
 
 type Runner interface {
@@ -162,7 +164,7 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
 	paths = append(paths, metadataPaths...)
 	files, err := manifest.Inventory(root, paths)
 	if err != nil {
@@ -308,6 +310,18 @@ func assemble(root, buildRoot, runtimeRoot string, config Config) error {
 	if err := copyFile(config.IdentityInstallerPath, filepath.Join(root, "atlas-manager-runtime-identity-installer"), 0o755); err != nil {
 		return err
 	}
+	if config.RuntimeConfigurationPath == "" {
+		return fmt.Errorf("runtime_configuration_missing")
+	}
+	if err := copyFile(config.RuntimeConfigurationPath, filepath.Join(root, "atlas-manager-runtime-configuration"), 0o755); err != nil {
+		return err
+	}
+	if config.ServiceLifecyclePath == "" {
+		return fmt.Errorf("service_lifecycle_missing")
+	}
+	if err := copyFile(config.ServiceLifecyclePath, filepath.Join(root, "atlas-manager-service-lifecycle"), 0o755); err != nil {
+		return err
+	}
 	for _, name := range []string{"package.json", "package-lock.json"} {
 		if err := copyFile(filepath.Join(runtimeRoot, name), filepath.Join(root, "application", name), 0o644); err != nil {
 			return err
@@ -359,7 +373,7 @@ SOFTWARE.
 `
 
 func envTemplate(config Config) []byte {
-	return []byte("# Atlas Manager safe disabled deployment template\nHOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\n# Runtime configuration is operator-owned and is not created by this installer.\n")
+	return []byte("# Atlas Manager safe disabled deployment template\nHOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nREGISTERED_SERVICES_JSON=[]\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=false\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n# Runtime configuration is operator-owned and is not created by this installer.\n")
 }
 
 const installationText = `# Atlas Manager disabled installation

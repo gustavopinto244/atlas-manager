@@ -49,3 +49,10 @@ go test ./internal/rehearsal -count=1
 
 CI runs the complete deployment test suite and the focused rehearsal test. No
 physical Atlas host or VM is used.
+
+Issue #278 extends the sandbox lifecycle after disabled installation with the
+canonical mock runtime configuration and reversible service lifecycle. The
+service remains loopback-only, mock-first, disabled for power effects and the
+machine scheduler, and has no administrative routes. The activation rehearsal
+uses a fake systemd executor and injected health checks; it never runs a real
+systemd command.

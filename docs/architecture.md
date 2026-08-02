@@ -1090,3 +1090,14 @@ exact mutation allowlists. It emits bounded canonical evidence with report
 digests and a deterministic hash chain. It is not a production command and
 never reads the real account database, invokes account tools or systemd,
 executes the application or helper, or accesses RTC or D-Bus.
+
+### Mock-only production activation readiness
+
+ADR-021 adds two separate operator boundaries after disabled installation. The
+runtime-configuration tool installs only the fixed mock-first environment,
+validated by the real TypeScript parser. The service-lifecycle tool controls
+only the fixed systemd unit and verifies loopback health, route absence, and
+the dedicated runtime identity. Both use fixed paths, exact confirmations,
+private state, nonblocking locks, and bounded reports. Activation is reversible
+and does not install the helper, enable the scheduler, or expose administrative
+routes.

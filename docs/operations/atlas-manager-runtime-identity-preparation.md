@@ -40,3 +40,8 @@ This tool does not install Atlas Manager or the power helper, create the real
 environment file, enroll the account textually in `atlas-manager-power`, call
 systemd, start the service, access RTC or D-Bus, or perform a power operation.
 No physical Atlas host or VM is part of development validation.
+
+After identity preparation, the separate mock-only runtime configuration and
+service lifecycle tools may be used. They preserve these committed identities
+through service deactivation and configuration removal; neither tool enrolls
+the account textually in the helper group or enables Linux power effects.

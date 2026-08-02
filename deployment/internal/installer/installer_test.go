@@ -112,7 +112,7 @@ func TestSandboxRejectsUnknownReleaseArtifact(t *testing.T) {
 		return New(Config{
 			Paths: paths, BundleRoot: bundle, EffectiveUID: func() int { return 0 },
 			ResolveIdentity: func() (runtimeidentity.Identity, error) { return identity, nil },
-			CheckNode: func(_ context.Context) error { return nil },
+			CheckNode:       func(_ context.Context) error { return nil },
 		})
 	}
 	if err := newInstaller().Run(context.Background(), InstallDisabled); err != nil {
@@ -153,6 +153,8 @@ func createBundle(t *testing.T, root, version string) string {
 		"atlas-manager-installer":                   {"test installer\n", 0o755},
 		"atlas-manager-host-qualification":          {"test qualification\n", 0o755},
 		"atlas-manager-runtime-identity-installer":  {"test identity installer\n", 0o755},
+		"atlas-manager-runtime-configuration":       {"test runtime configuration\n", 0o755},
+		"atlas-manager-service-lifecycle":           {"test service lifecycle\n", 0o755},
 		"systemd/atlas-manager.service":             {systemdunit.Content, 0o644},
 		"config/atlas-manager.env.example":          {"HOST=127.0.0.1\nPOWER_MANAGEMENT_BACKEND=mock\n", 0o640},
 		"INSTALLATION.md":                           {"disabled\n", 0o644},

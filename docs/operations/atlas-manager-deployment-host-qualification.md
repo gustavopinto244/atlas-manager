@@ -68,3 +68,8 @@ When `qualify` returns `preparation_required`, use the separate
 read-only and never creates the account or groups. A valid managed identity
 preparation is reported as `prepared`; an interrupted preparation journal is
 blocked and requires operator review.
+
+Once a disabled deployment exists, the qualification report is followed by the
+separate mock-only configuration and service-lifecycle gates. Qualification
+does not activate systemd, create configuration, or approve administrative or
+Linux power operations.

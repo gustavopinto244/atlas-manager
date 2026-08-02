@@ -2731,3 +2731,17 @@ reviewed boundary. The rehearsal never reads or mutates real account databases
 or production paths, calls systemd, executes Atlas Manager or the power helper,
 accesses RTC or D-Bus, enables or starts a service, or performs a physical-host
 or VM drill. The packaged mock-only application smoke test remains separate.
+
+### Mock-only production activation readiness
+
+Issue #278 adds the first reversible service-activation profile. The fixed
+runtime configuration binds Atlas Manager to loopback, the mock power backend,
+disabled power effects and scheduler, an always-on policy, an empty service
+catalog, and disabled administrative routes. Separate operator-run tools
+install/remove that configuration and activate/deactivate only the reviewed
+systemd unit. Activation verifies loopback health, route absence, and the exact
+`atlas-manager` identity; it never installs or executes the power helper.
+
+Automated activation coverage is sandbox-only. It uses fake account/systemd
+boundaries, emits bounded canonical evidence, and does not touch real systemd,
+account databases, production paths, RTC, D-Bus, a host, or a VM.

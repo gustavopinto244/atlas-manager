@@ -52,6 +52,10 @@ jobs:
         working-directory: deployment
         run: go test ./internal/rehearsal -count=1
 
+      - name: Run mock-only activation rehearsal
+        working-directory: deployment
+        run: go test ./internal/rehearsal -run 'TestMockOnlyActivationLifecycleRehearsal|TestActivationEvidenceIsBoundedAndDeterministic' -count=1
+
       - name: Check Go formatting
         working-directory: power-helper
         run: test -z "$(gofmt -l .)"
@@ -97,6 +101,8 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-smoke ./cmd/atlas-manager-smoke
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-host-qualification ./cmd/atlas-manager-host-qualification
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-runtime-identity-installer ./cmd/atlas-manager-runtime-identity-installer
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-runtime-configuration ./cmd/atlas-manager-runtime-configuration
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-service-lifecycle ./cmd/atlas-manager-service-lifecycle
 
       - name: Build reproducible installation bundle
         run: |
@@ -147,6 +153,12 @@ jobs:
           test -x "$bundle_root/atlas-manager-runtime-identity-installer"
           grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/SHA256SUMS"
+          test -x "$bundle_root/atlas-manager-runtime-configuration"
+          test -x "$bundle_root/atlas-manager-service-lifecycle"
+          grep -q 'atlas-manager-runtime-configuration' "$bundle_root/MANIFEST.json"
+          grep -q 'atlas-manager-service-lifecycle' "$bundle_root/MANIFEST.json"
+          grep -q 'atlas-manager-runtime-configuration' "$bundle_root/SHA256SUMS"
+          grep -q 'atlas-manager-service-lifecycle' "$bundle_root/SHA256SUMS"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
             --application-root "$GITHUB_WORKSPACE/$bundle_root/application"
