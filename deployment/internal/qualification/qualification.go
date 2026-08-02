@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/hostinspection"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/qualificationreport"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
 )
@@ -40,25 +41,39 @@ func Run(ctx context.Context, action Action, inspector Inspector) (qualification
 		RuntimeIdentity: snapshot.RuntimeIdentity,
 		Deployment:      snapshot.Deployment,
 		Configuration:   snapshot.Configuration,
-		Checks:          []qualificationreport.Check{snapshot.Lock, snapshot.Runtime, snapshot.Enablement},
+		Preparation:     snapshot.Preparation,
+		Checks:          []qualificationreport.Check{snapshot.Lock, snapshot.Runtime, snapshot.Enablement, snapshot.ApplicationState},
 	}
+	if report.RuntimeIdentity.Name == "" {
+		report.RuntimeIdentity = qualificationreport.Check{Name: "runtime_identity", Status: qualificationreport.NotApplicable, Code: "identity_not_inspected"}
+	}
+	if report.Preparation.Name == "" {
+		report.Preparation = qualificationreport.Check{Name: "identity_preparation", Status: qualificationreport.NotApplicable, Code: "preparation_not_inspected"}
+	}
+	if report.Checks[3].Name == "" {
+		report.Checks[3] = qualificationreport.Check{Name: "application_state", Status: qualificationreport.NotApplicable, Code: "application_state_not_inspected"}
+	}
+	report.Checks = append(report.Checks, report.Preparation)
 	return report, nil
 }
 
 func resultFor(action Action, snapshot hostinspection.Snapshot) string {
 	if action == VerifyRemoved {
-		if snapshot.Platform.Status == qualificationreport.Blocked || snapshot.Bundle.Status == qualificationreport.Blocked || snapshot.Systemd.Status == qualificationreport.Blocked || snapshot.Filesystem.Status == qualificationreport.Blocked || snapshot.RuntimeIdentity.Status == qualificationreport.Blocked || snapshot.Configuration.Status == qualificationreport.Blocked || snapshot.Lock.Status == qualificationreport.Blocked || snapshot.Runtime.Status == qualificationreport.Blocked || snapshot.Enablement.Status == qualificationreport.Blocked || snapshot.DeploymentState != hostinspection.DeploymentAbsent {
+		if snapshot.Platform.Status == qualificationreport.Blocked || snapshot.Bundle.Status == qualificationreport.Blocked || snapshot.Systemd.Status == qualificationreport.Blocked || snapshot.Filesystem.Status == qualificationreport.Blocked || snapshot.RuntimeIdentity.Status == qualificationreport.Blocked || snapshot.Configuration.Status == qualificationreport.Blocked || snapshot.Lock.Status == qualificationreport.Blocked || snapshot.Runtime.Status == qualificationreport.Blocked || snapshot.Enablement.Status == qualificationreport.Blocked || snapshot.Preparation.Status == qualificationreport.Blocked || snapshot.DeploymentState != hostinspection.DeploymentAbsent {
 			return "blocked"
 		}
 		return "removed"
 	}
-	if hasBlocked(snapshot) {
+	if hasBlocked(action, snapshot) {
 		return "blocked"
 	}
 	switch action {
 	case Qualify:
 		if snapshot.DeploymentState != hostinspection.DeploymentAbsent {
 			return "blocked"
+		}
+		if snapshot.PreparationState == identitystate.ManagedPrepared {
+			return "prepared"
 		}
 		if snapshot.IdentityState == runtimeidentity.Absent {
 			return "preparation_required"
@@ -79,8 +94,12 @@ func resultFor(action Action, snapshot hostinspection.Snapshot) string {
 	}
 }
 
-func hasBlocked(snapshot hostinspection.Snapshot) bool {
-	for _, check := range []qualificationreport.Check{snapshot.Bundle, snapshot.Platform, snapshot.NodeRuntime, snapshot.Systemd, snapshot.Filesystem, snapshot.RuntimeIdentity, snapshot.Deployment, snapshot.Configuration, snapshot.Lock, snapshot.Runtime, snapshot.Enablement} {
+func hasBlocked(action Action, snapshot hostinspection.Snapshot) bool {
+	checks := []qualificationreport.Check{snapshot.Bundle, snapshot.Platform, snapshot.NodeRuntime, snapshot.Systemd, snapshot.Filesystem, snapshot.RuntimeIdentity, snapshot.Deployment, snapshot.Configuration, snapshot.Lock, snapshot.Runtime, snapshot.Enablement, snapshot.Preparation}
+	if action != VerifyDisabledInstallation && action != VerifyRemoved {
+		checks = append(checks, snapshot.ApplicationState)
+	}
+	for _, check := range checks {
 		if check.Status == qualificationreport.Blocked {
 			return true
 		}

@@ -2700,3 +2700,18 @@ or conflicting identities block. Prepared-host, disabled-installation, and
 removed-state checks remain separate from account creation, installation,
 systemd enablement/startup, helper installation, power-helper qualification,
 and real-effect certification. No physical host or VM qualification was run.
+
+### Operator-controlled runtime identity preparation
+
+Issue #274 adds `atlas-manager-runtime-identity-installer` to the deployment
+bundle. It accepts only `inspect`, `prepare-disabled`, and `verify-managed`.
+The preparation action requires the exact anti-accident confirmation and a
+completely absent identity state, then creates only the fixed
+`atlas-manager` user, primary group, and empty `atlas-manager-power` group.
+
+The transaction writes private managed evidence and a synchronized journal,
+verifies every account transition, and rolls back only resources created by
+the current failed attempt. It never creates the home directory, changes
+textual group membership, installs Atlas or the helper, creates configuration,
+enables or starts systemd, or performs a power operation. Committed identities
+have no public removal action; physical preparation remains deferred.

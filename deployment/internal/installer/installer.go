@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/systemdunit"
@@ -30,18 +31,20 @@ const (
 )
 
 type Paths struct {
-	ReleaseRoot string
-	Current     string
-	Unit        string
-	ConfigDir   string
-	Template    string
-	Environment string
-	StateHome   string
-	StateFile   string
-	Lock        string
-	RuntimeDir  string
-	EnableLink  string
-	Node        string
+	ReleaseRoot                string
+	Current                    string
+	Unit                       string
+	ConfigDir                  string
+	Template                   string
+	Environment                string
+	StateHome                  string
+	StateFile                  string
+	Lock                       string
+	RuntimeDir                 string
+	EnableLink                 string
+	Node                       string
+	IdentityPreparationState   string
+	IdentityPreparationJournal string
 }
 
 func ProductionPaths() Paths {
@@ -51,6 +54,7 @@ func ProductionPaths() Paths {
 		Template: "/etc/atlas-manager/atlas-manager.env.example", Environment: "/etc/atlas-manager/atlas-manager.env",
 		StateHome: "/var/lib/atlas-manager-deployment", StateFile: "/var/lib/atlas-manager-deployment/state.json",
 		Lock: "/run/atlas-manager-deployment.lock", RuntimeDir: "/run/atlas-manager", EnableLink: "/etc/systemd/system/multi-user.target.wants/atlas-manager.service", Node: "/usr/bin/node",
+		IdentityPreparationState: "/var/lib/atlas-manager-identity-preparation/state.json", IdentityPreparationJournal: "/var/lib/atlas-manager-identity-preparation/transaction.json",
 	}
 }
 
@@ -129,6 +133,9 @@ func (installer *Installer) Run(ctx context.Context, action Action) error {
 	if err != nil {
 		return fmt.Errorf("runtime_identity_invalid")
 	}
+	if err := validateIdentityPreparationState(installer.config, identity); err != nil {
+		return err
+	}
 	if err := installer.config.CheckNode(ctx); err != nil {
 		return fmt.Errorf("node_runtime_invalid")
 	}
@@ -151,6 +158,23 @@ func (installer *Installer) Run(ctx context.Context, action Action) error {
 		return installer.uninstall()
 	}
 	return fmt.Errorf("action_invalid")
+}
+
+func validateIdentityPreparationState(config Config, identity runtimeidentity.Identity) error {
+	if config.Paths.IdentityPreparationJournal != "" {
+		_, seen, err := identitystate.ReadJournal(config.Paths.IdentityPreparationJournal)
+		if seen || err != nil {
+			return fmt.Errorf("identity_preparation_interrupted")
+		}
+	}
+	if config.Paths.IdentityPreparationState == "" || !exists(config.Paths.IdentityPreparationState) {
+		return nil
+	}
+	state, seen, err := identitystate.ReadState(config.Paths.IdentityPreparationState)
+	if err != nil || !seen || state == nil || state.RuntimeUser.ID != identity.UserID || state.PrimaryGroup.ID != identity.PrimaryGroupID || state.HelperGroup.ID != identity.HelperGroupID {
+		return fmt.Errorf("identity_preparation_invalid")
+	}
+	return nil
 }
 
 func inspectBundle(root string) error {
@@ -177,6 +201,12 @@ func inspectBundle(root string) error {
 	}
 	if _, err := os.Stat(filepath.Join(root, "atlas-manager-installer")); err != nil {
 		return fmt.Errorf("installer_missing")
+	}
+	if _, err := os.Stat(filepath.Join(root, "atlas-manager-host-qualification")); err != nil {
+		return fmt.Errorf("qualification_missing")
+	}
+	if _, err := os.Stat(filepath.Join(root, "atlas-manager-runtime-identity-installer")); err != nil {
+		return fmt.Errorf("identity_installer_missing")
 	}
 	return nil
 }

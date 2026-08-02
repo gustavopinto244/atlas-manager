@@ -1824,3 +1824,17 @@ to create accounts or groups and does not pass prepared-host verification.
 A canonical report proving that the managed application release, unit, and
 template are intact while the service remains disabled and inactive. It does
 not prove application startup or power-effect readiness.
+
+### Runtime identity preparation
+
+The separate operator-run transaction that creates the fixed `atlas-manager`
+user, its primary group, and the empty `atlas-manager-power` group. It starts
+only from completely absent identities, records private managed state, and
+does not create a home, install the application, enroll group membership, or
+enable the service.
+
+### Managed identity preparation state
+
+Root-private version-one evidence containing the fixed identity names,
+host-assigned numeric IDs, source commit, and bundle version. It does not
+adopt or authorize unrelated accounts and is not a removal instruction.

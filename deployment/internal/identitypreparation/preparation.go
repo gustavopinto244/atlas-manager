@@ -1,0 +1,592 @@
+package identitypreparation
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/atlas-manager/atlas-manager/deployment/internal/hostinspection"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identitycommand"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identityreport"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/qualification"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/qualificationreport"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
+)
+
+const Confirmation = "confirm_atlas_manager_runtime_identity_preparation"
+
+type Action string
+
+const (
+	Inspect         Action = "inspect"
+	PrepareDisabled Action = "prepare-disabled"
+	VerifyManaged   Action = "verify-managed"
+)
+
+func ValidAction(value string) bool {
+	return value == string(Inspect) || value == string(PrepareDisabled) || value == string(VerifyManaged)
+}
+
+type Paths struct {
+	BundleRoot         string
+	Passwd             string
+	Group              string
+	Shadow             string
+	GShadow            string
+	Etc                string
+	Usr                string
+	UsrSbin            string
+	Helper             string
+	RuntimeHome        string
+	ApplicationState   string
+	DeploymentRoot     string
+	DeploymentCurrent  string
+	DeploymentReleases string
+	DeploymentUnit     string
+	DeploymentEnable   string
+	DeploymentState    string
+	DeploymentLock     string
+	RuntimeActivity    string
+	Configuration      string
+	StateDirectory     string
+	StateFile          string
+	Journal            string
+	Lock               string
+}
+
+func ProductionPaths(bundleRoot string) Paths {
+	return Paths{
+		BundleRoot: bundleRoot, Passwd: "/etc/passwd", Group: "/etc/group", Shadow: "/etc/shadow", GShadow: "/etc/gshadow", Etc: "/etc", Usr: "/usr", UsrSbin: "/usr/sbin",
+		Helper: "/usr/local/libexec/atlas-manager-power-helper", RuntimeHome: "/var/lib/atlas-manager", ApplicationState: "/var/lib/atlas-manager",
+		DeploymentRoot: "/opt/atlas-manager", DeploymentCurrent: "/opt/atlas-manager/current", DeploymentReleases: "/opt/atlas-manager/releases", DeploymentUnit: "/etc/systemd/system/atlas-manager.service",
+		DeploymentEnable: "/etc/systemd/system/multi-user.target.wants/atlas-manager.service", DeploymentState: "/var/lib/atlas-manager-deployment/state.json", DeploymentLock: "/run/atlas-manager-deployment.lock", RuntimeActivity: "/run/atlas-manager",
+		Configuration: "/etc/atlas-manager/atlas-manager.env", StateDirectory: "/var/lib/atlas-manager-identity-preparation", StateFile: "/var/lib/atlas-manager-identity-preparation/state.json", Journal: "/var/lib/atlas-manager-identity-preparation/transaction.json", Lock: "/run/atlas-manager-identity-preparation.lock",
+	}
+}
+
+type Dependencies struct {
+	EffectiveUID        func() int
+	Platform            func() string
+	Architecture        func() string
+	ReadFile            func(string) ([]byte, error)
+	Exists              func(string) bool
+	HostQualify         func(context.Context) (qualificationreport.Report, error)
+	ValidateTool        func(string) error
+	ValidateDirectory   func(string) error
+	ValidateAccountFile func(string) error
+	ValidatePrivatePath func(string) error
+	BundleMetadata      func(string) (string, string, error)
+	Executor            identitycommand.Executor
+	Now                 func() time.Time
+}
+
+type Preparation struct {
+	paths Paths
+	deps  Dependencies
+}
+
+func New(paths Paths, deps Dependencies) Preparation {
+	if deps.EffectiveUID == nil {
+		deps.EffectiveUID = os.Geteuid
+	}
+	if deps.Platform == nil {
+		deps.Platform = func() string { return runtime.GOOS }
+	}
+	if deps.Architecture == nil {
+		deps.Architecture = func() string { return runtime.GOARCH }
+	}
+	if deps.ReadFile == nil {
+		deps.ReadFile = os.ReadFile
+	}
+	if deps.Exists == nil {
+		deps.Exists = func(path string) bool { _, err := os.Lstat(path); return err == nil }
+	}
+	if deps.ValidateTool == nil {
+		deps.ValidateTool = validateTool
+	}
+	if deps.ValidateAccountFile == nil {
+		deps.ValidateAccountFile = validateAccountFile
+	}
+	if deps.ValidateDirectory == nil {
+		deps.ValidateDirectory = validateDirectory
+	}
+	if deps.ValidatePrivatePath == nil {
+		deps.ValidatePrivatePath = validatePrivatePath
+	}
+	if deps.BundleMetadata == nil {
+		deps.BundleMetadata = bundleMetadata
+	}
+	if deps.Executor == nil {
+		deps.Executor = identitycommand.OSExecutor{}
+	}
+	if deps.Now == nil {
+		deps.Now = time.Now
+	}
+	if deps.HostQualify == nil {
+		deps.HostQualify = func(ctx context.Context) (qualificationreport.Report, error) {
+			hostPaths := hostinspection.ProductionPaths(paths.BundleRoot)
+			report, err := qualification.Run(ctx, qualification.Qualify, hostinspection.New(hostPaths, hostinspection.Dependencies{EffectiveUID: deps.EffectiveUID}))
+			return report, err
+		}
+	}
+	return Preparation{paths: paths, deps: deps}
+}
+
+func (preparation Preparation) Run(ctx context.Context, action Action, confirmation string) (identityreport.Report, error) {
+	if preparation.deps.EffectiveUID() != 0 {
+		return preparation.failureReport(action, preparation.blockedSnapshot("effective_root_required"), "effective_root_required"), nil
+	}
+	if preparation.deps.Platform() != "linux" || preparation.deps.Architecture() != "amd64" {
+		return preparation.failureReport(action, preparation.blockedSnapshot("unsupported_platform"), "unsupported_platform"), nil
+	}
+	snapshot := preparation.inspectSnapshot()
+	if action == Inspect {
+		return preparation.report(action, snapshot), nil
+	}
+	if action == PrepareDisabled {
+		if confirmation != Confirmation {
+			return preparation.failureReport(action, snapshot, "confirmation_invalid"), nil
+		}
+		return preparation.prepare(ctx, snapshot)
+	}
+	if action == VerifyManaged {
+		if snapshot.state != identitystate.ManagedPrepared {
+			return preparation.failureReport(action, snapshot, "identity_state_unmanaged"), nil
+		}
+		if report, err := preparation.dependencyReport(ctx); err != nil || (report.Result != "qualified" && report.Result != "prepared") {
+			return preparation.failureReport(action, snapshot, "qualification_precondition_failed"), nil
+		}
+		return preparation.report(action, snapshot), nil
+	}
+	return identityreport.Report{}, fmt.Errorf("action_invalid")
+}
+
+type snapshot struct {
+	state                                                                            identitystate.State
+	identity                                                                         runtimeidentity.Identity
+	stateValue                                                                       *identitystate.ManagedState
+	journal                                                                          identitystate.Journal
+	journalSeen                                                                      bool
+	identityCheck, stateCheck, journalCheck, deploymentCheck, helperCheck, lockCheck identityreport.Check
+	passwordCheck                                                                    identityreport.Check
+}
+
+func (preparation Preparation) inspectSnapshot() snapshot {
+	value := snapshot{
+		identityCheck:   identityCheck("identity_state_invalid", identityreport.Blocked),
+		stateCheck:      check("managed_state", identityreport.Passed, "managed_state_absent"),
+		journalCheck:    check("transaction", identityreport.Passed, "transaction_absent"),
+		deploymentCheck: check("deployment", identityreport.Passed, "deployment_absent"),
+		helperCheck:     check("helper_installation", identityreport.Passed, "helper_absent"),
+		lockCheck:       check("preparation_lock", identityreport.Passed, "preparation_lock_absent"),
+		passwordCheck:   check("runtime_password", identityreport.NotApplicable, "password_state_not_inspected"),
+	}
+	passwd, passwdErr := preparation.deps.ReadFile(preparation.paths.Passwd)
+	group, groupErr := preparation.deps.ReadFile(preparation.paths.Group)
+	if passwdErr != nil || groupErr != nil || preparation.deps.ValidateDirectory(preparation.paths.Etc) != nil {
+		value.state = identitystate.Unsafe
+		value.identityCheck = identityCheck("account_database_unsafe", identityreport.Blocked)
+	} else {
+		if preparation.deps.ValidateAccountFile(preparation.paths.Passwd) != nil || preparation.deps.ValidateAccountFile(preparation.paths.Group) != nil {
+			value.state = identitystate.Unsafe
+			value.identityCheck = identityCheck("account_database_unsafe", identityreport.Blocked)
+			return value
+		}
+		managed, stateSeen, stateErr := identitystate.ReadState(preparation.paths.StateFile)
+		journal, journalSeen, journalErr := identitystate.ReadJournal(preparation.paths.Journal)
+		value.journal = journal
+		value.journalSeen = journalSeen
+		if stateSeen && preparation.deps.ValidatePrivatePath(preparation.paths.StateFile) != nil {
+			value.state = identitystate.Unsafe
+			value.stateCheck = check("managed_state", identityreport.Blocked, "managed_state_invalid")
+		} else if stateErr != nil {
+			value.state = identitystate.Unsafe
+			value.stateCheck = check("managed_state", identityreport.Blocked, "managed_state_invalid")
+		} else if stateSeen {
+			value.stateValue = managed
+			value.stateCheck = check("managed_state", identityreport.Passed, "managed_state_valid")
+		}
+		if journalSeen && preparation.deps.ValidatePrivatePath(preparation.paths.Journal) != nil {
+			value.state = identitystate.Unsafe
+			value.journalCheck = check("transaction", identityreport.Blocked, "preparation_journal_invalid")
+		} else if journalErr != nil {
+			value.state = identitystate.Unsafe
+			value.journalCheck = check("transaction", identityreport.Blocked, "preparation_journal_invalid")
+		} else if journalSeen {
+			value.journalCheck = check("transaction", identityreport.Blocked, "preparation_journal_present")
+		}
+		value.state, value.identity, _ = identitystate.Classify(string(passwd), string(group), managed, journalSeen)
+		value.identityCheck = identityCheck(string(value.state), identityStatus(value.state))
+		if value.state == identitystate.ManagedPrepared {
+			value.identityCheck = identityCheck("managed_prepared", identityreport.Passed)
+		}
+	}
+	if preparation.deps.Exists(preparation.paths.Lock) {
+		if preparation.deps.ValidatePrivatePath(preparation.paths.Lock) != nil {
+			value.lockCheck = check("preparation_lock", identityreport.Blocked, "preparation_lock_unsafe")
+		} else {
+			value.lockCheck = check("preparation_lock", identityreport.Blocked, "preparation_lock_conflict")
+		}
+	}
+	if preparation.deps.Exists(preparation.paths.Helper) {
+		value.helperCheck = check("helper_installation", identityreport.Blocked, "helper_installation_present")
+	}
+	value.passwordCheck = preparation.inspectPasswordState()
+	if preparation.deps.Exists(preparation.paths.Configuration) || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.deps.Exists(preparation.paths.ApplicationState) || preparation.deps.Exists(preparation.paths.DeploymentCurrent) || preparation.deps.Exists(preparation.paths.DeploymentReleases) || preparation.deps.Exists(preparation.paths.DeploymentUnit) || preparation.deps.Exists(preparation.paths.DeploymentEnable) || preparation.deps.Exists(preparation.paths.DeploymentState) || preparation.deps.Exists(preparation.paths.DeploymentLock) || preparation.deps.Exists(preparation.paths.RuntimeActivity) {
+		value.deploymentCheck = check("deployment", identityreport.Blocked, "deployment_present")
+	}
+	return value
+}
+
+func (preparation Preparation) dependencyReport(ctx context.Context) (qualificationreport.Report, error) {
+	return preparation.deps.HostQualify(ctx)
+}
+
+func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (identityreport.Report, error) {
+	if snapshot.state != identitystate.Absent || snapshot.journalSeen || snapshot.passwordCheck.Status == identityreport.Blocked || snapshot.deploymentCheck.Status == identityreport.Blocked || snapshot.helperCheck.Status == identityreport.Blocked || snapshot.lockCheck.Status == identityreport.Blocked {
+		return preparation.failureReport(PrepareDisabled, snapshot, "qualification_precondition_failed"), nil
+	}
+	qualificationResult, err := preparation.dependencyReport(ctx)
+	if err != nil || qualificationResult.Result != "preparation_required" {
+		return preparation.failureReport(PrepareDisabled, snapshot, "qualification_precondition_failed"), nil
+	}
+	for _, tool := range []string{"/usr/sbin/groupadd", "/usr/sbin/useradd", "/usr/sbin/userdel", "/usr/sbin/groupdel"} {
+		if err := preparation.deps.ValidateTool(tool); err != nil {
+			return preparation.failureReport(PrepareDisabled, snapshot, "account_tool_unsafe"), nil
+		}
+	}
+	lock, err := preparation.acquireLock()
+	if err != nil {
+		return preparation.failureReport(PrepareDisabled, snapshot, "preparation_lock_conflict"), nil
+	}
+	defer preparation.releaseLock(lock)
+	current := preparation.inspectSnapshot()
+	if current.state != identitystate.Absent || current.journalSeen || current.passwordCheck.Status == identityreport.Blocked || current.deploymentCheck.Status == identityreport.Blocked || current.helperCheck.Status == identityreport.Blocked {
+		return preparation.failureReport(PrepareDisabled, current, "identity_state_not_absent"), nil
+	}
+	commit, version, metadataErr := preparation.deps.BundleMetadata(preparation.paths.BundleRoot)
+	if metadataErr != nil {
+		return preparation.failureReport(PrepareDisabled, current, "bundle_invalid"), nil
+	}
+	journal := identitystate.Journal{SchemaVersion: identitystate.SchemaVersion, Status: "in_progress", Resources: []string{identitystate.ResourcePrimaryGroup, identitystate.ResourceHelperGroup, identitystate.ResourceRuntimeUser}, SourceCommit: commit, BundleVersion: version}
+	if err := identitystate.WriteJournal(preparation.paths.StateDirectory, preparation.paths.Journal, journal); err != nil {
+		return preparation.failureReport(PrepareDisabled, current, "preparation_journal_write_failed"), nil
+	}
+	createdPrimary, createdHelper, createdUser := false, false, false
+	primaryID, helperID := 0, 0
+	createdIdentity := runtimeidentity.Identity{}
+	fail := func(code string) (identityreport.Report, error) {
+		if createdUser || createdHelper || createdPrimary {
+			if preparation.rollback(ctx, createdUser, createdHelper, createdPrimary, createdIdentity, primaryID, helperID) {
+				_ = identitystate.RemoveJournal(preparation.paths.Journal)
+				return preparation.failureReport(PrepareDisabled, current, "preparation_failed_rolled_back"), nil
+			}
+			return preparation.failureReport(PrepareDisabled, current, "preparation_failed_recovery_required"), nil
+		}
+		return preparation.failureReport(PrepareDisabled, current, code), nil
+	}
+	if result := preparation.deps.Executor.Run(ctx, identitycommand.PrimaryGroupTool, identitycommand.PrimaryGroupArguments()); result.ExitCode != 0 {
+		return fail("primary_group_creation_failed")
+	}
+	createdPrimary = true
+	primaryID, _ = preparation.groupID(identitystate.PrimaryGroup)
+	if !preparation.verifyGroup(identitystate.PrimaryGroup, false) || !preparation.updateJournal(&journal, identitystate.ResourcePrimaryGroup) {
+		return fail("primary_group_verification_failed")
+	}
+	if result := preparation.deps.Executor.Run(ctx, identitycommand.HelperGroupTool, identitycommand.HelperGroupArguments()); result.ExitCode != 0 {
+		return fail("helper_group_creation_failed")
+	}
+	createdHelper = true
+	helperID, _ = preparation.groupID(identitystate.HelperGroup)
+	if !preparation.verifyGroup(identitystate.HelperGroup, false) || !preparation.updateJournal(&journal, identitystate.ResourceHelperGroup) {
+		return fail("helper_group_verification_failed")
+	}
+	if result := preparation.deps.Executor.Run(ctx, identitycommand.UserTool, identitycommand.UserArguments()); result.ExitCode != 0 {
+		return fail("runtime_user_creation_failed")
+	}
+	createdUser = true
+	identity, verifyErr := preparation.currentIdentity()
+	createdIdentity = identity
+	passwordCheck := preparation.inspectPasswordState()
+	if verifyErr != nil || passwordCheck.Status == identityreport.Blocked || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.deps.Exists(filepath.Join("/var/mail", runtimeidentity.RuntimeUser)) || preparation.deps.Exists(filepath.Join("/var/spool/mail", runtimeidentity.RuntimeUser)) || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
+		return fail("runtime_user_verification_failed")
+	}
+	state := identitystate.ManagedState{SchemaVersion: identitystate.SchemaVersion, Status: "prepared", RuntimeUser: identitystate.Resource{Name: identitystate.RuntimeUser, ID: identity.UserID}, PrimaryGroup: identitystate.GroupResource{Name: identitystate.PrimaryGroup, ID: identity.PrimaryGroupID}, HelperGroup: identitystate.GroupResource{Name: identitystate.HelperGroup, ID: identity.HelperGroupID}, SourceCommit: commit, BundleVersion: version}
+	if err := identitystate.WriteState(preparation.paths.StateDirectory, preparation.paths.StateFile, state); err != nil {
+		return fail("managed_state_write_failed")
+	}
+	if err := identitystate.RemoveJournal(preparation.paths.Journal); err != nil {
+		return preparation.failureReport(PrepareDisabled, preparation.inspectSnapshot(), "preparation_failed_recovery_required"), nil
+	}
+	result := preparation.inspectSnapshot()
+	report := preparation.report(PrepareDisabled, result)
+	report.Result = "prepared"
+	return report, nil
+}
+
+func (preparation Preparation) rollback(ctx context.Context, user, helper, primary bool, expected runtimeidentity.Identity, primaryID, helperID int) bool {
+	if user {
+		identity, err := preparation.currentIdentity()
+		if err != nil || identity != expected || preparation.deps.Executor.Run(ctx, identitycommand.UserDeleteTool, identitycommand.UserDeleteArguments()).ExitCode != 0 {
+			return false
+		}
+	}
+	if helper {
+		id, ok := preparation.groupID(identitystate.HelperGroup)
+		if !ok || id != helperID || !preparation.verifyGroup(identitystate.HelperGroup, false) || preparation.deps.Executor.Run(ctx, identitycommand.GroupDeleteTool, identitycommand.HelperGroupDeleteArguments()).ExitCode != 0 {
+			return false
+		}
+	}
+	if primary {
+		id, ok := preparation.groupID(identitystate.PrimaryGroup)
+		if !ok || id != primaryID || !preparation.verifyGroup(identitystate.PrimaryGroup, false) || preparation.deps.Executor.Run(ctx, identitycommand.GroupDeleteTool, identitycommand.PrimaryGroupDeleteArguments()).ExitCode != 0 {
+			return false
+		}
+	}
+	passwd, passwdErr := preparation.deps.ReadFile(preparation.paths.Passwd)
+	group, groupErr := preparation.deps.ReadFile(preparation.paths.Group)
+	if passwdErr != nil || groupErr != nil {
+		return false
+	}
+	state, _, _ := identitystate.Classify(string(passwd), string(group), nil, false)
+	return state == identitystate.Absent
+}
+
+func (preparation Preparation) updateJournal(journal *identitystate.Journal, step string) bool {
+	journal.Steps = append(journal.Steps, step)
+	return identitystate.WriteJournal(preparation.paths.StateDirectory, preparation.paths.Journal, *journal) == nil
+}
+
+func (preparation Preparation) currentIdentity() (runtimeidentity.Identity, error) {
+	passwd, passwdErr := preparation.deps.ReadFile(preparation.paths.Passwd)
+	group, groupErr := preparation.deps.ReadFile(preparation.paths.Group)
+	if passwdErr != nil || groupErr != nil {
+		return runtimeidentity.Identity{}, fmt.Errorf("account_database_unsafe")
+	}
+	state, identity, err := runtimeidentity.ClassifyAccountContract(string(passwd), string(group))
+	if err != nil || state != runtimeidentity.Ready || !preparation.verifyGroup(identitystate.HelperGroup, false) {
+		return runtimeidentity.Identity{}, fmt.Errorf("runtime_user_verification_failed")
+	}
+	return identity, nil
+}
+
+func (preparation Preparation) verifyGroup(name string, requireMembers bool) bool {
+	_, ok := preparation.groupID(name)
+	if !ok {
+		return false
+	}
+	data, err := preparation.deps.ReadFile(preparation.paths.Group)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) != 4 || fields[0] != name {
+			continue
+		}
+		if !requireMembers && fields[3] != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func (preparation Preparation) groupID(name string) (int, bool) {
+	data, err := preparation.deps.ReadFile(preparation.paths.Group)
+	if err != nil {
+		return 0, false
+	}
+	count := 0
+	value := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) != 4 || fields[0] != name {
+			continue
+		}
+		count++
+		parsed, parseErr := strconv.Atoi(fields[2])
+		if parseErr != nil || parsed <= 0 || (len(fields[2]) > 1 && fields[2][0] == '0') {
+			return 0, false
+		}
+		value = parsed
+	}
+	return value, count == 1 && value > 0
+}
+
+func (preparation Preparation) acquireLock() (*os.File, error) {
+	file, err := os.OpenFile(preparation.paths.Lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		_ = os.Remove(preparation.paths.Lock)
+		return nil, err
+	}
+	return file, nil
+}
+
+func (preparation Preparation) releaseLock(file *os.File) {
+	if file == nil {
+		return
+	}
+	_ = file.Sync()
+	_ = file.Close()
+	_ = os.Remove(preparation.paths.Lock)
+}
+
+func (preparation Preparation) report(action Action, snapshot snapshot) identityreport.Report {
+	result := "blocked"
+	switch snapshot.state {
+	case identitystate.Absent:
+		result = "absent"
+	case identitystate.ManagedPrepared:
+		result = "managed_prepared"
+	case identitystate.ExactUnmanaged:
+		result = "exact_unmanaged"
+	case identitystate.Interrupted:
+		result = "interrupted"
+	}
+	if result == string(identitystate.Absent) && action == VerifyManaged {
+		result = "blocked"
+	}
+	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: snapshot.journalCheck, Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck}}
+}
+
+func (preparation Preparation) failureReport(action Action, snapshot snapshot, code string) identityreport.Report {
+	result := "blocked"
+	if code == "preparation_failed_rolled_back" || code == "preparation_failed_recovery_required" {
+		result = code
+	}
+	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: check("transaction", identityreport.Blocked, code), Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck}}
+}
+
+func identityCheck(code string, status identityreport.Status) identityreport.Check {
+	return check("identity_state", status, code)
+}
+func identityStatus(state identitystate.State) identityreport.Status {
+	if state == identitystate.Absent {
+		return identityreport.Warning
+	}
+	if state == identitystate.ManagedPrepared {
+		return identityreport.Passed
+	}
+	return identityreport.Blocked
+}
+func check(name string, status identityreport.Status, code string) identityreport.Check {
+	return identityreport.Check{Name: name, Status: status, Code: code}
+}
+
+func (preparation Preparation) inspectPasswordState() identityreport.Check {
+	if !preparation.deps.Exists(preparation.paths.Shadow) {
+		return check("runtime_password", identityreport.NotApplicable, "password_database_absent")
+	}
+	if err := preparation.deps.ValidateAccountFile(preparation.paths.Shadow); err != nil {
+		return check("runtime_password", identityreport.Blocked, "account_database_unsafe")
+	}
+	data, err := preparation.deps.ReadFile(preparation.paths.Shadow)
+	if err != nil {
+		return check("runtime_password", identityreport.Blocked, "account_database_unsafe")
+	}
+	count := 0
+	locked := false
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) == 0 || fields[0] != runtimeidentity.RuntimeUser {
+			continue
+		}
+		count++
+		if len(fields) >= 2 && (strings.HasPrefix(fields[1], "!") || strings.HasPrefix(fields[1], "*")) {
+			locked = true
+		}
+	}
+	if count != 1 || !locked {
+		return check("runtime_password", identityreport.Blocked, "runtime_password_unlocked")
+	}
+	return check("runtime_password", identityreport.Passed, "runtime_password_locked")
+}
+
+func (preparation Preparation) blockedSnapshot(code string) snapshot {
+	return snapshot{
+		state:           identitystate.Unsafe,
+		identityCheck:   identityCheck(code, identityreport.Blocked),
+		stateCheck:      check("managed_state", identityreport.NotApplicable, "managed_state_not_inspected"),
+		journalCheck:    check("transaction", identityreport.NotApplicable, "transaction_not_inspected"),
+		deploymentCheck: check("deployment", identityreport.NotApplicable, "deployment_not_inspected"),
+		helperCheck:     check("helper_installation", identityreport.NotApplicable, "helper_not_inspected"),
+		lockCheck:       check("preparation_lock", identityreport.NotApplicable, "lock_not_inspected"),
+		passwordCheck:   check("runtime_password", identityreport.NotApplicable, "password_not_inspected"),
+	}
+}
+
+func validateTool(path string) error {
+	for _, parent := range []string{"/usr", "/usr/sbin"} {
+		info, err := os.Lstat(parent)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 || fileUID(info) != 0 {
+			return fmt.Errorf("account_tool_unsafe")
+		}
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o111 == 0 || info.Mode().Perm()&0o022 != 0 || fileUID(info) != 0 {
+		return fmt.Errorf("account_tool_unsafe")
+	}
+	return nil
+}
+
+func validateAccountFile(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 || fileUID(info) != 0 || fileNlink(info) != 1 || info.Size() > 1<<20 {
+		return fmt.Errorf("account_database_unsafe")
+	}
+	return nil
+}
+
+func validateDirectory(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 || fileUID(info) != 0 {
+		return fmt.Errorf("account_database_unsafe")
+	}
+	return nil
+}
+
+func validatePrivatePath(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o600 || fileUID(info) != 0 || fileNlink(info) != 1 {
+		return fmt.Errorf("private_path_unsafe")
+	}
+	return nil
+}
+
+func bundleMetadata(root string) (string, string, error) {
+	data, err := os.ReadFile(filepath.Join(root, "MANIFEST.json"))
+	if err != nil {
+		return "", "", err
+	}
+	value, err := manifest.Decode(data)
+	if err != nil {
+		return "", "", err
+	}
+	return value.SourceCommit, value.Version, nil
+}
+
+func fileUID(info os.FileInfo) uint32 {
+	if stats, ok := info.Sys().(*syscall.Stat_t); ok {
+		return stats.Uid
+	}
+	return ^uint32(0)
+}
+
+func fileNlink(info os.FileInfo) uint64 {
+	if stats, ok := info.Sys().(*syscall.Stat_t); ok {
+		return uint64(stats.Nlink)
+	}
+	return 0
+}

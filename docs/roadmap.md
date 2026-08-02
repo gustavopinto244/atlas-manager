@@ -690,3 +690,21 @@ Deferred:
 - service enablement and startup;
 - power-helper installation and qualification;
 - real wake and shutdown certification.
+
+## Issue #274 — Operator-controlled runtime identity preparation
+
+Delivered:
+
+- fixed, operator-confirmed creation of the `atlas-manager` user and groups;
+- private managed preparation state and synchronized transaction journal;
+- same-process, bounded rollback for resources created by a failed attempt;
+- deterministic `inspect`, `prepare-disabled`, and `verify-managed` reports;
+- bundle inclusion without service or power activation.
+
+Deferred:
+
+- physical identity preparation;
+- disabled application installation drill;
+- service enablement and startup;
+- helper installation and qualification;
+- Linux power activation and real-effect certification.

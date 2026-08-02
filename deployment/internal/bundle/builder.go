@@ -26,17 +26,18 @@ const (
 )
 
 type Config struct {
-	Version           string
-	SourceCommit      string
-	SourceDateEpoch   int64
-	SourceRoot        string
-	OutputDir         string
-	NodeVersion       string
-	NPMVersion        string
-	GoVersion         string
-	InstallerPath     string
-	QualificationPath string
-	Runner            Runner
+	Version               string
+	SourceCommit          string
+	SourceDateEpoch       int64
+	SourceRoot            string
+	OutputDir             string
+	NodeVersion           string
+	NPMVersion            string
+	GoVersion             string
+	InstallerPath         string
+	QualificationPath     string
+	IdentityInstallerPath string
+	Runner                Runner
 }
 
 type Runner interface {
@@ -161,7 +162,7 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
 	paths = append(paths, metadataPaths...)
 	files, err := manifest.Inventory(root, paths)
 	if err != nil {
@@ -299,6 +300,12 @@ func assemble(root, buildRoot, runtimeRoot string, config Config) error {
 		return fmt.Errorf("qualification_missing")
 	}
 	if err := copyFile(config.QualificationPath, filepath.Join(root, "atlas-manager-host-qualification"), 0o755); err != nil {
+		return err
+	}
+	if config.IdentityInstallerPath == "" {
+		return fmt.Errorf("identity_installer_missing")
+	}
+	if err := copyFile(config.IdentityInstallerPath, filepath.Join(root, "atlas-manager-runtime-identity-installer"), 0o755); err != nil {
 		return err
 	}
 	for _, name := range []string{"package.json", "package-lock.json"} {

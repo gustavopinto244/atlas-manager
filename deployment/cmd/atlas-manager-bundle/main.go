@@ -40,8 +40,9 @@ func main() {
 		Version: *version, SourceCommit: *commit, SourceDateEpoch: parsedEpoch,
 		SourceRoot: *source, OutputDir: *output, NodeVersion: *nodeVersion,
 		NPMVersion: *npmVersion, GoVersion: *goVersion,
-		InstallerPath:     filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
-		QualificationPath: filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),
+		InstallerPath:         filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
+		QualificationPath:     filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),
+		IdentityInstallerPath: filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-identity-installer"),
 	})
 	if err != nil {
 		fail(errorCode(err))
