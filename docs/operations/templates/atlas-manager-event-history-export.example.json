@@ -1,0 +1,5 @@
+{
+  "fromSequence": 1,
+  "throughSequence": 100,
+  "confirmation": "confirm_administrative_event_history_export"
+}

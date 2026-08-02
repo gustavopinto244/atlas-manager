@@ -9,3 +9,8 @@ Operators must inspect the bounded project-owned state and decide the next
 reviewed action. There is no force, repair, adopt, restore, or automatic rerun
 action in this milestone. Unknown candidate and artifact directories are never
 deleted automatically.
+
+Backup-run metadata remains separate from administrative event history. The
+event-history v2 chain, rotation journal, retention anchors, and canonical
+exports are operated through the event-history runbooks; they are not a
+backup-run database and are not automatically repaired.

@@ -11,7 +11,15 @@ export interface AdministrativeEventHistoryQuery {
     | "request_machine_shutdown"
     | "prepare_machine_shutdown_occurrence"
     | "execute_machine_shutdown_occurrence"
-    | "run_machine_power_scheduler_tick";
+    | "run_machine_power_scheduler_tick"
+    | "verify_event_history_integrity"
+    | "rotate_administrative_event_history"
+    | "update_administrative_event_history_retention"
+    | "prune_administrative_event_history"
+    | "create_administrative_event_history_export"
+    | "prune_administrative_event_history_exports"
+    | "recover_administrative_event_history_stale_lock"
+    | "migrate_administrative_event_history_v1";
   readonly status?: "started" | "succeeded" | "rejected" | "failed";
   readonly attemptId?: string;
   readonly occurredFrom?: string;
@@ -89,6 +97,14 @@ export function createAdministrativeEventHistoryQuery(
     "prepare_machine_shutdown_occurrence",
     "execute_machine_shutdown_occurrence",
     "run_machine_power_scheduler_tick",
+    "verify_event_history_integrity",
+    "rotate_administrative_event_history",
+    "update_administrative_event_history_retention",
+    "prune_administrative_event_history",
+    "create_administrative_event_history_export",
+    "prune_administrative_event_history_exports",
+    "recover_administrative_event_history_stale_lock",
+    "migrate_administrative_event_history_v1",
   ];
   const operation = record["operation"];
   if (operation !== undefined && !operations.includes(operation as string))

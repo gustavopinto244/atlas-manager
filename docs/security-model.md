@@ -1320,3 +1320,19 @@ artifacts are never adopted or deleted. Shutdown readiness consumes only
 `ready`, `active`, `interrupted`, or `unavailable` and never starts, cancels, or
 prunes a backup. Restore, remote storage, logical database backup, and physical
 execution are not enabled by v0.7.
+
+## Event-history operational security boundary
+
+ADR-024 keeps administrative history separate from application logs and backup
+run metadata. The fixed v2 store uses restrictive private files, an atomic
+cross-process writer lock, canonical record and segment SHA-256 chains, and
+retention anchors. Unknown files, broken chains, interrupted transactions,
+unsafe metadata, and stale locks fail closed. No automatic repair, arbitrary
+path selection, arbitrary deletion, or silent truncation exists.
+
+Canonical exports are protected and bounded. They contain only explicitly
+mapped safe event fields and never JWTs, confirmations, environment values,
+private paths, process identifiers, or raw operating-system errors. SHA-256
+provides deterministic integrity evidence only; it does not provide external
+authenticity, non-repudiation, trusted timestamping, or third-party
+attestation.

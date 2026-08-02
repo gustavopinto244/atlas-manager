@@ -31,6 +31,7 @@ import type { AdministrativeDashboardRouteDependencies } from "./administrative-
 import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
 import type { BackupManagementCapabilities } from "../backup-management/composition/create-backup-management.js";
 import type { AdministrativeBackupsRouteDependencies } from "./administrative-backups-route.js";
+import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
@@ -41,6 +42,7 @@ export interface AdministrativeRuntime {
   readonly overview?: AdministrativeOverviewRouteDependencies;
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
   readonly backups?: AdministrativeBackupsRouteDependencies;
+  readonly eventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
 }
 
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
@@ -57,9 +59,13 @@ export function createAdministrativeRuntime(
   compositionDependencies: AdministrativeRuntimeCompositionDependencies = {},
 ): AdministrativeRuntime {
   const filePath = config.administrativeEventHistoryFilePath;
+  const directoryPath = config.administrativeEventHistoryDirectoryPath;
   const roleAssignments = config.administrativeRoleAssignments;
   const cloudflareAccess = config.cloudflareAccess;
-  if (filePath === undefined || roleAssignments === undefined)
+  if (
+    (filePath === undefined && directoryPath === undefined) ||
+    roleAssignments === undefined
+  )
     throw new Error("Administrative configuration is incomplete");
   if (cloudflareAccess === undefined)
     throw new Error("Cloudflare Access configuration is incomplete");
@@ -68,7 +74,10 @@ export function createAdministrativeRuntime(
     now: () => new Date(),
   });
   const eventHistory =
-    compositionDependencies.eventHistory ?? createEventHistory({ filePath });
+    compositionDependencies.eventHistory ??
+    (directoryPath === undefined
+      ? createEventHistory({ filePath: filePath! })
+      : createEventHistory({ directoryPath }));
   const roleAssignmentReader = new InMemoryAdministrativeRoleAssignmentReader({
     assignments: roleAssignments.map((assignment) => ({
       principalId: assignment.principal.principalId,
@@ -96,6 +105,8 @@ export function createAdministrativeRuntime(
   const admission = new FixedAdministrativeRequestAdmission(clock);
   const powerOperationGate = new FixedAdministrativePowerOperationGate();
   const serviceMutationGate = new FixedAdministrativePowerOperationGate();
+  const eventHistoryMaintenanceGate =
+    new FixedAdministrativePowerOperationGate();
 
   const createProtected = (
     reader: CloudflareAccessAssertionReader,
@@ -115,6 +126,9 @@ export function createAdministrativeRuntime(
       ...(compositionDependencies.backupManagement === undefined
         ? {}
         : { backupManagement: compositionDependencies.backupManagement }),
+      ...(eventHistory.operations === undefined
+        ? {}
+        : { eventHistoryOperations: eventHistory.operations }),
       ...(confirmationReader === undefined
         ? {}
         : { machineShutdownConfirmationReader: confirmationReader }),
@@ -215,6 +229,17 @@ export function createAdministrativeRuntime(
           backups: Object.freeze({
             admission,
             mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...(config.administrativeEventHistoryOperationsHttpEnabled === true
+      ? {
+          eventHistoryOperations: Object.freeze({
+            admission,
+            mutationGate: eventHistoryMaintenanceGate,
             createProtectedAdministration: (
               reader: CloudflareAccessAssertionReader,
             ) => createProtected(reader),

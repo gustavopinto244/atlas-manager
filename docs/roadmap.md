@@ -217,6 +217,23 @@ This milestone does not include:
 - schema management;
 - logical database backup or restoration.
 
+## v0.8 — Event history and auditing (completed)
+
+Issue #283 completes segmented administrative history with deterministic
+record and segment integrity chains, cross-process writer coordination,
+operator-controlled v1 migration, bounded rotation, retention anchors,
+canonical protected exports, dashboard visibility, and sandbox rehearsal.
+
+This milestone does not provide external authenticity, remote archival, SIEM
+delivery, restore, physical deployment, or real power effects.
+
+## v0.7 — Backup orchestration (completed)
+
+Issue #281 completes registered backup targets, protected manual and scheduled
+execution, persistent run metadata, atomic local artifacts, checksums,
+retention, shutdown readiness, and dashboard visibility. Restoration, remote
+replication, logical database backup, and physical execution remain deferred.
+
 ## v0.6 — Power management (active)
 
 ### Objective
@@ -382,7 +399,7 @@ application resources.
 
 Engine-specific logical database backups remain outside the initial scope.
 
-## v0.8 — Event history and auditing
+## v0.8 — Event history and auditing (completed)
 
 ### Objective
 
@@ -408,17 +425,19 @@ permissions, audited authorization decisions, protected power and event-history
 facades, and verified actor propagation. It does not complete production
 authentication or protected delivery.
 
-The default remains in memory for non-HTTP compositions and file persistence
-is explicit with fixed line and file bounds. Cross-process locking,
-cryptographic tamper evidence, retention, and rotation remain future work.
+The default remains in memory for non-HTTP compositions. The operational
+profile uses the fixed version-two segmented store with bounded limits,
+integrity verification, retention anchors, and protected exports.
 Issue #240 delivers the first protected, authenticated, and authorization-
 audited event-history HTTP read with bounded cursor filters and safe response
-mapping. v0.8 remains active.
+mapping. Issue #283 completes the operational lifecycle and protected
+maintenance delivery.
 
-### Remaining v0.8 scope
+### Deferred beyond v0.8
 
-- operational retention and export design;
-- tamper-evidence and multi-process persistence design when required.
+- remote audit replication;
+- external attestation, trusted timestamps, and SIEM delivery;
+- physical deployment and real power effects.
 
 Events must not store credentials, tokens, private keys, or other secrets.
 

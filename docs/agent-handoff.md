@@ -1,5 +1,36 @@
 # Agent handoff
 
+## Current work — Issue #283
+
+The active branch is:
+
+```text
+feat/event-history-operational-lifecycle-integrity-export
+```
+
+The authoritative local baseline is:
+
+```text
+fa94db38ade054f72637c238b8f8c63bbea41702
+```
+
+Issue #283 adds ADR-024 and a v2 segmented administrative event-history
+boundary: canonical SHA-256 record and segment chains, bounded rotation,
+cross-process writer coordination with stale-lock classification, operator-
+controlled v1 migration, retention anchors, protected canonical exports, and
+operational HTTP contracts. The v1 file remains migration input and is not
+used simultaneously with the v2 profile.
+
+The v2 store is sandbox-tested with temporary roots and injected clocks. It
+does not access real event data, arbitrary paths, systemd, accounts, Cloudflare,
+the helper, RTC, D-Bus, or power effects. Integrity failures, interrupted
+transactions, unknown files, and unsafe lock state fail closed; automatic
+repair is not implemented. Validation completed locally: Node format, lint,
+typecheck, build, 2,643 serialized tests with 3 intentional skips, production
+audit with zero vulnerabilities, deployment Go validation, power-helper Go
+validation, and deterministic bundle inspection/reproducibility. No commit,
+push, merge, or Pull Request was performed.
+
 ## Current work — Issue #280
 
 The active branch is:

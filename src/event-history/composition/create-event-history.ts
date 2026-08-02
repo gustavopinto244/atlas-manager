@@ -11,20 +11,29 @@ import {
   type FileAdministrativeEventHistoryDependencies,
 } from "../infrastructure/file-administrative-event-history.js";
 import { InMemoryAdministrativeEventHistory } from "../infrastructure/in-memory-administrative-event-history.js";
+import {
+  FileSegmentedAdministrativeEventHistory,
+  type FileSegmentedAdministrativeEventHistoryDependencies,
+} from "../infrastructure/file-segmented-administrative-event-history.js";
+import type { AdministrativeEventHistoryOperations } from "../application/ports/administrative-event-history-operations.js";
 
 export interface EventHistoryCompositionOverrides {
   readonly filePath?: string;
+  readonly directoryPath?: string;
   readonly persistence?: unknown;
   readonly recorder?: AdministrativeEventRecorder;
   readonly reader?: AdministrativeEventHistoryReader;
   readonly readiness?: AdministrativeEventHistoryReadinessReader;
   readonly fileDependencies?: FileAdministrativeEventHistoryDependencies;
+  readonly directoryDependencies?: FileSegmentedAdministrativeEventHistoryDependencies;
+  readonly operations?: AdministrativeEventHistoryOperations;
 }
 
 export interface EventHistoryCapabilities {
   readonly recordAdministrativeEvent: RecordAdministrativeEvent;
   readonly getAdministrativeEventHistory: GetAdministrativeEventHistory;
   readonly checkAdministrativeEventHistoryReadiness: CheckAdministrativeEventHistoryReadiness;
+  readonly operations?: AdministrativeEventHistoryOperations;
 }
 
 export function createEventHistory(
@@ -33,25 +42,44 @@ export function createEventHistory(
   const keys = Object.keys(overrides);
   const allowed = [
     "filePath",
+    "directoryPath",
     "persistence",
     "recorder",
     "reader",
     "readiness",
     "fileDependencies",
+    "directoryDependencies",
+    "operations",
   ];
   if (keys.some((key) => !allowed.includes(key)))
     throw new EventHistoryCompositionError("invalid_configuration");
-  if (overrides.filePath !== undefined && overrides.persistence !== undefined)
+  if (
+    (overrides.filePath !== undefined ||
+      overrides.directoryPath !== undefined) &&
+    ((overrides.filePath !== undefined &&
+      overrides.directoryPath !== undefined) ||
+      overrides.persistence !== undefined)
+  )
     throw new EventHistoryCompositionError("invalid_configuration");
   let recorder: AdministrativeEventRecorder;
   let reader: AdministrativeEventHistoryReader;
   let readiness: AdministrativeEventHistoryReadinessReader;
+  let operations = overrides.operations;
   if (overrides.recorder || overrides.reader || overrides.readiness) {
     if (!overrides.recorder || !overrides.reader || !overrides.readiness)
       throw new EventHistoryCompositionError("invalid_configuration");
     recorder = overrides.recorder;
     reader = overrides.reader;
     readiness = overrides.readiness;
+  } else if (overrides.directoryPath !== undefined) {
+    const store = new FileSegmentedAdministrativeEventHistory(
+      overrides.directoryPath,
+      overrides.directoryDependencies,
+    );
+    recorder = store;
+    reader = store;
+    readiness = store;
+    operations = store;
   } else if (
     overrides.filePath !== undefined ||
     overrides.persistence !== undefined
@@ -76,6 +104,7 @@ export function createEventHistory(
     getAdministrativeEventHistory: new GetAdministrativeEventHistory(reader),
     checkAdministrativeEventHistoryReadiness:
       new CheckAdministrativeEventHistoryReadiness(readiness),
+    ...(operations === undefined ? {} : { operations }),
   });
 }
 

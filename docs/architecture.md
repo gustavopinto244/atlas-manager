@@ -187,7 +187,15 @@ history fails closed before preparation, claims, wake mutation, or shutdown.
 Terminal audit failures preserve completed effects and return focused
 partial-effect errors without rollback or retry. The store is append-only
 within one process instance; cross-process locking and tamper-proof storage are
-not claimed.
+not claimed. Operational v2 persistence adds a fixed atomic cross-process
+writer lock, bounded segments, canonical record and segment SHA-256 chains,
+retention anchors, and protected exports. These provide deterministic
+integrity evidence, not external authenticity or non-repudiation.
+
+Rotation, retention, migration, and export use private transaction evidence.
+Broken chains, unknown files, unsafe metadata, interrupted maintenance, and
+stale locks fail closed. No automatic repair, arbitrary path selection, or
+silent truncation is available.
 
 ### Administrative access-control boundary
 

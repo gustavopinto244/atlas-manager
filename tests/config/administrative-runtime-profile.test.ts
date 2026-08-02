@@ -32,6 +32,19 @@ const input = JSON.stringify({
       },
     },
   ],
+  eventHistoryOperations: {
+    enabled: true,
+    segment: { maxEvents: 10000, maxBytes: 16777216 },
+    retention: {
+      automaticPruneEnabled: false,
+      segments: {
+        minSealedSegments: 2,
+        maxSealedSegments: 100,
+        maxSealedSegmentAgeDays: 365,
+      },
+      exports: { minExports: 1, maxExports: 32, maxExportAgeDays: 90 },
+    },
+  },
 });
 
 describe("mock administrative runtime profile", () => {

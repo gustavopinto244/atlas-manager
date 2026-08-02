@@ -21,16 +21,61 @@ const (
 const ExampleInput = `{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"replace-with-access-application-audience","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]}],"registeredServices":[],"backupSchedulerEnabled":false,"backupTargets":[{"id":"example-backup","displayName":"Example backup","kind":"mock","schedule":{"mode":"manual"},"retention":{"keepLastSuccessful":7},"limits":{"maxFiles":1000,"maxTotalBytes":1073741824,"maxFileBytes":268435456,"maxDepth":16,"maxRelativePathBytes":4096}}]}
 `
 
-func ExampleInputBytes() []byte { return []byte(ExampleInput) }
+func ExampleInputBytes() []byte {
+	var input map[string]any
+	if err := json.Unmarshal([]byte(ExampleInput), &input); err != nil {
+		panic(err)
+	}
+	input["eventHistoryOperations"] = map[string]any{
+		"enabled": true,
+		"segment": map[string]any{"maxEvents": 10000, "maxBytes": 16777216},
+		"retention": map[string]any{
+			"automaticPruneEnabled": false,
+			"segments":              map[string]any{"minSealedSegments": 2, "maxSealedSegments": 100, "maxSealedSegmentAgeDays": 365},
+			"exports":               map[string]any{"minExports": 1, "maxExports": 32, "maxExportAgeDays": 90},
+		},
+	}
+	value, err := json.Marshal(input)
+	if err != nil {
+		panic(err)
+	}
+	return append(value, '\n')
+}
 
 type Input struct {
-	SchemaVersion          int              `json:"schemaVersion"`
-	CloudflareTeam         string           `json:"cloudflareTeamName"`
-	CloudflareAudience     string           `json:"cloudflareAudience"`
-	RoleAssignments        []RoleAssignment `json:"roleAssignments"`
-	RegisteredServices     json.RawMessage  `json:"registeredServices"`
-	BackupSchedulerEnabled bool             `json:"backupSchedulerEnabled"`
-	BackupTargets          json.RawMessage  `json:"backupTargets"`
+	SchemaVersion          int                    `json:"schemaVersion"`
+	CloudflareTeam         string                 `json:"cloudflareTeamName"`
+	CloudflareAudience     string                 `json:"cloudflareAudience"`
+	RoleAssignments        []RoleAssignment       `json:"roleAssignments"`
+	RegisteredServices     json.RawMessage        `json:"registeredServices"`
+	BackupSchedulerEnabled bool                   `json:"backupSchedulerEnabled"`
+	BackupTargets          json.RawMessage        `json:"backupTargets"`
+	EventHistoryOperations EventHistoryOperations `json:"eventHistoryOperations"`
+}
+
+type EventHistoryOperations struct {
+	Enabled   bool                  `json:"enabled"`
+	Segment   EventHistorySegment   `json:"segment"`
+	Retention EventHistoryRetention `json:"retention"`
+}
+type EventHistorySegment struct {
+	MaxEvents int `json:"maxEvents"`
+	MaxBytes  int `json:"maxBytes"`
+}
+type EventHistoryRetention struct {
+	AutomaticPruneEnabled bool                         `json:"automaticPruneEnabled"`
+	Segments              EventHistorySegmentRetention `json:"segments"`
+	Exports               EventHistoryExportRetention  `json:"exports"`
+}
+type EventHistorySegmentRetention struct {
+	MinSealedSegments       int `json:"minSealedSegments"`
+	MaxSealedSegments       int `json:"maxSealedSegments"`
+	MaxSealedSegmentAgeDays int `json:"maxSealedSegmentAgeDays"`
+}
+type EventHistoryExportRetention struct {
+	MinExports       int `json:"minExports"`
+	MaxExports       int `json:"maxExports"`
+	MaxExportAgeDays int `json:"maxExportAgeDays"`
 }
 
 type RoleAssignment struct {
@@ -40,7 +85,7 @@ type RoleAssignment struct {
 
 var allowedRoles = map[string]struct{}{
 	"power_operator": {}, "scheduler_operator": {}, "auditor": {},
-	"service_operator": {}, "backup_operator": {}, "administrator": {},
+	"service_operator": {}, "backup_operator": {}, "audit_operator": {}, "administrator": {},
 }
 
 func ValidateInput(data []byte) (Input, error) {
@@ -70,10 +115,13 @@ func ValidateInput(data []byte) (Input, error) {
 	if _, ok := topLevel["backupSchedulerEnabled"]; !ok {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
 	}
+	if _, ok := topLevel["eventHistoryOperations"]; !ok || !validEventHistoryOperations(input.EventHistoryOperations) {
+		return Input{}, fmt.Errorf("administrative_input_invalid")
+	}
 	seenPrincipals := map[string]struct{}{}
 	for index := range input.RoleAssignments {
 		assignment := &input.RoleAssignments[index]
-		if !validUUID(assignment.PrincipalID) || len(assignment.Roles) == 0 || len(assignment.Roles) > 5 {
+		if !validUUID(assignment.PrincipalID) || len(assignment.Roles) == 0 || len(assignment.Roles) > 7 {
 			return Input{}, fmt.Errorf("administrative_input_invalid")
 		}
 		if _, exists := seenPrincipals[assignment.PrincipalID]; exists {
@@ -304,7 +352,37 @@ func Environment(input Input) ([]byte, error) {
 	if input.BackupSchedulerEnabled {
 		schedulerFiles = "BACKUP_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-backups/scheduler-cursor.json\nBACKUP_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-backups/occurrence-claims.jsonl\n"
 	}
+	if input.EventHistoryOperations.Enabled {
+		retention, err := json.Marshal(input.EventHistoryOperations.Retention)
+		if err != nil {
+			return nil, fmt.Errorf("administrative_input_invalid")
+		}
+		var retentionMap map[string]any
+		if err := json.Unmarshal(retention, &retentionMap); err != nil {
+			return nil, fmt.Errorf("administrative_input_invalid")
+		}
+		retentionMap["schemaVersion"] = 1
+		retention, err = json.Marshal(retentionMap)
+		if err != nil {
+			return nil, fmt.Errorf("administrative_input_invalid")
+		}
+		return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nADMINISTRATIVE_EVENT_HISTORY_DIRECTORY=/var/lib/atlas-manager-event-history\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS=%d\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES=%d\nADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY=%s\nADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED=%t\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.EventHistoryOperations.Segment.MaxEvents, input.EventHistoryOperations.Segment.MaxBytes, bytes.TrimSpace(retention), input.EventHistoryOperations.Retention.AutomaticPruneEnabled, input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
+	}
 	return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nADMINISTRATIVE_EVENT_HISTORY_FILE=/var/lib/atlas-manager/admin-events.jsonl\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
+}
+
+func validEventHistoryOperations(value EventHistoryOperations) bool {
+	segments := value.Retention.Segments
+	exports := value.Retention.Exports
+	return value.Enabled &&
+		value.Segment.MaxEvents >= 100 && value.Segment.MaxEvents <= 100000 &&
+		value.Segment.MaxBytes >= 1048576 && value.Segment.MaxBytes <= 67108864 &&
+		segments.MinSealedSegments >= 1 && segments.MinSealedSegments <= 1000 &&
+		segments.MaxSealedSegments >= segments.MinSealedSegments && segments.MaxSealedSegments <= 10000 &&
+		segments.MaxSealedSegmentAgeDays >= 1 && segments.MaxSealedSegmentAgeDays <= 3650 &&
+		exports.MinExports >= 0 && exports.MinExports <= 100 &&
+		exports.MaxExports >= exports.MinExports && exports.MaxExports <= 1000 &&
+		exports.MaxExportAgeDays >= 1 && exports.MaxExportAgeDays <= 3650
 }
 
 func ProfileSHA256(data []byte) string {

@@ -106,6 +106,31 @@ function fieldsForOperation(
     operation === "remove_registered_service_availability"
   )
     return ["serviceId", "outcome", "failureCode"];
+  if (
+    operation === "verify_event_history_integrity" ||
+    operation === "rotate_administrative_event_history" ||
+    operation === "update_administrative_event_history_retention" ||
+    operation === "prune_administrative_event_history" ||
+    operation === "create_administrative_event_history_export" ||
+    operation === "prune_administrative_event_history_exports" ||
+    operation === "recover_administrative_event_history_stale_lock" ||
+    operation === "migrate_administrative_event_history_v1" ||
+    operation === "read_event_history_retention" ||
+    operation === "list_event_history_exports" ||
+    operation === "read_event_history_export" ||
+    operation === "download_event_history_export"
+  )
+    return [
+      "outcome",
+      "firstSequence",
+      "lastSequence",
+      "processedSegmentCount",
+      "processedExportCount",
+      "exportId",
+      "failureCode",
+      "fromSequence",
+      "throughSequence",
+    ];
   return [
     "tickedThrough",
     "schedulerOutcome",

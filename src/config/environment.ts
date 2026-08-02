@@ -17,6 +17,7 @@ import {
 } from "../power-management/domain/machine-operating-policy.js";
 import { parseStrictJson } from "./strict-json.js";
 import { createBackupTargetCatalogFromEnvironment } from "../backup-management/infrastructure/environment-backup-target-catalog.js";
+import { createRetentionPolicy } from "../event-history/domain/event-history-record.js";
 
 export const LOG_LEVELS = [
   "trace",
@@ -250,6 +251,9 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED: z
+      .enum(["true", "false"], { error: "must be exactly true or false" })
+      .default("false"),
     ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: z
       .enum(["true", "false"], {
         error: "must be exactly true or false",
@@ -291,6 +295,14 @@ const environmentSchema = z
     BACKUP_OCCURRENCE_CLAIM_FILE: persistenceFilePathSchema.optional(),
     ADMINISTRATIVE_EVENT_HISTORY_FILE:
       administrativeEventHistoryFileSchema.optional(),
+    ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY:
+      persistenceFilePathSchema.optional(),
+    ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS: z.string().optional(),
+    ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES: z.string().optional(),
+    ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY: z.string().optional(),
+    ADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED: z
+      .enum(["true", "false"], { error: "must be exactly true or false" })
+      .default("false"),
     ADMINISTRATIVE_ROLE_ASSIGNMENTS:
       administrativeRoleAssignmentsSchema.optional(),
     MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
@@ -360,6 +372,9 @@ const environmentSchema = z
 
     const eventHistoryHttpEnabled =
       environment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true";
+    const eventHistoryOperationsHttpEnabled =
+      environment.ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED ===
+      "true";
     const wakeAlarmHttpEnabled =
       environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true";
     const shutdownHttpEnabled =
@@ -378,6 +393,7 @@ const environmentSchema = z
       environment.BACKUP_SCHEDULER_ENABLED === "true";
     const administrativeHttpEnabled =
       eventHistoryHttpEnabled ||
+      eventHistoryOperationsHttpEnabled ||
       wakeAlarmHttpEnabled ||
       shutdownHttpEnabled ||
       serviceManagementHttpEnabled ||
@@ -467,11 +483,35 @@ const environmentSchema = z
           path: ["CLOUDFLARE_ACCESS_TEAM_NAME"],
           message: "is required when administration is enabled",
         });
-      if (environment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined)
+      if (
+        environment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined &&
+        environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY === undefined
+      )
         context.addIssue({
           code: "custom",
-          path: ["ADMINISTRATIVE_EVENT_HISTORY_FILE"],
+          path: [
+            eventHistoryOperationsHttpEnabled
+              ? "ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY"
+              : "ADMINISTRATIVE_EVENT_HISTORY_FILE",
+          ],
           message: "is required when administration is enabled",
+        });
+      if (
+        eventHistoryOperationsHttpEnabled &&
+        (environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY === undefined ||
+          environment.ADMINISTRATIVE_EVENT_HISTORY_FILE !== undefined)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY"],
+          message:
+            "version-two persistence requires one fixed directory and no version-one file",
+        });
+      if (eventHistoryOperationsHttpEnabled && !eventHistoryHttpEnabled)
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED"],
+          message: "must be enabled for operational event-history delivery",
         });
       if (environment.ADMINISTRATIVE_ROLE_ASSIGNMENTS === undefined)
         context.addIssue({
@@ -485,7 +525,7 @@ const environmentSchema = z
             environment.ADMINISTRATIVE_ROLE_ASSIGNMENTS,
           );
           if (
-            eventHistoryHttpEnabled &&
+            (eventHistoryHttpEnabled || eventHistoryOperationsHttpEnabled) &&
             !assignments.some((assignment) =>
               assignment.roles.some((role) =>
                 roleHasAdministrativePermission(role, "event_history.read"),
@@ -575,6 +615,22 @@ const environmentSchema = z
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include a backup reader",
             });
+          if (
+            eventHistoryOperationsHttpEnabled &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(
+                  role,
+                  "event_history.integrity.read",
+                ),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include an event-history integrity reader",
+            });
         } catch {
           // The field-level schema has already reported the safe category.
         }
@@ -586,6 +642,7 @@ const environmentSchema = z
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
       environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE,
+      environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY,
       environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
       environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
       environment.BACKUP_RUN_HISTORY_FILE,
@@ -601,6 +658,65 @@ const environmentSchema = z
         path: ["ADMINISTRATIVE_EVENT_HISTORY_FILE"],
         message: "must differ from every other persistence file",
       });
+    if (
+      eventHistoryOperationsHttpEnabled &&
+      environment.ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY !== undefined
+    ) {
+      try {
+        createRetentionPolicy(
+          parseStrictJson(
+            environment.ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY,
+          ),
+        );
+      } catch {
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY"],
+          message: "must be a valid version-two retention policy",
+        });
+      }
+    }
+    if (eventHistoryOperationsHttpEnabled) {
+      const events =
+        environment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS;
+      const bytes = environment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES;
+      if (
+        events !== undefined &&
+        (!/^\d+$/u.test(events) ||
+          Number(events) < 100 ||
+          Number(events) > 100_000)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS"],
+          message: "must be between 100 and 100000",
+        });
+      if (
+        bytes !== undefined &&
+        (!/^\d+$/u.test(bytes) ||
+          Number(bytes) < 1_048_576 ||
+          Number(bytes) > 67_108_864)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES"],
+          message: "must be between 1048576 and 67108864",
+        });
+      if (environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY"],
+          message: "is required for version-two persistence",
+        });
+      if (
+        environment.ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY === undefined
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY"],
+          message: "is required for version-two persistence",
+        });
+    }
     const servicePersistencePaths = [
       environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
@@ -671,10 +787,13 @@ const environmentSchema = z
           path: ["MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"],
           message: "is required when the machine-power scheduler is enabled",
         });
-      if (environment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined)
+      if (
+        environment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined &&
+        environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY === undefined
+      )
         context.addIssue({
           code: "custom",
-          path: ["ADMINISTRATIVE_EVENT_HISTORY_FILE"],
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY"],
           message: "is required when the machine-power scheduler is enabled",
         });
     }
@@ -750,6 +869,7 @@ export interface EnvironmentConfig {
     readonly audience: string;
   }>;
   readonly administrativeEventHistoryHttpEnabled: boolean;
+  readonly administrativeEventHistoryOperationsHttpEnabled?: boolean;
   readonly administrativeWakeAlarmHttpEnabled: boolean;
   readonly administrativeShutdownHttpEnabled: boolean;
   readonly administrativeServiceManagementHttpEnabled?: boolean;
@@ -765,6 +885,11 @@ export interface EnvironmentConfig {
   readonly backupSchedulerCursorFilePath?: string;
   readonly backupOccurrenceClaimFilePath?: string;
   readonly administrativeEventHistoryFilePath?: string;
+  readonly administrativeEventHistoryDirectoryPath?: string;
+  readonly administrativeEventHistoryMaxSegmentEvents?: number;
+  readonly administrativeEventHistoryMaxSegmentBytes?: number;
+  readonly administrativeEventHistoryRetentionPolicy?: unknown;
+  readonly administrativeEventHistoryAutomaticRetentionEnabled?: boolean;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
   readonly machineShutdownOccurrenceClaimFilePath?: string;
   readonly machinePowerSchedulerCursorFilePath?: string;
@@ -827,6 +952,10 @@ export function parseEnvironment(
     machineOperatingPolicy: parsedEnvironment.MACHINE_OPERATING_POLICY,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED ===
+    "true"
+      ? { administrativeEventHistoryOperationsHttpEnabled: true }
+      : {}),
     administrativeWakeAlarmHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true",
     administrativeShutdownHttpEnabled:
@@ -900,6 +1029,40 @@ export function parseEnvironment(
           administrativeEventHistoryFilePath:
             parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_FILE,
         }),
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY === undefined
+      ? {}
+      : {
+          administrativeEventHistoryDirectoryPath:
+            parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY,
+        }),
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS ===
+    undefined
+      ? {}
+      : {
+          administrativeEventHistoryMaxSegmentEvents: Number(
+            parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS,
+          ),
+        }),
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES ===
+    undefined
+      ? {}
+      : {
+          administrativeEventHistoryMaxSegmentBytes: Number(
+            parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES,
+          ),
+        }),
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY ===
+    undefined
+      ? {}
+      : {
+          administrativeEventHistoryRetentionPolicy: parseStrictJson(
+            parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY,
+          ),
+        }),
+    ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED ===
+    "true"
+      ? { administrativeEventHistoryAutomaticRetentionEnabled: true }
+      : {}),
     ...(administrativeRoleAssignments === undefined
       ? {}
       : { administrativeRoleAssignments }),
