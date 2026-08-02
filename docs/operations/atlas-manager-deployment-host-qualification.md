@@ -62,3 +62,9 @@ The application qualification tool is independent from
 `atlas-manager-power-helper-host-qualification`. The latter remains the
 authority for helper installation and power-host checks. No physical Atlas
 host or VM drill is part of this runbook.
+
+When `qualify` returns `preparation_required`, use the separate
+`atlas-manager-runtime-identity-installer` procedure. The qualifier remains
+read-only and never creates the account or groups. A valid managed identity
+preparation is reported as `prepared`; an interrupted preparation journal is
+blocked and requires operator review.

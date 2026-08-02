@@ -1188,3 +1188,66 @@ They require `ATLAS_MANAGER_POWER_HELPER_FIXTURE`, intentionally absent from
 the standard suite. The dedicated workflow supplies only the nonproduction
 fixture executable. No skipped test requires the production helper, host
 qualification, RTC, D-Bus, or a power operation.
+
+## Current work — Issue #274
+
+The active branch is:
+
+`feat/operator-controlled-atlas-manager-runtime-identity-preparation`
+
+The authoritative merged baseline is:
+
+`cfe24215dabc7814af9ce791b7b1ed5506044e0a`
+
+Issue #274 adds the operator-run
+`atlas-manager-runtime-identity-installer` with exactly `inspect`,
+`prepare-disabled`, and `verify-managed`. It prepares only the fixed
+`atlas-manager` user, primary group, and empty `atlas-manager-power` group,
+from a completely absent state and after the exact confirmation. Preparation
+uses fixed account tools, a private journal, managed state, a nonblocking
+lock, post-transition verification, and bounded same-process rollback. No
+home, application deployment, service, helper, configuration, or power state
+is created.
+
+The identity installer is included in the reproducible deployment bundle and
+the host qualifier recognizes valid managed preparation as `prepared`.
+
+Final validation for Issue #274:
+
+```text
+baseline                          → cfe24215dabc7814af9ce791b7b1ed5506044e0a
+branch                            → feat/operator-controlled-atlas-manager-runtime-identity-preparation
+Node.js                           → 24.18.0
+npm                               → 11.16.0
+Go                                → 1.23.0 linux/amd64
+Node test files                   → 181 passed
+Node tests                        → 2,607 passed
+Node skipped tests                → 3
+power-helper Go tests             → passed
+deployment Go tests               → passed
+deployment Go vet                 → passed
+deployment Go mod verify          → passed
+deployment executables            → bundle, installer, host-qualification, runtime-identity-installer, smoke built with CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1
+format                            → passed
+lint                              → passed
+typecheck                         → passed
+build                             → passed
+power-helper gofmt                → passed
+power-helper go mod verify        → passed
+power-helper go vet               → passed
+npm audit --omit=dev              → 0 production vulnerabilities
+git diff --check                  → passed
+dependencies                      → unchanged; deployment module stdlib-only
+bundle archive                    → atlas-manager_0.1.0_linux_amd64.tar.gz
+bundle SHA-256                    → 4445c9edfd5ef2114b61f3af4132dc3c29176d673ffa9871b273c87098889e4c
+second-build SHA-256              → 4445c9edfd5ef2114b61f3af4132dc3c29176d673ffa9871b273c87098889e4c
+reproducibility                   → identical archive bytes
+identity installer inclusion     → manifest and SHA256SUMS passed
+bundle inspection                 → passed
+packaged mock-only smoke test     → passed
+```
+
+The three skipped Node tests are the deterministic Go-helper compatibility
+tests requiring `ATLAS_MANAGER_POWER_HELPER_FIXTURE`; that variable is
+intentionally absent from the standard suite. No real account command, host
+path, service, helper, RTC, D-Bus, VM, or power effect has been used.

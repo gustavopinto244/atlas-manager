@@ -128,6 +128,8 @@ func createBundle(t *testing.T, root, version string) string {
 		"application/package-lock.json":             {`{"name":"atlas-manager","lockfileVersion":3,"requires":true,"packages":{}}`, 0o644},
 		"application/node_modules/runtime/index.js": {"export {};\n", 0o644},
 		"atlas-manager-installer":                   {"test installer\n", 0o755},
+		"atlas-manager-host-qualification":          {"test qualification\n", 0o755},
+		"atlas-manager-runtime-identity-installer":  {"test identity installer\n", 0o755},
 		"systemd/atlas-manager.service":             {systemdunit.Content, 0o644},
 		"config/atlas-manager.env.example":          {"HOST=127.0.0.1\nPOWER_MANAGEMENT_BACKEND=mock\n", 0o640},
 		"INSTALLATION.md":                           {"disabled\n", 0o644},

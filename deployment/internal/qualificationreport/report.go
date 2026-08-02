@@ -39,14 +39,18 @@ type Report struct {
 	RuntimeIdentity Check   `json:"runtimeIdentity"`
 	Deployment      Check   `json:"deployment"`
 	Configuration   Check   `json:"configuration"`
+	Preparation     Check   `json:"identityPreparation"`
 	Checks          []Check `json:"checks"`
 }
 
 func (report Report) Marshal() ([]byte, error) {
+	if report.Preparation.Name == "" {
+		report.Preparation = Check{Name: "identity_preparation", Status: NotApplicable, Code: "preparation_not_inspected"}
+	}
 	if report.SchemaVersion != SchemaVersion || !validAction(report.Action) || !validResult(report.Result) || len(report.Action) > MaxCodeLength || len(report.Result) > MaxCodeLength || len(report.Checks) > MaxChecks {
 		return nil, fmt.Errorf("qualification_report_invalid")
 	}
-	for _, check := range append([]Check{report.Bundle, report.Platform, report.NodeRuntime, report.Systemd, report.Filesystem, report.RuntimeIdentity, report.Deployment, report.Configuration}, report.Checks...) {
+	for _, check := range append([]Check{report.Bundle, report.Platform, report.NodeRuntime, report.Systemd, report.Filesystem, report.RuntimeIdentity, report.Deployment, report.Configuration, report.Preparation}, report.Checks...) {
 		if check.Name == "" || len(check.Name) > MaxCodeLength || len(check.Code) > MaxCodeLength || !validStatus(check.Status) {
 			return nil, fmt.Errorf("qualification_report_invalid")
 		}

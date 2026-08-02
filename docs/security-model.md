@@ -1247,3 +1247,18 @@ contents, host identifiers, or raw operating-system errors. It does not create
 or acquire locks, repair state, invoke systemd, start a service, execute the
 installer, or inspect or execute the power helper. The power-helper
 qualification executable remains an independent authority.
+
+### Runtime identity preparation
+
+Runtime identity creation is an operator-controlled boundary separate from
+qualification and application installation. Only the fixed `atlas-manager`
+user, primary group, and empty `atlas-manager-power` group may be created, and
+only from a completely absent state after exact confirmation. Fixed root-owned
+account tools are invoked without a shell or PATH lookup. The installer never
+creates a home, enrolls the user textually in the helper group, changes
+privileges, installs the helper, or enables the service.
+
+A synchronized private journal is written before the first mutation and
+updated after each verified step. Same-process rollback removes only resources
+created in that invocation; changed or ambiguous resources stop rollback and
+preserve the journal. Committed identities have no public deletion action.

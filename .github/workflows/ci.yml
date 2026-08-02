@@ -92,6 +92,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-bundle ./cmd/atlas-manager-bundle
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-smoke ./cmd/atlas-manager-smoke
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-host-qualification ./cmd/atlas-manager-host-qualification
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-runtime-identity-installer ./cmd/atlas-manager-runtime-identity-installer
 
       - name: Build reproducible installation bundle
         run: |
@@ -137,10 +138,14 @@ jobs:
             -source-date-epoch 0 \
             -source-root "$GITHUB_WORKSPACE" \
             -output-dir "$GITHUB_WORKSPACE/dist/atlas-manager-bundle"
-          (cd "dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64" && ./atlas-manager-installer inspect-bundle)
+          bundle_root="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
+          (cd "$bundle_root" && ./atlas-manager-installer inspect-bundle)
+          test -x "$bundle_root/atlas-manager-runtime-identity-installer"
+          grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/MANIFEST.json"
+          grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/SHA256SUMS"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
-            --application-root "$GITHUB_WORKSPACE/dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64/application"
+            --application-root "$GITHUB_WORKSPACE/$bundle_root/application"
 
       - name: Rebuild Atlas Manager deployment bundle reproducibly
         run: |

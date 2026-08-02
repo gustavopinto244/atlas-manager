@@ -64,3 +64,9 @@ manually under this contract.
 Before and after these actions, use the separate
 `atlas-manager-host-qualification` executable for read-only evidence. The
 installer does not invoke it, and the qualifier does not invoke the installer.
+
+If the required identities are absent, prepare them first with the separate
+`atlas-manager-runtime-identity-installer`. That tool requires the exact
+operator confirmation, starts only from a completely absent identity state,
+and has no committed identity-removal action. Identity preparation must be
+verified before `install-disabled`; it does not enable or start the service.

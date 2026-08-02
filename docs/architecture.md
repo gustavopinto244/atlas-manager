@@ -1063,3 +1063,15 @@ manifest, systemd, and managed-release rules without acquiring the installer
 lock or invoking installer actions. It may run only the fixed
 `/usr/bin/node --version` check; it never executes Atlas Manager, npm,
 systemd commands, the helper, RTC, or D-Bus.
+
+### Operator-controlled runtime identity preparation
+
+ADR-019 adds a separate Go executable for the only reviewed identity-creation
+transaction. It accepts only `inspect`, `prepare-disabled`, and
+`verify-managed`; preparation requires root, Linux amd64, exact confirmation,
+valid bundle/host preconditions, and a completely absent identity state. It
+uses fixed account-management binaries without a shell, writes a private
+transaction journal before mutation, verifies every transition, and rolls
+back only resources created by the current failed attempt. The helper group
+remains textually empty and no home, deployment, service, configuration,
+helper, or power state is created.
