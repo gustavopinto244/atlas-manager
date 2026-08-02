@@ -24,6 +24,15 @@ export const ADMINISTRATIVE_PERMISSIONS = Object.freeze([
   "backups.retention.write",
   "backups.retention.prune",
   "backups.scheduler.tick",
+  "event_history.integrity.read",
+  "event_history.rotation.run",
+  "event_history.retention.read",
+  "event_history.retention.write",
+  "event_history.retention.prune",
+  "event_history.exports.read",
+  "event_history.exports.create",
+  "event_history.exports.download",
+  "event_history.exports.prune",
 ] as const);
 
 export type AdministrativePermission =

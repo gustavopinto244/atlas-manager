@@ -28,6 +28,7 @@ import type { ServiceManagementCapabilities } from "../../service-management/com
 import { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
 import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
 import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
+import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
@@ -38,6 +39,7 @@ export interface ProtectedAdministrationCompositionInput {
   readonly clock: PowerManagementClock;
   readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
   readonly administrativeEventAttemptIdGenerator?: AdministrativeEventAttemptIdGenerator;
+  readonly eventHistoryOperations?: AdministrativeEventHistoryOperations;
 }
 
 export interface ProtectedAdministrationCapabilities {
@@ -117,6 +119,26 @@ export interface ProtectedAdministrationCapabilities {
     execute(targetId: string): Promise<unknown>;
   }>;
   readonly runBackupSchedulerTick: Readonly<{ execute(): Promise<unknown> }>;
+  readonly verifyEventHistoryIntegrity: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly rotateEventHistory: Readonly<{ execute(): Promise<unknown> }>;
+  readonly getEventHistoryRetention: Readonly<{ execute(): Promise<unknown> }>;
+  readonly setEventHistoryRetention: Readonly<{
+    execute(value: unknown): Promise<unknown>;
+  }>;
+  readonly pruneEventHistory: Readonly<{ execute(): Promise<unknown> }>;
+  readonly listEventHistoryExports: Readonly<{ execute(): Promise<unknown> }>;
+  readonly getEventHistoryExport: Readonly<{
+    execute(exportId: string): Promise<unknown>;
+  }>;
+  readonly createEventHistoryExport: Readonly<{
+    execute(value: unknown): Promise<unknown>;
+  }>;
+  readonly downloadEventHistoryExport: Readonly<{
+    execute(exportId: string): Promise<unknown>;
+  }>;
+  readonly pruneEventHistoryExports: Readonly<{ execute(): Promise<unknown> }>;
 }
 
 export function createProtectedAdministration(
@@ -233,6 +255,14 @@ export function createProtectedAdministration(
       throw new Error("Backup-management composition is unavailable");
     return input.backupManagement;
   };
+  const requireEventHistoryOperations =
+    (): AdministrativeEventHistoryOperations => {
+      const operations =
+        input.eventHistoryOperations ?? input.eventHistory.operations;
+      if (operations === undefined)
+        throw new Error("Event-history operational composition is unavailable");
+      return operations;
+    };
   const readService = async (serviceId: string): Promise<unknown> => {
     const services = requireServices();
     const service = (await services.listRegisteredServices.execute()).find(
@@ -529,6 +559,136 @@ export function createProtectedAdministration(
         }
       }),
   });
+  const runEventHistoryMutation = (
+    operation:
+      | "rotate_administrative_event_history"
+      | "update_administrative_event_history_retention"
+      | "prune_administrative_event_history"
+      | "create_administrative_event_history_export"
+      | "prune_administrative_event_history_exports",
+    invoke: () => Promise<unknown>,
+    details: Readonly<Record<string, unknown>> = Object.freeze({}),
+  ): Promise<unknown> =>
+    runner.run(
+      operation === "rotate_administrative_event_history"
+        ? "rotate_event_history"
+        : operation === "update_administrative_event_history_retention"
+          ? "update_event_history_retention"
+          : operation === "prune_administrative_event_history"
+            ? "prune_event_history"
+            : operation === "create_administrative_event_history_export"
+              ? "create_event_history_export"
+              : "prune_event_history_exports",
+      async (occurredAt, source) => {
+        const attempt = await operationAudit.begin({
+          occurredAt,
+          source,
+          target: Object.freeze({ kind: "machine", id: "atlas" }),
+          operation,
+          details,
+        });
+        try {
+          const result = await invoke();
+          try {
+            await operationAudit.complete(
+              attempt,
+              "succeeded",
+              Object.freeze({ outcome: "succeeded" }),
+            );
+          } catch {
+            throw new AdministrativeAuditPartialEffectError(
+              "audit_failed_after_event_history_operation",
+              result,
+            );
+          }
+          return result;
+        } catch (error) {
+          if (error instanceof AdministrativeAuditPartialEffectError)
+            throw error;
+          try {
+            await operationAudit.complete(
+              attempt,
+              "failed",
+              Object.freeze({ failureCode: "administrative_audit_failed" }),
+            );
+          } catch {
+            throw new AdministrativeAuditTrailError(
+              "administrative_audit_failed",
+            );
+          }
+          throw error;
+        }
+      },
+    );
+  const verifyEventHistoryIntegrity = Object.freeze({
+    execute: () =>
+      runner.run("verify_event_history_integrity", () =>
+        requireEventHistoryOperations().verifyIntegrity(),
+      ),
+  });
+  const rotateEventHistory = Object.freeze({
+    execute: () =>
+      runEventHistoryMutation("rotate_administrative_event_history", () =>
+        requireEventHistoryOperations().rotate(),
+      ),
+  });
+  const getEventHistoryRetention = Object.freeze({
+    execute: () =>
+      runner.run("read_event_history_retention", () =>
+        requireEventHistoryOperations().getRetentionSummary(),
+      ),
+  });
+  const setEventHistoryRetention = Object.freeze({
+    execute: (value: unknown) =>
+      runEventHistoryMutation(
+        "update_administrative_event_history_retention",
+        () => requireEventHistoryOperations().setRetentionPolicy(value),
+      ),
+  });
+  const pruneEventHistory = Object.freeze({
+    execute: () =>
+      runEventHistoryMutation("prune_administrative_event_history", () =>
+        requireEventHistoryOperations().pruneSegments(),
+      ),
+  });
+  const listEventHistoryExports = Object.freeze({
+    execute: () =>
+      runner.run("list_event_history_exports", () =>
+        requireEventHistoryOperations().listExports(),
+      ),
+  });
+  const getEventHistoryExport = Object.freeze({
+    execute: (exportId: string) =>
+      runner.run("read_event_history_export", async () => {
+        const value = await requireEventHistoryOperations().getExport(exportId);
+        if (value === undefined)
+          throw new Error("event_history_export_not_found");
+        return value;
+      }),
+  });
+  const createEventHistoryExport = Object.freeze({
+    execute: (value: unknown) =>
+      runEventHistoryMutation(
+        "create_administrative_event_history_export",
+        () => requireEventHistoryOperations().createExport(value),
+        typeof value === "object" && value !== null
+          ? (value as Readonly<Record<string, unknown>>)
+          : Object.freeze({}),
+      ),
+  });
+  const downloadEventHistoryExport = Object.freeze({
+    execute: (exportId: string) =>
+      runner.run("download_event_history_export", () =>
+        requireEventHistoryOperations().readExport(exportId),
+      ),
+  });
+  const pruneEventHistoryExports = Object.freeze({
+    execute: () =>
+      runEventHistoryMutation(
+        "prune_administrative_event_history_exports",
+        () => requireEventHistoryOperations().pruneExports(),
+      ),
+  });
   const getOperationsOverview = Object.freeze({
     execute: () =>
       runner.run("read_operations_overview", async (observedAt) => {
@@ -650,6 +810,16 @@ export function createProtectedAdministration(
     setBackupRetention,
     pruneBackupRetention,
     runBackupSchedulerTick,
+    verifyEventHistoryIntegrity,
+    rotateEventHistory,
+    getEventHistoryRetention,
+    setEventHistoryRetention,
+    pruneEventHistory,
+    listEventHistoryExports,
+    getEventHistoryExport,
+    createEventHistoryExport,
+    downloadEventHistoryExport,
+    pruneEventHistoryExports,
   });
 }
 

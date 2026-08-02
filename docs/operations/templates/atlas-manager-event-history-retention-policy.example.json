@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "automaticPruneEnabled": false,
+  "segments": {
+    "minSealedSegments": 2,
+    "maxSealedSegments": 100,
+    "maxSealedSegmentAgeDays": 365
+  },
+  "exports": {
+    "minExports": 1,
+    "maxExports": 32,
+    "maxExportAgeDays": 90
+  }
+}

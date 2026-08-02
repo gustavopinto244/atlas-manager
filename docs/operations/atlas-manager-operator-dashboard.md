@@ -22,3 +22,8 @@ helper is unused. Wake-alarm and shutdown controls are intentionally absent.
 
 Physical deployment, Cloudflare Tunnel/DNS configuration, helper installation,
 and real power-effect certification remain separately approved gates.
+
+The Audit section also displays v2 integrity state, retained boundaries,
+segment and retention summaries, and verified canonical export metadata. It
+does not expose event-history paths or contents and never represents broken or
+interrupted history as healthy.

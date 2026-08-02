@@ -287,14 +287,29 @@ function appendBackupActionForm(
 
 const status = document.querySelector<HTMLElement>("#status");
 async function refresh(): Promise<void> {
-  const [overview, serviceList, history, backupTargets, backupRuns] =
-    await Promise.all([
-      readJson("/admin/overview"),
-      readJson("/admin/services"),
-      readJson("/admin/event-history?limit=20"),
-      readJson("/admin/backups/targets").catch(() => ({ targets: [] })),
-      readJson("/admin/backups/runs?limit=20").catch(() => ({ runs: [] })),
-    ]);
+  const [
+    overview,
+    serviceList,
+    history,
+    integrity,
+    retention,
+    exports,
+    backupTargets,
+    backupRuns,
+  ] = await Promise.all([
+    readJson("/admin/overview"),
+    readJson("/admin/services"),
+    readJson("/admin/event-history?limit=20"),
+    readJson("/admin/event-history/integrity").catch(() => ({
+      outcome: "unavailable",
+    })),
+    readJson("/admin/event-history/retention").catch(() => ({
+      eligibleSegmentCount: 0,
+    })),
+    readJson("/admin/event-history/exports").catch(() => ({ exports: [] })),
+    readJson("/admin/backups/targets").catch(() => ({ targets: [] })),
+    readJson("/admin/backups/runs?limit=20").catch(() => ({ runs: [] })),
+  ]);
   const serviceValues =
     typeof serviceList === "object" &&
     serviceList !== null &&
@@ -312,7 +327,7 @@ async function refresh(): Promise<void> {
   if (root !== null) root.textContent = JSON.stringify(overview, null, 2);
   renderServices(serviceList);
   renderAvailability(policies);
-  renderAudit(history);
+  renderAudit({ history, integrity, retention, exports });
   renderBackups(backupTargets, backupRuns);
 }
 

@@ -178,19 +178,47 @@ function start(): void {
       config.administrativeOverviewHttpEnabled === true ||
       config.administrativeDashboardEnabled === true ||
       config.administrativeBackupHttpEnabled === true ||
+      config.administrativeEventHistoryOperationsHttpEnabled === true ||
       config.backupSchedulerEnabled;
     if (
       eventHistoryRequired &&
-      config.administrativeEventHistoryFilePath === undefined
+      config.administrativeEventHistoryFilePath === undefined &&
+      config.administrativeEventHistoryDirectoryPath === undefined
     ) {
       throw new Error("Event-history persistence is required");
     }
     const eventHistory =
-      config.administrativeEventHistoryFilePath === undefined
-        ? undefined
-        : createEventHistory({
-            filePath: config.administrativeEventHistoryFilePath,
-          });
+      config.administrativeEventHistoryDirectoryPath !== undefined
+        ? createEventHistory({
+            directoryPath: config.administrativeEventHistoryDirectoryPath,
+            directoryDependencies: {
+              lockPath: "/run/atlas-manager/event-history-writer.lock",
+              ...(config.administrativeEventHistoryMaxSegmentEvents ===
+              undefined
+                ? {}
+                : {
+                    maxSegmentEvents:
+                      config.administrativeEventHistoryMaxSegmentEvents,
+                  }),
+              ...(config.administrativeEventHistoryMaxSegmentBytes === undefined
+                ? {}
+                : {
+                    maxSegmentBytes:
+                      config.administrativeEventHistoryMaxSegmentBytes,
+                  }),
+              ...(config.administrativeEventHistoryRetentionPolicy === undefined
+                ? {}
+                : {
+                    retentionPolicy:
+                      config.administrativeEventHistoryRetentionPolicy,
+                  }),
+            },
+          })
+        : config.administrativeEventHistoryFilePath === undefined
+          ? undefined
+          : createEventHistory({
+              filePath: config.administrativeEventHistoryFilePath,
+            });
     const powerManagement: PowerManagementCapabilities | undefined =
       administrativePowerEnabled || config.machinePowerSchedulerEnabled
         ? createConfiguredPowerManagementRuntime(
@@ -224,7 +252,8 @@ function start(): void {
       config.administrativeServiceAvailabilityHttpEnabled === true ||
       config.administrativeOverviewHttpEnabled === true ||
       config.administrativeDashboardEnabled === true ||
-      config.administrativeBackupHttpEnabled === true
+      config.administrativeBackupHttpEnabled === true ||
+      config.administrativeEventHistoryOperationsHttpEnabled === true
         ? createAdministrativeRuntime(config, serviceManagement, {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
@@ -275,6 +304,12 @@ function start(): void {
       ...(administrativeRuntime?.backups === undefined
         ? {}
         : { administrativeBackups: administrativeRuntime.backups }),
+      ...(administrativeRuntime?.eventHistoryOperations === undefined
+        ? {}
+        : {
+            administrativeEventHistoryOperations:
+              administrativeRuntime.eventHistoryOperations,
+          }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

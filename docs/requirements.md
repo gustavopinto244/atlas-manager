@@ -586,3 +586,11 @@ execution, persistent run metadata, atomic local filesystem artifacts,
 checksums, bounded retention, administrative audit integration, shutdown
 backup readiness, and dashboard visibility. Restoration, remote replication,
 logical database backup, and physical execution remain out of scope.
+
+# v0.8 event-history and auditing delivery
+
+Issue #283 delivers bounded segmented persistence, chained record and segment
+integrity, cross-process writer coordination, explicit v1 migration, anchored
+retention, protected canonical export, and dashboard operational visibility.
+Remote replication, external attestation, restore, SIEM delivery, and physical
+deployment remain out of scope.

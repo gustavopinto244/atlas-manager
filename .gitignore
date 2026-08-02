@@ -9,6 +9,8 @@ dist/
 deployment/releases/
 disabled-deployment-rehearsal-report.json
 atlas-manager-control-plane-evidence.json
+atlas-manager-event-history-operational-lifecycle-rehearsal.json
+atlas-manager-event-history-rehearsal-evidence.json
 
 # Environment variables
 .env

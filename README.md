@@ -1,5 +1,16 @@
 # Atlas Manager
 
+Atlas Manager is a self-hosted, mock-first operations application for a
+controlled Atlas homelab environment.
+
+The v0.8 event-history lifecycle is segmented, bounded, and protected. It
+supports deterministic SHA-256 integrity verification, operator-controlled
+rotation and retention, canonical local exports, v1 migration, and dashboard
+visibility. It never exposes arbitrary filesystem paths or event contents,
+and it does not claim external authenticity. Automated validation uses
+sandbox-only state; no physical host, helper, real power effect, or external
+export destination is used.
+
 Atlas Manager is a self-hosted Node.js and TypeScript application for
 monitoring, managing, and automating the Atlas homelab server.
 

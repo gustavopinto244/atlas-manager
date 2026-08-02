@@ -35,3 +35,9 @@ The first profile exposes no wake or shutdown controls. Its backend is mock,
 power effects are disabled, the machine-power scheduler is disabled, and the
 Linux helper is unused. No physical host or VM was used for development or
 automated validation.
+
+Operational event-history maintenance is a separate v0.8 boundary. Its routes
+are disabled unless explicitly configured, use the fixed segmented store, and
+fail closed on broken integrity, interrupted transactions, unknown files, or
+unsafe locks. Rotation, retention, and export use operation-specific
+confirmations and are audited before effects.

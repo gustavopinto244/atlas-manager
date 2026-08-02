@@ -41,6 +41,10 @@ import {
   registerAdministrativeBackupRoutes,
   type AdministrativeBackupsRouteDependencies,
 } from "./administrative-backups-route.js";
+import {
+  registerAdministrativeEventHistoryOperationsRoutes,
+  type AdministrativeEventHistoryOperationsRouteDependencies,
+} from "./administrative-event-history-operations-route.js";
 
 export interface CreateAppDependencies {
   logger: HttpErrorLogger;
@@ -53,6 +57,7 @@ export interface CreateAppDependencies {
   administrativeOverview?: AdministrativeOverviewRouteDependencies;
   administrativeDashboard?: AdministrativeDashboardRouteDependencies;
   administrativeBackups?: AdministrativeBackupsRouteDependencies;
+  administrativeEventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
 }
 
 export function createApp({
@@ -66,6 +71,7 @@ export function createApp({
   administrativeOverview,
   administrativeDashboard,
   administrativeBackups,
+  administrativeEventHistoryOperations,
 }: CreateAppDependencies): Express {
   const app = express();
 
@@ -77,7 +83,8 @@ export function createApp({
     administrativeServiceAvailability !== undefined ||
     administrativeOverview !== undefined ||
     administrativeDashboard !== undefined ||
-    administrativeBackups !== undefined
+    administrativeBackups !== undefined ||
+    administrativeEventHistoryOperations !== undefined
   ) {
     app.disable("etag");
     app.disable("x-powered-by");
@@ -102,6 +109,11 @@ export function createApp({
     registerAdministrativeDashboardRoutes(app, administrativeDashboard);
   if (administrativeBackups !== undefined)
     registerAdministrativeBackupRoutes(app, administrativeBackups);
+  if (administrativeEventHistoryOperations !== undefined)
+    registerAdministrativeEventHistoryOperationsRoutes(
+      app,
+      administrativeEventHistoryOperations,
+    );
 
   app.get("/health/live", (_request, response) => {
     response.status(200).json({ status: "ok" });

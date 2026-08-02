@@ -22,3 +22,9 @@ incomplete, the private transaction journal remains and future mutations are
 blocked until an operator reviews it. Deactivation stops and disables the
 service while preserving the deployment, configuration, identities, and
 application state. No automatic restart or retry is performed.
+
+Activation also requires the fixed v2 event-history store to be fresh or
+verified: required migration, stale writer locks, interrupted maintenance,
+broken integrity, and unsafe retention/export state block service startup.
+Event-history operational maintenance remains separately protected and does
+not grant arbitrary filesystem access.

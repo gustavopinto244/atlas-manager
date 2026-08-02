@@ -26,6 +26,18 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "update_backup_retention",
   "run_backup_retention_prune",
   "run_backup_scheduler_tick",
+  "verify_event_history_integrity",
+  "rotate_administrative_event_history",
+  "update_administrative_event_history_retention",
+  "prune_administrative_event_history",
+  "create_administrative_event_history_export",
+  "prune_administrative_event_history_exports",
+  "recover_administrative_event_history_stale_lock",
+  "migrate_administrative_event_history_v1",
+  "read_event_history_retention",
+  "list_event_history_exports",
+  "read_event_history_export",
+  "download_event_history_export",
 ] as const);
 export const ADMINISTRATIVE_EVENT_STATUSES = Object.freeze([
   "started",
@@ -373,6 +385,16 @@ function createDetails(
       "run_backup_scheduler_tick",
       "read_operations_overview",
       "read_administrative_dashboard",
+      "verify_event_history_integrity",
+      "rotate_administrative_event_history",
+      "update_administrative_event_history_retention",
+      "prune_administrative_event_history",
+      "create_administrative_event_history_export",
+      "prune_administrative_event_history_exports",
+      "read_event_history_retention",
+      "list_event_history_exports",
+      "read_event_history_export",
+      "download_event_history_export",
     ].includes(requestedOperation as string);
     const validPermission = [
       "power.wake.read",
@@ -400,6 +422,15 @@ function createDetails(
       "backups.retention.write",
       "backups.retention.prune",
       "backups.scheduler.tick",
+      "event_history.integrity.read",
+      "event_history.rotation.run",
+      "event_history.retention.read",
+      "event_history.retention.write",
+      "event_history.retention.prune",
+      "event_history.exports.read",
+      "event_history.exports.create",
+      "event_history.exports.download",
+      "event_history.exports.prune",
     ].includes(permission as string);
     const expected = {
       read_wake_alarm: "power.wake.read",
@@ -426,6 +457,18 @@ function createDetails(
       run_backup_scheduler_tick: "backups.scheduler.tick",
       read_operations_overview: "operations.read",
       read_administrative_dashboard: "dashboard.read",
+      verify_event_history_integrity: "event_history.integrity.read",
+      rotate_administrative_event_history: "event_history.rotation.run",
+      update_administrative_event_history_retention:
+        "event_history.retention.write",
+      prune_administrative_event_history: "event_history.retention.prune",
+      create_administrative_event_history_export:
+        "event_history.exports.create",
+      prune_administrative_event_history_exports: "event_history.exports.prune",
+      read_event_history_retention: "event_history.retention.read",
+      list_event_history_exports: "event_history.exports.read",
+      read_event_history_export: "event_history.exports.read",
+      download_event_history_export: "event_history.exports.download",
     } as Record<string, string>;
     if (
       !validOperation ||
@@ -515,6 +558,21 @@ function createDetails(
       return Object.freeze({ failureCode: record["failureCode"] });
     throw new AdministrativeEventValidationError("invalid_details");
   }
+  if (
+    operation === "verify_event_history_integrity" ||
+    operation === "rotate_administrative_event_history" ||
+    operation === "update_administrative_event_history_retention" ||
+    operation === "prune_administrative_event_history" ||
+    operation === "create_administrative_event_history_export" ||
+    operation === "prune_administrative_event_history_exports" ||
+    operation === "recover_administrative_event_history_stale_lock" ||
+    operation === "migrate_administrative_event_history_v1" ||
+    operation === "read_event_history_retention" ||
+    operation === "list_event_history_exports" ||
+    operation === "read_event_history_export" ||
+    operation === "download_event_history_export"
+  )
+    return createEventHistoryOperationalDetails(record, status);
   if (
     operation === "start_registered_service" ||
     operation === "stop_registered_service" ||
@@ -777,6 +835,66 @@ function createDetails(
   });
 }
 
+function createEventHistoryOperationalDetails(
+  record: Record<string, unknown>,
+  status: AdministrativeEventStatus,
+): AdministrativeEventDetails {
+  if (status === "started") {
+    assertAllowedKeys(record, ["fromSequence", "throughSequence"]);
+    for (const field of ["fromSequence", "throughSequence"]) {
+      if (Object.hasOwn(record, field) && !isBoundedCount(record[field]))
+        throw new AdministrativeEventValidationError("invalid_details");
+    }
+    return Object.freeze({
+      ...(Object.hasOwn(record, "fromSequence")
+        ? { fromSequence: record["fromSequence"] }
+        : {}),
+      ...(Object.hasOwn(record, "throughSequence")
+        ? { throughSequence: record["throughSequence"] }
+        : {}),
+    });
+  }
+  if (status === "failed" || status === "rejected") {
+    return failureDetails(record);
+  }
+  if (status !== "succeeded")
+    throw new AdministrativeEventValidationError("invalid_details");
+  assertAllowedKeys(record, [
+    "outcome",
+    "firstSequence",
+    "lastSequence",
+    "processedSegmentCount",
+    "processedExportCount",
+    "exportId",
+  ]);
+  if (Object.hasOwn(record, "outcome") && typeof record["outcome"] !== "string")
+    throw new AdministrativeEventValidationError("invalid_details");
+  for (const field of [
+    "firstSequence",
+    "lastSequence",
+    "processedSegmentCount",
+    "processedExportCount",
+  ]) {
+    if (Object.hasOwn(record, field) && !isBoundedCount(record[field]))
+      throw new AdministrativeEventValidationError("invalid_details");
+  }
+  if (
+    Object.hasOwn(record, "exportId") &&
+    (typeof record["exportId"] !== "string" ||
+      !/^[0-9a-f]{64}$/u.test(record["exportId"]))
+  )
+    throw new AdministrativeEventValidationError("invalid_details");
+  return Object.freeze({ ...record });
+}
+
+function isBoundedCount(value: unknown): boolean {
+  return (
+    Number.isSafeInteger(value) &&
+    (value as number) >= 0 &&
+    (value as number) <= 100_000
+  );
+}
+
 function failureDetails(
   record: Record<string, unknown>,
 ): AdministrativeEventDetails {
@@ -1004,6 +1122,7 @@ function freezeDefined(
 const SAFE_FAILURE_CODES = new Set<string>([
   "backup_operation_failed",
   "administrative_audit_failed",
+  "audit_failed_after_event_history_operation",
   "audit_failed_after_wake_alarm_mutation",
   "audit_failed_after_shutdown_request",
   "audit_failed_after_shutdown_execution",

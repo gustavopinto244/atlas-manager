@@ -1242,6 +1242,30 @@ operation.
 
 Backup targets must use controlled identifiers and paths.
 
+### Version-two event-history record
+
+The canonical durable representation of an existing administrative event. It
+contains the event, contiguous sequence, previous-record SHA-256, and its own
+SHA-256. The chain detects retained-store changes; it is not external
+authenticity.
+
+### Sealed event-history segment
+
+An immutable bounded JSON Lines segment with a canonical manifest and link to
+the previous retained segment. Segment filenames encode their sequence range.
+
+### Retention anchor
+
+A private chained record describing a deliberately pruned sequence boundary.
+It allows retained history to prove continuity without retaining removed event
+contents.
+
+### Canonical event-history export
+
+A protected, bounded JSON Lines snapshot selected by an explicit retained
+sequence range. Its identifier is the SHA-256 of its complete bytes; it is not
+an unrestricted file export or an external audit destination.
+
 ### Event history
 
 A user-relevant history of administrative and automated operations.

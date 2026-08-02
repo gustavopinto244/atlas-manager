@@ -22,3 +22,7 @@ bytes and metadata still match the managed profile.
 This profile does not create accounts, install a helper, enable a scheduler,
 or activate a power effect. The TypeScript parser remains authoritative for the
 generated environment semantics.
+
+The profile uses the fixed v2 event-history directory and strict segment and
+retention policy fields. The legacy single-file setting is migration input only
+and cannot be configured together with v2 operational routes.

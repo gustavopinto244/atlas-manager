@@ -205,6 +205,13 @@ jobs:
       - name: Run deterministic backup orchestration rehearsal
         run: npm test -- --maxWorkers=1 tests/backup-management
 
+      - name: Run event-history operational lifecycle tests
+        run: npm test -- --maxWorkers=1 tests/event-history
+
+      - name: Verify event-history maintenance boundary
+        run: |
+          if rg -n '/admin/event-history/(delete|truncate|repair|import|path)' src/http src/maintenance tests/event-history; then exit 1; fi
+
       - name: Run tests
         run: npm test
         env:
