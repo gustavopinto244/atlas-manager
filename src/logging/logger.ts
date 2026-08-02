@@ -97,3 +97,50 @@ export function logServiceAvailabilityReconciliationSchedulerObserverFailed(
     "Service availability reconciliation scheduler observer failed",
   );
 }
+
+export function logMachinePowerSchedulerStarted(
+  logger: SchedulerRuntimeLogger,
+): void {
+  logger.info(
+    { event: "machine_power_scheduler_started" },
+    "Machine-power scheduler started",
+  );
+}
+
+export function logMachinePowerSchedulerStopped(
+  logger: SchedulerRuntimeLogger,
+): void {
+  logger.info(
+    { event: "machine_power_scheduler_stopped" },
+    "Machine-power scheduler stopped",
+  );
+}
+
+export function logMachinePowerSchedulerTerminated(
+  logger: SchedulerRuntimeLogger,
+  context: Readonly<{
+    outcome: "blocked" | "incomplete" | "conflict" | "failed";
+    errorType?: string;
+  }>,
+): void {
+  logger.error(
+    {
+      event: "machine_power_scheduler_terminated",
+      ...context,
+    },
+    "Machine-power scheduler terminated",
+  );
+}
+
+export function logMachinePowerSchedulerObserverFailed(
+  logger: SchedulerRuntimeLogger,
+  error: unknown,
+): void {
+  logger.error(
+    {
+      event: "machine_power_scheduler_observer_failed",
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    },
+    "Machine-power scheduler observer failed",
+  );
+}

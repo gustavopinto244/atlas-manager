@@ -985,3 +985,18 @@ Direct occurrence execution and administrative HTTP execution do not inherit
 this authority. Readiness still owns due, stale, service, task, backup,
 filesystem, event-recording, and preparation decisions. The scheduler remains
 an explicitly invoked tick; no lifecycle loop or timer is configured.
+
+### Machine-power scheduler lifecycle
+
+ADR-014 adds a separate lifecycle around the existing explicit machine-power
+scheduler tick. `MACHINE_POWER_SCHEDULER_ENABLED` accepts only exact `true` or
+`false` and defaults to `false`. Enabled operation requires persistent cursor,
+permanent claim, and event-history files. A one-shot Node timer waits exactly
+60 seconds after each continuing tick; the first tick starts only after HTTP
+listening, and no ticks overlap. Blocked, incomplete, conflict, and failure
+outcomes stop the application through bounded coordinated shutdown.
+
+The scheduler and administrative power surfaces share one immutable production
+power capability bundle and event-history bundle. Route activation, helper
+backend selection, and policy selection remain independent. No scheduler loop,
+helper request, or real power effect is created by default.

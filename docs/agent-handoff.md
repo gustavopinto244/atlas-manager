@@ -820,3 +820,73 @@ helper, host RTC, D-Bus, installation, privilege, or power operation is used.
 No automatic scheduler loop, timer, startup tick, host or VM drill, helper
 installation or execution, group or user membership change, setuid change,
 RTC access or mutation, D-Bus power request, reboot, or shutdown occurred.
+
+## Current work — Issue #264
+
+The active branch is:
+
+```text
+feat/disabled-machine-power-scheduler-lifecycle
+```
+
+The authoritative merged PR #263 baseline for this delivery is:
+
+```text
+d548477cbee6a1be7f1765d89ef714d68beb7ddb
+```
+
+Issue #264 adds ADR-014 and a disabled-by-default machine-power scheduler
+lifecycle. `MACHINE_POWER_SCHEDULER_ENABLED` accepts only exact `true` or
+`false` and defaults to `false`; enabled operation requires persistent cursor,
+permanent occurrence-claim, and administrative event-history files. The loop
+starts only after HTTP listening, runs the existing explicit tick immediately,
+then waits a fixed 60 seconds after each continuing result. Ticks cannot
+overlap, and blocked, incomplete, conflict, timer, or tick failures terminate
+the application fail-closed without retry.
+
+Administrative power surfaces and the scheduler use one shared production
+power capability bundle and one shared event-history bundle. The scheduler is
+independent from HTTP activation, backend selection, and machine policy. The
+default remains mock-first, always-on, and scheduler-disabled.
+
+Final validation for Issue #264:
+
+```text
+Node.js                            → v24.18.0
+npm                                → 11.16.0
+Node test files                    → 178 passed
+Node tests                         → 2,522 passed
+Node skipped tests                 → 3
+Go                                 → 1.23.0 linux/amd64
+Go tests                           → 111 individual tests
+format                             → passed
+lint                               → passed
+typecheck                          → passed
+build                              → passed
+go format                          → passed
+go mod verify                      → passed
+go vet                             → passed
+npm audit --omit=dev               → 0 production vulnerabilities
+git diff --check                   → passed
+dependencies                       → unchanged
+```
+
+The three skipped tests are the conditional compatibility checks in
+`tests/power-management/integration/linux-power-helper-protocol-compatibility.test.ts`:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They require `ATLAS_MANAGER_POWER_HELPER_FIXTURE`, intentionally unset by the
+ordinary test command so it cannot select an executable implicitly. The
+dedicated compatibility workflow supplies the separately built nonproduction
+fixture path. No production helper, host RTC, D-Bus, installation, privilege,
+or power operation is used.
+
+No scheduler loop was exercised against a real host. No Atlas or VM drill
+occurred; no helper was installed or executed; no group or user membership or
+setuid state changed; no RTC, wake, D-Bus, reboot, shutdown, or other real
+power effect occurred.

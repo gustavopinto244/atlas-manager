@@ -24,6 +24,69 @@ describe("parseEnvironment", () => {
     expect(Object.isFrozen(config.machineOperatingPolicy)).toBe(true);
   });
 
+  it("defaults the machine-power scheduler to disabled", () => {
+    const config = parseEnvironment({});
+    expect(config.machinePowerSchedulerEnabled).toBe(false);
+    expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  it.each([
+    ["false", false],
+    ["true", true],
+  ] as const)("accepts the exact scheduler flag %s", (value, expected) => {
+    const config = parseEnvironment({
+      MACHINE_POWER_SCHEDULER_ENABLED: value,
+      MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+        "/var/lib/atlas-manager/power-cursor.json",
+      MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+        "/var/lib/atlas-manager/power-claims.json",
+      ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
+    });
+
+    expect(config.machinePowerSchedulerEnabled).toBe(expected);
+  });
+
+  it.each([
+    "TRUE",
+    "FALSE",
+    "True",
+    "False",
+    "1",
+    "0",
+    "yes",
+    "no",
+    "enabled",
+    "disabled",
+    "",
+    " true",
+    "false ",
+    "unknown",
+  ])("rejects non-canonical scheduler flag %s", (value) => {
+    expect(() =>
+      parseEnvironment({ MACHINE_POWER_SCHEDULER_ENABLED: value }),
+    ).toThrow();
+  });
+
+  it("requires all persistent scheduler files only when enabled", () => {
+    expect(() =>
+      parseEnvironment({ MACHINE_POWER_SCHEDULER_ENABLED: "true" }),
+    ).toThrow();
+
+    expect(
+      parseEnvironment({ MACHINE_POWER_SCHEDULER_ENABLED: "false" })
+        .machinePowerSchedulerEnabled,
+    ).toBe(false);
+  });
+
+  it("does not enable the scheduler because a scheduled policy is configured", () => {
+    const config = parseEnvironment({
+      MACHINE_OPERATING_POLICY: JSON.stringify(scheduledPolicy),
+    });
+
+    expect(config.machineOperatingPolicy.mode).toBe("scheduled");
+    expect(config.machinePowerSchedulerEnabled).toBe(false);
+  });
+
   it.each([{ mode: "always_on" }, { mode: "manual" }, scheduledPolicy])(
     "accepts a strict machine operating policy",
     (policy) => {
@@ -511,6 +574,7 @@ describe("parseEnvironment", () => {
       port: 3000,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machinePowerSchedulerEnabled: false,
       machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
@@ -536,6 +600,7 @@ describe("parseEnvironment", () => {
       port: 8080,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machinePowerSchedulerEnabled: false,
       machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,

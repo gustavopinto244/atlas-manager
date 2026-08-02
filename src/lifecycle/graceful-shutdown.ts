@@ -10,7 +10,11 @@ export type ApplicationShutdownReason =
         | "http_server_error"
         | "scheduler_incomplete"
         | "scheduler_conflict"
-        | "scheduler_failed";
+        | "scheduler_failed"
+        | "machine_power_scheduler_blocked"
+        | "machine_power_scheduler_incomplete"
+        | "machine_power_scheduler_conflict"
+        | "machine_power_scheduler_failed";
     }>;
 
 export interface ClosableServer {

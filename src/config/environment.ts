@@ -212,6 +212,11 @@ const environmentSchema = z
         error: "must be exactly mock or linux_helper",
       })
       .default("mock"),
+    MACHINE_POWER_SCHEDULER_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
     MACHINE_OPERATING_POLICY: machineOperatingPolicySchema,
     SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
       persistenceFilePathSchema.optional(),
@@ -463,6 +468,27 @@ const environmentSchema = z
         path: ["MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"],
         message: "must differ from the scheduler cursor file path",
       });
+
+    if (environment.MACHINE_POWER_SCHEDULER_ENABLED === "true") {
+      if (environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["MACHINE_POWER_SCHEDULER_CURSOR_FILE"],
+          message: "is required when the machine-power scheduler is enabled",
+        });
+      if (environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE"],
+          message: "is required when the machine-power scheduler is enabled",
+        });
+      if (environment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_EVENT_HISTORY_FILE"],
+          message: "is required when the machine-power scheduler is enabled",
+        });
+    }
   });
 
 function isValidPersistenceFilePath(value: string): boolean {
@@ -474,6 +500,7 @@ export interface EnvironmentConfig {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly powerManagementBackend: PowerManagementBackend;
+  readonly machinePowerSchedulerEnabled: boolean;
   readonly machineOperatingPolicy: MachineOperatingPolicy;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
@@ -529,6 +556,8 @@ export function parseEnvironment(
     port: parsedEnvironment.PORT,
     logLevel: parsedEnvironment.LOG_LEVEL,
     powerManagementBackend: parsedEnvironment.POWER_MANAGEMENT_BACKEND,
+    machinePowerSchedulerEnabled:
+      parsedEnvironment.MACHINE_POWER_SCHEDULER_ENABLED === "true",
     machineOperatingPolicy: parsedEnvironment.MACHINE_OPERATING_POLICY,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",

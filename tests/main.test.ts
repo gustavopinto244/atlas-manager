@@ -18,7 +18,12 @@ interface ControlledEnvironmentConfig {
   serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   serviceAvailabilityOverrideFilePath?: string;
   administrativeEventHistoryHttpEnabled?: boolean;
+  administrativeWakeAlarmHttpEnabled?: boolean;
+  administrativeShutdownHttpEnabled?: boolean;
   administrativeEventHistoryFilePath?: string;
+  machinePowerSchedulerEnabled?: boolean;
+  machinePowerSchedulerCursorFilePath?: string;
+  machineShutdownOccurrenceClaimFilePath?: string;
   administrativeRoleAssignments?: readonly {
     principal: AdministrativePrincipal;
     roles: readonly AdministrativeRole[];
@@ -47,6 +52,10 @@ const controlled = vi.hoisted(() => {
     overridePaths: [] as string[],
     createServiceManagement: vi.fn(),
     createApp: vi.fn(),
+    createConfiguredPowerManagementRuntime: vi.fn(),
+    machineSchedulerLoops: [] as object[],
+    machineSchedulerRuntimeStarts: 0,
+    serverListeners: new Map<string, () => void>(),
   };
 });
 
@@ -120,7 +129,9 @@ vi.mock(
 vi.mock("../src/http/create-app.js", () => ({
   createApp: controlled.createApp.mockImplementation(() => ({
     listen: vi.fn(() => ({
-      once: vi.fn(),
+      once: vi.fn((event: string, listener: () => void) => {
+        controlled.serverListeners.set(event, listener);
+      }),
       close: vi.fn(),
     })),
   })),
@@ -134,9 +145,45 @@ vi.mock("../src/lifecycle/graceful-shutdown.js", () => ({
 vi.mock(
   "../src/lifecycle/service-availability-reconciliation-scheduler-runtime.js",
   () => ({
-    ServiceAvailabilityReconciliationSchedulerRuntime: class {},
+    ServiceAvailabilityReconciliationSchedulerRuntime: class {
+      public start = vi.fn(() => Promise.resolve({ kind: "stopped" }));
+    },
   }),
 );
+
+vi.mock(
+  "../src/power-management/composition/create-configured-power-management-runtime.js",
+  () => ({
+    createConfiguredPowerManagementRuntime:
+      controlled.createConfiguredPowerManagementRuntime.mockImplementation(
+        () => ({ runMachinePowerSchedulerTick: { execute: vi.fn() } }),
+      ),
+  }),
+);
+
+vi.mock(
+  "../src/power-management/application/machine-power-scheduler-loop.js",
+  () => ({
+    MachinePowerSchedulerLoop: class {
+      public constructor() {
+        controlled.machineSchedulerLoops.push(this);
+      }
+
+      public start = vi.fn(() => Promise.resolve({ kind: "stopped" }));
+
+      public stop = vi.fn(() => Promise.resolve({ kind: "stopped" }));
+    },
+  }),
+);
+
+vi.mock("../src/lifecycle/machine-power-scheduler-runtime.js", () => ({
+  MachinePowerSchedulerRuntime: class {
+    public start = vi.fn(() => {
+      controlled.machineSchedulerRuntimeStarts += 1;
+      return Promise.resolve({ kind: "stopped" });
+    });
+  },
+}));
 
 vi.mock("../src/logging/logger.js", () => ({
   createLogger: vi.fn(() => ({})),
@@ -158,6 +205,9 @@ describe("application persistence adapter selection", () => {
       "../src/http/create-app.js",
       "../src/lifecycle/graceful-shutdown.js",
       "../src/lifecycle/service-availability-reconciliation-scheduler-runtime.js",
+      "../src/power-management/composition/create-configured-power-management-runtime.js",
+      "../src/power-management/application/machine-power-scheduler-loop.js",
+      "../src/lifecycle/machine-power-scheduler-runtime.js",
       "../src/logging/logger.js",
     ])
       vi.doUnmock(modulePath);
@@ -176,10 +226,19 @@ describe("application persistence adapter selection", () => {
     controlled.claimPaths.length = 0;
     controlled.overrideStores.length = 0;
     controlled.overridePaths.length = 0;
+    controlled.createConfiguredPowerManagementRuntime.mockReset();
+    controlled.createConfiguredPowerManagementRuntime.mockImplementation(
+      () => ({ runMachinePowerSchedulerTick: { execute: vi.fn() } }),
+    );
+    controlled.machineSchedulerLoops.length = 0;
+    controlled.machineSchedulerRuntimeStarts = 0;
+    controlled.serverListeners.clear();
     controlled.createApp.mockReset();
     controlled.createApp.mockImplementation(() => ({
       listen: vi.fn(() => ({
-        once: vi.fn(),
+        once: vi.fn((event: string, listener: () => void) => {
+          controlled.serverListeners.set(event, listener);
+        }),
         close: vi.fn(),
       })),
     }));
@@ -376,5 +435,35 @@ describe("application persistence adapter selection", () => {
       administrativeEventHistory?: object;
     };
     expect(dependencies.administrativeEventHistory).toBeDefined();
+  });
+
+  it("does not construct or start the machine-power scheduler by default", async () => {
+    await import("../src/main.js");
+
+    expect(controlled.machineSchedulerLoops).toHaveLength(0);
+    expect(controlled.machineSchedulerRuntimeStarts).toBe(0);
+  });
+
+  it("starts the enabled machine-power scheduler only after HTTP listening", async () => {
+    controlled.config = {
+      ...controlled.config,
+      machinePowerSchedulerEnabled: true,
+      machinePowerSchedulerCursorFilePath:
+        "/var/lib/atlas-manager/power-cursor.json",
+      machineShutdownOccurrenceClaimFilePath:
+        "/var/lib/atlas-manager/power-claims.json",
+      administrativeEventHistoryFilePath: "/var/lib/atlas-manager/events.jsonl",
+    };
+
+    await import("../src/main.js");
+
+    expect(
+      controlled.createConfiguredPowerManagementRuntime,
+    ).toHaveBeenCalledOnce();
+    expect(controlled.machineSchedulerLoops).toHaveLength(1);
+    expect(controlled.machineSchedulerRuntimeStarts).toBe(0);
+
+    controlled.serverListeners.get("listening")?.();
+    expect(controlled.machineSchedulerRuntimeStarts).toBe(1);
   });
 });

@@ -10,7 +10,13 @@ import {
   registerShutdownSignals,
   type RequestShutdown,
 } from "./lifecycle/graceful-shutdown.js";
+import { MachinePowerSchedulerRuntime } from "./lifecycle/machine-power-scheduler-runtime.js";
 import { ServiceAvailabilityReconciliationSchedulerRuntime } from "./lifecycle/service-availability-reconciliation-scheduler-runtime.js";
+import { MachinePowerSchedulerLoop } from "./power-management/application/machine-power-scheduler-loop.js";
+import { NodeMachinePowerSchedulerTimer } from "./power-management/infrastructure/node-machine-power-scheduler-timer.js";
+import { createEventHistory } from "./event-history/composition/create-event-history.js";
+import { createConfiguredPowerManagementRuntime } from "./power-management/composition/create-configured-power-management-runtime.js";
+import type { PowerManagementCapabilities } from "./power-management/composition/create-power-management.js";
 import {
   createLogger,
   logHttpServerStarted,
@@ -105,12 +111,48 @@ function start(): void {
       process.env,
       serviceManagementOverrides,
     );
+    const administrativePowerEnabled =
+      config.administrativeWakeAlarmHttpEnabled ||
+      config.administrativeShutdownHttpEnabled;
+    const eventHistoryRequired =
+      config.administrativeEventHistoryHttpEnabled ||
+      administrativePowerEnabled ||
+      config.machinePowerSchedulerEnabled;
+    if (
+      eventHistoryRequired &&
+      config.administrativeEventHistoryFilePath === undefined
+    ) {
+      throw new Error("Event-history persistence is required");
+    }
+    const eventHistory =
+      config.administrativeEventHistoryFilePath === undefined
+        ? undefined
+        : createEventHistory({
+            filePath: config.administrativeEventHistoryFilePath,
+          });
+    const powerManagement: PowerManagementCapabilities | undefined =
+      administrativePowerEnabled || config.machinePowerSchedulerEnabled
+        ? createConfiguredPowerManagementRuntime(
+            config,
+            serviceManagement,
+            eventHistory!,
+          )
+        : undefined;
     const administrativeRuntime =
       config.administrativeEventHistoryHttpEnabled ||
       config.administrativeWakeAlarmHttpEnabled ||
       config.administrativeShutdownHttpEnabled
-        ? createAdministrativeRuntime(config, serviceManagement)
+        ? createAdministrativeRuntime(config, serviceManagement, {
+            ...(eventHistory === undefined ? {} : { eventHistory }),
+            ...(powerManagement === undefined ? {} : { powerManagement }),
+          })
         : undefined;
+    const machinePowerSchedulerLoop = config.machinePowerSchedulerEnabled
+      ? new MachinePowerSchedulerLoop(
+          powerManagement!.runMachinePowerSchedulerTick,
+          new NodeMachinePowerSchedulerTimer(),
+        )
+      : undefined;
     const app = createApp({
       logger,
       getServerHealth,
@@ -130,10 +172,22 @@ function start(): void {
     };
     const coordinatedShutdown = createGracefulShutdown({
       server,
-      stopBackgroundWork: () =>
-        serviceManagement.serviceAvailabilityReconciliationSchedulerLoop
-          .stop()
-          .then(() => undefined),
+      stopBackgroundWork: async () => {
+        const stops = [
+          Promise.resolve().then(() =>
+            serviceManagement.serviceAvailabilityReconciliationSchedulerLoop.stop(),
+          ),
+          ...(machinePowerSchedulerLoop === undefined
+            ? []
+            : [Promise.resolve().then(() => machinePowerSchedulerLoop.stop())]),
+        ];
+        const results = await Promise.allSettled(stops);
+        const failure = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+        );
+        if (failure !== undefined) throw failure.reason;
+      },
       logger,
       setFailureExitCode,
     });
@@ -149,6 +203,15 @@ function start(): void {
         logger,
         setFailureExitCode,
       );
+    const machinePowerSchedulerRuntime =
+      machinePowerSchedulerLoop === undefined
+        ? undefined
+        : new MachinePowerSchedulerRuntime(
+            machinePowerSchedulerLoop,
+            requestShutdown,
+            logger,
+            setFailureExitCode,
+          );
 
     registerShutdownSignals(process, requestShutdown);
 
@@ -162,6 +225,8 @@ function start(): void {
         port: config.port,
       });
       void schedulerRuntime.start();
+      if (machinePowerSchedulerRuntime !== undefined)
+        void machinePowerSchedulerRuntime.start();
     });
 
     server.once("error", (error) => {

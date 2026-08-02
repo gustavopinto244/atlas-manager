@@ -1755,3 +1755,11 @@ one-minute policy interval ending at a candidate shutdown and confirms only
 when exactly one generated occurrence matches every field. It does not replace
 readiness, preparation, direct confirmation, administrative confirmation, or
 automatic scheduler lifecycle.
+
+### Machine-power scheduler lifecycle
+
+The disabled-by-default process lifecycle around the existing explicit
+machine-power scheduler tick. It starts after HTTP listening only when the
+exact activation flag is `true`, uses one non-overlapping one-shot timer with
+a fixed 60-second delay, and terminates fail-closed on blocked, incomplete,
+conflict, or failed outcomes.

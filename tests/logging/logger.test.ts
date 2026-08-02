@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   createLogger,
   logHttpServerStarted,
+  logMachinePowerSchedulerObserverFailed,
+  logMachinePowerSchedulerStarted,
+  logMachinePowerSchedulerStopped,
+  logMachinePowerSchedulerTerminated,
   logServiceAvailabilityReconciliationSchedulerStarted,
   logServiceAvailabilityReconciliationSchedulerStopped,
   logServiceAvailabilityReconciliationSchedulerTerminated,
@@ -44,6 +48,44 @@ describe("application logger", () => {
       port: 3000,
       msg: "HTTP server started",
     });
+  });
+
+  it("writes bounded machine-power scheduler lifecycle events", () => {
+    const output: string[] = [];
+    const destination = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        output.push(chunk.toString());
+        callback();
+      },
+    });
+    const logger = createLogger("info", destination);
+
+    logMachinePowerSchedulerStarted(logger);
+    logMachinePowerSchedulerStopped(logger);
+    logMachinePowerSchedulerTerminated(logger, {
+      outcome: "failed",
+      errorType: "TypeError",
+    });
+    logMachinePowerSchedulerObserverFailed(
+      logger,
+      new Error("secret scheduler path"),
+    );
+
+    const entries = output.map((entry): unknown => JSON.parse(entry));
+    expect(entries).toEqual([
+      expect.objectContaining({ event: "machine_power_scheduler_started" }),
+      expect.objectContaining({ event: "machine_power_scheduler_stopped" }),
+      expect.objectContaining({
+        event: "machine_power_scheduler_terminated",
+        outcome: "failed",
+        errorType: "TypeError",
+      }),
+      expect.objectContaining({
+        event: "machine_power_scheduler_observer_failed",
+        errorType: "Error",
+      }),
+    ]);
+    expect(output.join(" ")).not.toContain("secret scheduler path");
   });
 
   it("writes safe structured scheduler lifecycle events", () => {
