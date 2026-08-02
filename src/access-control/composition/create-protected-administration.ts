@@ -40,6 +40,9 @@ export interface ProtectedAdministrationCompositionInput {
   readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
   readonly administrativeEventAttemptIdGenerator?: AdministrativeEventAttemptIdGenerator;
   readonly eventHistoryOperations?: AdministrativeEventHistoryOperations;
+  readonly securityPostureReader?: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
 }
 
 export interface ProtectedAdministrationCapabilities {
@@ -85,6 +88,9 @@ export interface ProtectedAdministrationCapabilities {
   }>;
   readonly getOperationsOverview: Readonly<{ execute(): Promise<unknown> }>;
   readonly getAdministrativeDashboard: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly getAdministrativeSecurityPosture: Readonly<{
     execute(): Promise<unknown>;
   }>;
   readonly getRegisteredBackupTargets: Readonly<{
@@ -244,6 +250,14 @@ export function createProtectedAdministration(
       runner.run("read_administrative_event_history", async () =>
         input.eventHistory.getAdministrativeEventHistory.execute(value),
       ),
+  });
+  const getAdministrativeSecurityPosture = Object.freeze({
+    execute: () =>
+      runner.run("read_administrative_security_posture", () => {
+        if (input.securityPostureReader === undefined)
+          throw new Error("administrative_security_status_unavailable");
+        return input.securityPostureReader.execute();
+      }),
   });
   const requireServices = (): ServiceManagementCapabilities => {
     if (input.serviceManagement === undefined)
@@ -788,6 +802,7 @@ export function createProtectedAdministration(
     executeMachineShutdownOccurrence,
     runMachinePowerSchedulerTick,
     getAdministrativeEventHistory,
+    getAdministrativeSecurityPosture,
     getRegisteredServices,
     getRegisteredService,
     startRegisteredService,

@@ -87,6 +87,7 @@ describe("configured machine power-effects admission", () => {
       HOST: "127.0.0.1",
       CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
       CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+      ADMINISTRATIVE_PUBLIC_ORIGIN: "https://atlas.example.com",
       ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
       ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
         {
@@ -124,6 +125,7 @@ describe("configured machine power-effects admission", () => {
       HOST: "127.0.0.1",
       CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
       CLOUDFLARE_ACCESS_AUDIENCE: "aud",
+      ADMINISTRATIVE_PUBLIC_ORIGIN: "https://atlas.example.com",
       ADMINISTRATIVE_EVENT_HISTORY_FILE: "/var/lib/atlas-manager/events.jsonl",
       ADMINISTRATIVE_ROLE_ASSIGNMENTS: JSON.stringify([
         {

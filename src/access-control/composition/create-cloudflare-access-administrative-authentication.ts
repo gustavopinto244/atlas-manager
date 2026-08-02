@@ -8,6 +8,10 @@ import {
   type CloudflareAccessJwksFetch,
 } from "../infrastructure/cloudflare-access-jwks-provider.js";
 import { CloudflareAccessJwtVerifierAdapter } from "../infrastructure/cloudflare-access-jwt-verifier.js";
+import {
+  createAdministrativeIdentityReadiness,
+  type AdministrativeIdentityReadiness,
+} from "../domain/administrative-identity-readiness.js";
 
 export interface CloudflareAccessAdministrativeAuthenticationOverrides {
   readonly fetch?: CloudflareAccessJwksFetch;
@@ -20,6 +24,7 @@ export interface CloudflareAccessAdministrativeAuthenticationCapabilities {
   readonly checkIdentityProviderReadiness: () => Promise<
     "ready" | "unavailable"
   >;
+  readonly readIdentityProviderReadiness: () => Promise<AdministrativeIdentityReadiness>;
 }
 
 export function createCloudflareAccessAdministrativeAuthentication(input: {
@@ -45,9 +50,20 @@ export function createCloudflareAccessAdministrativeAuthentication(input: {
     const createAuthenticationProviderForRequest = () => denyAll;
     const checkIdentityProviderReadiness = () =>
       Promise.resolve<"unavailable">("unavailable");
+    const readIdentityProviderReadiness = () =>
+      Promise.resolve(
+        createAdministrativeIdentityReadiness({
+          outcome: "misconfigured",
+          checkedAt: input.clock.now(),
+          issuerConfigured: false,
+          audienceConfigured: false,
+          jwksReachable: false,
+        }),
+      );
     return Object.freeze({
       createAuthenticationProviderForRequest,
       checkIdentityProviderReadiness,
+      readIdentityProviderReadiness,
     });
   }
 
@@ -75,8 +91,20 @@ export function createCloudflareAccessAdministrativeAuthentication(input: {
       return "unavailable" as const;
     }
   };
+  const readIdentityProviderReadiness = async () => {
+    const checkedAt = input.clock.now();
+    const outcome = await checkIdentityProviderReadiness();
+    return createAdministrativeIdentityReadiness({
+      outcome,
+      checkedAt,
+      issuerConfigured: true,
+      audienceConfigured: true,
+      jwksReachable: outcome === "ready",
+    });
+  };
   return Object.freeze({
     createAuthenticationProviderForRequest,
     checkIdentityProviderReadiness,
+    readIdentityProviderReadiness,
   });
 }

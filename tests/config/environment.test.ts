@@ -522,6 +522,7 @@ describe("parseEnvironment", () => {
       HOST: "127.0.0.1",
       CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
       CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_PUBLIC_ORIGIN: "https://atlas.example.com",
       ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: "true",
       ADMINISTRATIVE_EVENT_HISTORY_FILE:
         "/var/lib/atlas-manager/admin-events.jsonl",
@@ -552,6 +553,7 @@ describe("parseEnvironment", () => {
       HOST: "127.0.0.1",
       CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
       CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_PUBLIC_ORIGIN: "https://atlas.example.com",
       ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "true",
       ADMINISTRATIVE_EVENT_HISTORY_FILE:
         "/var/lib/atlas-manager/admin-events.jsonl",
@@ -590,6 +592,7 @@ describe("parseEnvironment", () => {
       HOST: "127.0.0.1",
       CLOUDFLARE_ACCESS_TEAM_NAME: "atlas",
       CLOUDFLARE_ACCESS_AUDIENCE: "atlas-admin",
+      ADMINISTRATIVE_PUBLIC_ORIGIN: "https://atlas.example.com",
       ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "true",
       ADMINISTRATIVE_EVENT_HISTORY_FILE:
         "/var/lib/atlas-manager/admin-events.jsonl",

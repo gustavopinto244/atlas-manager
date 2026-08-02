@@ -27,11 +27,15 @@ const (
 	InstallDisabled     Action = "install-disabled"
 	VerifyInstalled     Action = "verify-installed"
 	RemoveDisabled      Action = "remove-disabled"
+	ReplaceDisabled     Action = "replace-disabled"
+	RollbackDisabled    Action = "rollback-disabled"
 )
 
 const (
 	InstallConfirmation = "confirm_atlas_manager_mock_administrative_configuration"
 	RemoveConfirmation  = "confirm_atlas_manager_mock_administrative_configuration_removal"
+	ReplaceConfirmation = "confirm_atlas_manager_administrative_configuration_replacement"
+	RollbackConfirmation = "confirm_atlas_manager_administrative_configuration_rollback"
 )
 
 type Paths struct {
@@ -39,6 +43,7 @@ type Paths struct {
 	StateDirectory, StateFile, Journal, Lock  string
 	Deployment                                installer.Paths
 	IdentityState, IdentityJournal            string
+	PreviousEnvironment                       string
 }
 
 func ProductionPaths(bundleRoot string) Paths {
@@ -49,6 +54,7 @@ func ProductionPaths(bundleRoot string) Paths {
 		StateDirectory:  "/var/lib/atlas-manager-administrative-runtime-configuration",
 		StateFile:       "/var/lib/atlas-manager-administrative-runtime-configuration/state.json",
 		Journal:         "/var/lib/atlas-manager-administrative-runtime-configuration/transaction.json",
+		PreviousEnvironment: "/var/lib/atlas-manager-administrative-runtime-configuration/previous.env",
 		Lock:            "/run/atlas-manager-administrative-runtime-configuration.lock",
 		Deployment:      deployment,
 		IdentityState:   "/var/lib/atlas-manager-identity-preparation/state.json",
@@ -83,6 +89,10 @@ type State struct {
 	ApplicationVersion  string `json:"applicationVersion"`
 	SourceCommit        string `json:"sourceCommit"`
 	Status              string `json:"status"`
+	CurrentGeneration   uint64 `json:"currentGeneration"`
+	PreviousGeneration  uint64 `json:"previousGeneration"`
+	PreviousConfigurationSHA256 string `json:"previousConfigurationSha256,omitempty"`
+	PreviousSourceInputSHA256 string `json:"previousSourceInputSha256,omitempty"`
 }
 
 type journal struct {
@@ -93,7 +103,7 @@ type journal struct {
 }
 
 func ValidAction(value string) bool {
-	return value == string(Inspect) || value == string(ValidateInputAction) || value == string(InstallDisabled) || value == string(VerifyInstalled) || value == string(RemoveDisabled)
+	return value == string(Inspect) || value == string(ValidateInputAction) || value == string(InstallDisabled) || value == string(VerifyInstalled) || value == string(RemoveDisabled) || value == string(ReplaceDisabled) || value == string(RollbackDisabled)
 }
 
 func New(paths Paths, deps Dependencies) Configuration {
@@ -140,6 +150,12 @@ func (configuration Configuration) Run(ctx context.Context, action Action, confi
 	if action == RemoveDisabled && confirmation != RemoveConfirmation {
 		return configuration.blocked(action, "confirmation_invalid"), nil
 	}
+	if action == ReplaceDisabled && confirmation != ReplaceConfirmation {
+		return configuration.blocked(action, "confirmation_invalid"), nil
+	}
+	if action == RollbackDisabled && confirmation != RollbackConfirmation {
+		return configuration.blocked(action, "confirmation_invalid"), nil
+	}
 	if action == VerifyInstalled {
 		if err := configuration.validateBase(); err != nil {
 			return configuration.blocked(action, err.Error()), nil
@@ -149,7 +165,7 @@ func (configuration Configuration) Run(ctx context.Context, action Action, confi
 		}
 		return configuration.success(action, "verified_installed"), nil
 	}
-	if action == RemoveDisabled {
+	if action == RemoveDisabled || action == ReplaceDisabled || action == RollbackDisabled {
 		if err := configuration.validateBase(); err != nil {
 			return configuration.blocked(action, err.Error()), nil
 		}
@@ -159,7 +175,8 @@ func (configuration Configuration) Run(ctx context.Context, action Action, confi
 	} else if err := configuration.validatePrerequisites(); err != nil {
 		return configuration.blocked(action, err.Error()), nil
 	}
-	if _, seen, err := readState(configuration.paths.StateFile); seen || err != nil {
+	state, seen, stateErr := readState(configuration.paths.StateFile)
+	if stateErr != nil || (action == InstallDisabled && seen) || ((action == ReplaceDisabled || action == RollbackDisabled) && (!seen || state == nil)) {
 		return configuration.blocked(action, "configuration_state_invalid"), nil
 	}
 	if _, seen, err := readJournal(configuration.paths.Journal); seen || err != nil {
@@ -172,6 +189,12 @@ func (configuration Configuration) Run(ctx context.Context, action Action, confi
 	defer releaseLock(lock, configuration.paths.Lock)
 	if action == InstallDisabled {
 		return configuration.install(), nil
+	}
+	if action == ReplaceDisabled {
+		return configuration.replace(), nil
+	}
+	if action == RollbackDisabled {
+		return configuration.rollback(), nil
 	}
 	return configuration.remove(), nil
 }
@@ -249,7 +272,8 @@ func (configuration Configuration) install() Report {
 	if err != nil || !seen {
 		return configuration.blocked(InstallDisabled, "deployment_not_ready")
 	}
-	state := State{SchemaVersion: 1, Profile: ProfileName, ConfigurationSHA256: ProfileSHA256(environment), ApplicationVersion: manifest.Version, SourceCommit: sourceCommit(configuration.paths.BundleRoot), Status: "installed"}
+	inputBytes, _ := os.ReadFile(configuration.paths.Input)
+	state := State{SchemaVersion: 1, Profile: ProfileName, ConfigurationSHA256: ProfileSHA256(environment), ApplicationVersion: manifest.Version, SourceCommit: sourceCommit(configuration.paths.BundleRoot), Status: "installed", CurrentGeneration: 1, PreviousGeneration: 0, PreviousSourceInputSHA256: hash(inputBytes)}
 	if err := writeState(configuration.paths, state, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil {
 		return configuration.blocked(InstallDisabled, err.Error())
 	}
@@ -258,6 +282,48 @@ func (configuration Configuration) install() Report {
 	}
 	_ = os.Remove(configuration.paths.Journal)
 	return configuration.success(InstallDisabled, "installed_mock_administrative")
+}
+
+func (configuration Configuration) replace() Report {
+	if err := writeJournal(configuration.paths); err != nil { return configuration.blocked(ReplaceDisabled, err.Error()) }
+	current, err := os.ReadFile(configuration.paths.Environment)
+	if err != nil { return configuration.blocked(ReplaceDisabled, "configuration_modified") }
+	input, err := configuration.readInput()
+	if err != nil { return configuration.blocked(ReplaceDisabled, "administrative_input_invalid") }
+	next, err := Environment(input)
+	if err != nil { return configuration.blocked(ReplaceDisabled, err.Error()) }
+	state, seen, err := readState(configuration.paths.StateFile)
+	if err != nil || !seen || state == nil { return configuration.blocked(ReplaceDisabled, "configuration_state_invalid") }
+	if err := os.MkdirAll(configuration.paths.StateDirectory, 0o700); err != nil { return configuration.blocked(ReplaceDisabled, "configuration_replace_failed") }
+	if err := writeAtomic(configuration.previousEnvironmentPath(), current, 0o640, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(ReplaceDisabled, "configuration_replace_failed") }
+	if err := writeAtomic(configuration.paths.Environment, next, 0o640, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(ReplaceDisabled, "configuration_replace_failed") }
+	inputBytes, _ := os.ReadFile(configuration.paths.Input)
+	state.PreviousGeneration = state.CurrentGeneration
+	state.CurrentGeneration++
+	state.PreviousConfigurationSHA256 = state.ConfigurationSHA256
+	state.PreviousSourceInputSHA256 = state.PreviousSourceInputSHA256
+	state.ConfigurationSHA256 = ProfileSHA256(next)
+	if err := writeState(configuration.paths, *state, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(ReplaceDisabled, "configuration_replace_failed") }
+	_ = inputBytes
+	_ = os.Remove(configuration.paths.Journal)
+	return configuration.success(ReplaceDisabled, "replaced")
+}
+
+func (configuration Configuration) rollback() Report {
+	if err := writeJournal(configuration.paths); err != nil { return configuration.blocked(RollbackDisabled, err.Error()) }
+	state, seen, err := readState(configuration.paths.StateFile)
+	if err != nil || !seen || state == nil || state.PreviousGeneration == 0 || state.PreviousConfigurationSHA256 == "" { return configuration.blocked(RollbackDisabled, "previous_generation_unavailable") }
+	previous, err := os.ReadFile(configuration.previousEnvironmentPath())
+	if err != nil || ProfileSHA256(previous) != state.PreviousConfigurationSHA256 { return configuration.blocked(RollbackDisabled, "previous_generation_modified") }
+	current, err := os.ReadFile(configuration.paths.Environment)
+	if err != nil { return configuration.blocked(RollbackDisabled, "configuration_modified") }
+	if err := writeAtomic(configuration.previousEnvironmentPath(), current, 0o640, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(RollbackDisabled, "configuration_rollback_failed") }
+	if err := writeAtomic(configuration.paths.Environment, previous, 0o640, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(RollbackDisabled, "configuration_rollback_failed") }
+	state.PreviousConfigurationSHA256, state.ConfigurationSHA256 = state.ConfigurationSHA256, state.PreviousConfigurationSHA256
+	state.PreviousGeneration, state.CurrentGeneration = state.CurrentGeneration, state.PreviousGeneration
+	if err := writeState(configuration.paths, *state, configuration.deps.ApplyOwnership, configuration.primaryGID()); err != nil { return configuration.blocked(RollbackDisabled, "configuration_rollback_failed") }
+	_ = os.Remove(configuration.paths.Journal)
+	return configuration.success(RollbackDisabled, "rolled_back")
 }
 
 func (configuration Configuration) remove() Report {
@@ -344,6 +410,13 @@ func (configuration Configuration) primaryGID() int {
 		return 0
 	}
 	return state.PrimaryGroup.ID
+}
+
+func (configuration Configuration) previousEnvironmentPath() string {
+	if configuration.paths.PreviousEnvironment != "" {
+		return configuration.paths.PreviousEnvironment
+	}
+	return filepath.Join(configuration.paths.StateDirectory, "previous.env")
 }
 func sourceCommit(root string) string {
 	data, err := os.ReadFile(filepath.Join(root, "MANIFEST.json"))

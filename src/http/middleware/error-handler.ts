@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 
 import { HttpError } from "../errors/http-error.js";
+import { setAdministrativeSecurityHeaders } from "../administrative-http.js";
 
 export interface HttpErrorLogger {
   error(context: Record<string, unknown>, message: string): void;
@@ -13,6 +14,9 @@ export function createErrorHandler(
     void _next;
 
     if (error instanceof HttpError) {
+      if (request.path.startsWith("/admin")) {
+        setAdministrativeSecurityHeaders(response);
+      }
       response.status(error.statusCode).json({
         error: {
           code: error.code,

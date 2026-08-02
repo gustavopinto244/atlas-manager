@@ -179,6 +179,7 @@ function start(): void {
       config.administrativeDashboardEnabled === true ||
       config.administrativeBackupHttpEnabled === true ||
       config.administrativeEventHistoryOperationsHttpEnabled === true ||
+      config.administrativeSecurityStatusHttpEnabled === true ||
       config.backupSchedulerEnabled;
     if (
       eventHistoryRequired &&
@@ -253,12 +254,13 @@ function start(): void {
       config.administrativeOverviewHttpEnabled === true ||
       config.administrativeDashboardEnabled === true ||
       config.administrativeBackupHttpEnabled === true ||
-      config.administrativeEventHistoryOperationsHttpEnabled === true
+      config.administrativeEventHistoryOperationsHttpEnabled === true ||
+      config.administrativeSecurityStatusHttpEnabled === true
         ? createAdministrativeRuntime(config, serviceManagement, {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
             getServerHealth,
-            applicationVersion: "0.1.0",
+            applicationVersion: "1.0.0-rc.1",
             ...(backupManagement === undefined ? {} : { backupManagement }),
           })
         : undefined;
@@ -310,6 +312,14 @@ function start(): void {
             administrativeEventHistoryOperations:
               administrativeRuntime.eventHistoryOperations,
           }),
+      ...(administrativeRuntime?.securityStatus === undefined
+        ? {}
+        : {
+            administrativeSecurityStatus: administrativeRuntime.securityStatus,
+          }),
+      ...(config.administrativePublicOrigin === undefined
+        ? {}
+        : { administrativePublicOrigin: config.administrativePublicOrigin }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

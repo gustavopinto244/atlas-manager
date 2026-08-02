@@ -1,11 +1,13 @@
 import { parseStrictJson } from "./strict-json.js";
 import { parseEnvironment } from "./environment.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../service-management/infrastructure/environment-registered-service-catalog.js";
+import { parseAdministrativePublicOrigin } from "../http/administrative-public-origin.js";
 
 export interface MockAdministrativeInput {
   readonly schemaVersion: 1;
   readonly cloudflareTeamName: string;
   readonly cloudflareAudience: string;
+  readonly publicOrigin: string;
   readonly roleAssignments: readonly Readonly<{
     readonly principalId: string;
     readonly roles: readonly string[];
@@ -29,10 +31,11 @@ export function parseMockAdministrativeInput(
   const parsed = parseStrictJson(value);
   if (
     !isRecord(parsed) ||
-    Reflect.ownKeys(parsed).length !== 8 ||
+    Reflect.ownKeys(parsed).length !== 9 ||
     parsed.schemaVersion !== 1 ||
     typeof parsed.cloudflareTeamName !== "string" ||
     typeof parsed.cloudflareAudience !== "string" ||
+    typeof parsed.publicOrigin !== "string" ||
     !Array.isArray(parsed.roleAssignments) ||
     !Array.isArray(parsed.registeredServices) ||
     typeof parsed.backupSchedulerEnabled !== "boolean" ||
@@ -40,6 +43,7 @@ export function parseMockAdministrativeInput(
     !isRecord(parsed.eventHistoryOperations)
   )
     throw new Error("administrative_input_invalid");
+  parseAdministrativePublicOrigin(parsed.publicOrigin);
   const roleAssignments = parsed.roleAssignments.map((assignment) => {
     if (
       !isRecord(assignment) ||
@@ -59,6 +63,12 @@ export function parseMockAdministrativeInput(
       ),
     });
   });
+  if (
+    !roleAssignments.some((assignment) =>
+      assignment.roles.includes("administrator"),
+    )
+  )
+    throw new Error("administrative_input_invalid");
   const history = parsed.eventHistoryOperations;
   if (
     Reflect.ownKeys(history).length !== 3 ||
@@ -74,6 +84,7 @@ export function parseMockAdministrativeInput(
     schemaVersion: 1,
     cloudflareTeamName: parsed.cloudflareTeamName,
     cloudflareAudience: parsed.cloudflareAudience,
+    publicOrigin: parsed.publicOrigin,
     roleAssignments: Object.freeze(roleAssignments),
     registeredServices: Object.freeze(parsed.registeredServices),
     backupSchedulerEnabled: parsed.backupSchedulerEnabled,
@@ -111,11 +122,13 @@ export function createMockAdministrativeEnvironment(
     ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "false",
     CLOUDFLARE_ACCESS_TEAM_NAME: input.cloudflareTeamName,
     CLOUDFLARE_ACCESS_AUDIENCE: input.cloudflareAudience,
+    ADMINISTRATIVE_PUBLIC_ORIGIN: input.publicOrigin,
     ADMINISTRATIVE_ROLE_ASSIGNMENTS: roleAssignments,
     REGISTERED_SERVICES_JSON: services,
     ADMINISTRATIVE_BACKUP_HTTP_ENABLED: "true",
     REGISTERED_BACKUP_TARGETS_JSON: JSON.stringify(input.backupTargets),
     ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED: "true",
+    ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED: "true",
     ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY:
       "/var/lib/atlas-manager-event-history",
     ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS: String(

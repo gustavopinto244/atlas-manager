@@ -1,5 +1,17 @@
 # Agent handoff
 
+## Latest active work — Issue #285
+
+Branch: `feat/v0.9-administrative-hardening-v1.0-rc`
+
+Baseline: `add695dcb988ce48033cd1cf736c53998deda7d9`
+
+Release: `1.0.0-rc.1` software-only candidate.
+
+The detailed Issue #285 implementation record is in
+`docs/release/atlas-manager-v1-implementation-report.md`. The historical
+handoff sections below are retained for continuity.
+
 ## Current work — Issue #283
 
 The active branch is:
@@ -1405,3 +1417,24 @@ digest is
 `99ec094370ecd40f373b520ca93a8b5c19717c4217cf5b5e259245e169483c13` for both
 builds; the packaged mock-only smoke test passes. No real backup source, account command, systemd operation, helper,
 Cloudflare endpoint, RTC, D-Bus, host, VM, or power effect was used.
+
+## Issue #285 — v0.9 hardening / v1.0.0-rc.1
+
+Implementation branch: `feat/v0.9-administrative-hardening-v1.0-rc`
+
+Authoritative local baseline: `add695dcb988ce48033cd1cf736c53998deda7d9`.
+The restricted environment did not permit a fresh remote fetch; local `main`
+matched the requested baseline before branching.
+
+This work adds the closed administrative route-security catalog, deterministic
+API contract, HTTPS public-origin and browser security envelope, identity
+readiness model/status surface, managed configuration generation actions, and
+the v1 software release documentation/evidence. The application remains
+loopback-only and mock-power. No Cloudflare, systemd, account, helper, RTC,
+D-Bus, host, VM, or machine-power operation was used.
+
+Validation completed locally: TypeScript typecheck, ESLint, focused catalog,
+origin, profile, environment, and power-boundary tests. Go tooling and the
+full deployment validation require the repository’s Go toolchain, which was
+not installed in this restricted environment. CI remains the authoritative
+place for those checks.

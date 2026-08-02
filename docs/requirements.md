@@ -348,7 +348,10 @@ stable.
 
 Priority: Should
 
-The system should provide a command-line interface for local administration.
+General command-line administration is deferred by accepted scope. The first
+software release candidate retains only narrow fixed deployment and
+maintenance entrypoints; it does not provide a general CLI for services,
+backups, power, roles, or event-history queries.
 
 #### FR-038 — Health endpoint
 
