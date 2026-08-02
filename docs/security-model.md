@@ -1,5 +1,27 @@
 # Atlas Manager — Security Model
 
+## Mock-only administrative control plane
+
+Administrative service and availability mutations require Cloudflare Access
+authentication, fixed local role authorization, exact operation confirmations,
+and persistent authorization plus operation audit. A JWT assertion never
+assigns a role, and the browser dashboard never becomes an authorization
+source. Service IDs resolve only through the trusted registered-service
+catalog; arbitrary Docker, Compose, PM2, systemd, command, and external
+resource targets are rejected.
+
+The shared admission and service mutation gates fail fast rather than queueing.
+Started and terminal audit events surround existing domain capabilities. A
+terminal audit failure after an effect yields a state-recheck result instead
+of an automatic reversal or retry. Dynamic dashboard values are rendered as
+text, assets use a closed inventory and restrictive CSP, and no JWT,
+confirmation, role, event, or service state is stored in browser storage.
+
+The first managed administrative profile remains loopback-only, mock-first,
+and power-safe. Wake/shutdown routes and power effects are disabled, the
+machine-power scheduler is disabled, and the helper is unused. The control
+plane does not authorize physical deployment or real power effects.
+
 ## Privileged helper installation
 
 The helper installation boundary is deliberately separate from the Node.js

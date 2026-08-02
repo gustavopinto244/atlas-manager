@@ -103,6 +103,7 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-runtime-identity-installer ./cmd/atlas-manager-runtime-identity-installer
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-runtime-configuration ./cmd/atlas-manager-runtime-configuration
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-service-lifecycle ./cmd/atlas-manager-service-lifecycle
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-administrative-runtime-configuration ./cmd/atlas-manager-administrative-runtime-configuration
 
       - name: Build reproducible installation bundle
         run: |
@@ -155,10 +156,18 @@ jobs:
           grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/SHA256SUMS"
           test -x "$bundle_root/atlas-manager-runtime-configuration"
           test -x "$bundle_root/atlas-manager-service-lifecycle"
+          test -x "$bundle_root/atlas-manager-administrative-runtime-configuration"
+          test -f "$bundle_root/atlas-manager.mock-admin.input.example.json"
+          test -f "$bundle_root/dashboard/index.html"
+          test -f "$bundle_root/dashboard/styles.css"
+          test -f "$bundle_root/dashboard/app.js"
+          test ! -e "$bundle_root/atlas-manager.mock-admin.input.json"
           grep -q 'atlas-manager-runtime-configuration' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-service-lifecycle' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-runtime-configuration' "$bundle_root/SHA256SUMS"
           grep -q 'atlas-manager-service-lifecycle' "$bundle_root/SHA256SUMS"
+          grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/MANIFEST.json"
+          grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/SHA256SUMS"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
             --application-root "$GITHUB_WORKSPACE/$bundle_root/application"

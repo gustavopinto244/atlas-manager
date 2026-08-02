@@ -24,16 +24,27 @@ import type { AdministrativeEventHistoryRouteDependencies } from "./administrati
 import type { AdministrativeWakeAlarmRouteDependencies } from "./administrative-wake-alarm-route.js";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
 import type { AdministrativeShutdownRouteDependencies } from "./administrative-shutdown-route.js";
+import type { AdministrativeServicesRouteDependencies } from "./administrative-services-route.js";
+import type { AdministrativeServiceAvailabilityRouteDependencies } from "./administrative-service-availability-route.js";
+import type { AdministrativeOverviewRouteDependencies } from "./administrative-overview-route.js";
+import type { AdministrativeDashboardRouteDependencies } from "./administrative-dashboard-route.js";
+import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
   readonly wakeAlarm?: AdministrativeWakeAlarmRouteDependencies;
   readonly shutdown?: AdministrativeShutdownRouteDependencies;
+  readonly services?: AdministrativeServicesRouteDependencies;
+  readonly availability?: AdministrativeServiceAvailabilityRouteDependencies;
+  readonly overview?: AdministrativeOverviewRouteDependencies;
+  readonly dashboard?: AdministrativeDashboardRouteDependencies;
 }
 
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
   readonly eventHistory?: EventHistoryCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly getServerHealth?: GetServerHealthCapability;
+  readonly applicationVersion?: string;
 }
 
 export function createAdministrativeRuntime(
@@ -80,6 +91,7 @@ export function createAdministrativeRuntime(
 
   const admission = new FixedAdministrativeRequestAdmission(clock);
   const powerOperationGate = new FixedAdministrativePowerOperationGate();
+  const serviceMutationGate = new FixedAdministrativePowerOperationGate();
 
   const createProtected = (
     reader: CloudflareAccessAssertionReader,
@@ -95,6 +107,7 @@ export function createAdministrativeRuntime(
       ...(powerManagement === undefined ? {} : { powerManagement }),
       eventHistory,
       clock,
+      ...(serviceManagement === undefined ? {} : { serviceManagement }),
       ...(confirmationReader === undefined
         ? {}
         : { machineShutdownConfirmationReader: confirmationReader }),
@@ -140,6 +153,53 @@ export function createAdministrativeRuntime(
               reader: CloudflareAccessAssertionReader,
               confirmationReader: MachineShutdownConfirmationReader,
             ) => createProtected(reader, confirmationReader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeServiceManagementHttpEnabled ?? false)
+      ? {
+          services: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
+      ? {
+          availability: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeOverviewHttpEnabled ?? false)
+      ? {
+          overview: Object.freeze({
+            admission,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+            getServerHealth: compositionDependencies.getServerHealth ?? {
+              execute: () => Promise.resolve({ status: "ok" }),
+            },
+            applicationVersion:
+              compositionDependencies.applicationVersion ?? "0.1.0",
+          }),
+        }
+      : {}),
+    ...((config.administrativeDashboardEnabled ?? false)
+      ? {
+          dashboard: Object.freeze({
+            admission,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
           }),
         }
       : {}),

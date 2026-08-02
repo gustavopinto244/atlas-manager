@@ -49,30 +49,32 @@ func ValidAction(value string) bool {
 }
 
 type Paths struct {
-	BundleRoot        string
-	Deployment        installer.Paths
-	Passwd            string
-	Group             string
-	ConfigEnvironment string
-	ConfigState       string
-	IdentityState     string
-	IdentityJournal   string
-	StateDirectory    string
-	StateFile         string
-	Journal           string
-	Lock              string
-	Systemctl         string
+	BundleRoot                string
+	Deployment                installer.Paths
+	Passwd                    string
+	Group                     string
+	ConfigEnvironment         string
+	ConfigState               string
+	AdministrativeConfigState string
+	IdentityState             string
+	IdentityJournal           string
+	StateDirectory            string
+	StateFile                 string
+	Journal                   string
+	Lock                      string
+	Systemctl                 string
 }
 
 func ProductionPaths(bundleRoot string) Paths {
 	deployment := installer.ProductionPaths()
 	return Paths{
 		BundleRoot: bundleRoot, Deployment: deployment, Passwd: "/etc/passwd", Group: "/etc/group",
-		ConfigEnvironment: "/etc/atlas-manager/atlas-manager.env",
-		ConfigState:       "/var/lib/atlas-manager-runtime-configuration/state.json",
-		IdentityState:     "/var/lib/atlas-manager-identity-preparation/state.json",
-		IdentityJournal:   "/var/lib/atlas-manager-identity-preparation/transaction.json",
-		StateDirectory:    "/var/lib/atlas-manager-service-lifecycle", StateFile: "/var/lib/atlas-manager-service-lifecycle/state.json",
+		ConfigEnvironment:         "/etc/atlas-manager/atlas-manager.env",
+		ConfigState:               "/var/lib/atlas-manager-runtime-configuration/state.json",
+		AdministrativeConfigState: "/var/lib/atlas-manager-administrative-runtime-configuration/state.json",
+		IdentityState:             "/var/lib/atlas-manager-identity-preparation/state.json",
+		IdentityJournal:           "/var/lib/atlas-manager-identity-preparation/transaction.json",
+		StateDirectory:            "/var/lib/atlas-manager-service-lifecycle", StateFile: "/var/lib/atlas-manager-service-lifecycle/state.json",
 		Journal: "/var/lib/atlas-manager-service-lifecycle/transaction.json", Lock: "/run/atlas-manager-service-lifecycle.lock", Systemctl: SystemctlPath,
 	}
 }
@@ -284,18 +286,49 @@ func (service Service) validateConfiguration() error {
 	if err != nil {
 		return fmt.Errorf("configuration_absent")
 	}
-	if !bytes.Equal(data, runtimeconfiguration.ProfileBytes()) {
-		return fmt.Errorf("configuration_modified")
+	if bytes.Equal(data, runtimeconfiguration.ProfileBytes()) {
+		stateData, err := os.ReadFile(service.paths.ConfigState)
+		if err != nil {
+			return fmt.Errorf("configuration_absent")
+		}
+		var state runtimeconfiguration.State
+		if err := decodeStrict(stateData, &state); err != nil || runtimeconfiguration.ValidateState(state) != nil || state.ConfigurationSHA256 != runtimeconfiguration.ProfileSHA256() {
+			return fmt.Errorf("configuration_modified")
+		}
+		return nil
 	}
-	stateData, err := os.ReadFile(service.paths.ConfigState)
-	if err != nil {
-		return fmt.Errorf("configuration_absent")
+	if service.paths.AdministrativeConfigState != "" && isAdministrativeProfile(data) {
+		stateData, err := os.ReadFile(service.paths.AdministrativeConfigState)
+		if err != nil {
+			return fmt.Errorf("configuration_absent")
+		}
+		var state struct {
+			SchemaVersion       int    `json:"schemaVersion"`
+			Profile             string `json:"profile"`
+			ConfigurationSHA256 string `json:"configurationSha256"`
+			Status              string `json:"status"`
+		}
+		if err := decodeStrict(stateData, &state); err != nil || state.SchemaVersion != 1 || state.Profile != "mock-administrative" || state.Status != "installed" || state.ConfigurationSHA256 != hashConfiguration(data) {
+			return fmt.Errorf("configuration_modified")
+		}
+		return nil
 	}
-	var state runtimeconfiguration.State
-	if err := decodeStrict(stateData, &state); err != nil || runtimeconfiguration.ValidateState(state) != nil || state.ConfigurationSHA256 != runtimeconfiguration.ProfileSHA256() {
-		return fmt.Errorf("configuration_modified")
+	return fmt.Errorf("configuration_modified")
+}
+
+func isAdministrativeProfile(data []byte) bool {
+	value := string(data)
+	for _, required := range []string{"POWER_MANAGEMENT_BACKEND=mock\n", "MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n", "MACHINE_POWER_SCHEDULER_ENABLED=false\n", "ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\n", "ADMINISTRATIVE_DASHBOARD_ENABLED=true\n", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n", "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n"} {
+		if !strings.Contains(value, required) {
+			return false
+		}
 	}
-	return nil
+	return true
+}
+
+func hashConfiguration(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
 func (service Service) validateUnit() error {

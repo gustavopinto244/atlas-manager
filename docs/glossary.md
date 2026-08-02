@@ -1,5 +1,24 @@
 # Atlas Manager — Project Glossary
 
+### Administrative control plane
+
+The protected service-management, availability, overview, event-history, and
+dashboard delivery boundary. It authenticates through Cloudflare Access,
+authorizes through fixed local roles, and audits administrative decisions and
+mutations.
+
+### Mock-administrative profile
+
+The managed loopback runtime profile that enables the administrative APIs and
+dashboard while keeping the power backend mock, Linux effects disabled, the
+machine-power scheduler disabled, and wake/shutdown routes disabled.
+
+### Trusted registered-service catalog
+
+The application-owned list of service IDs and approved management adapters.
+Administrative callers may select only these IDs; they cannot supply
+infrastructure targets or commands.
+
 ### Power-helper installation bundle
 
 A deterministic Linux amd64 archive containing the exact helper executable,

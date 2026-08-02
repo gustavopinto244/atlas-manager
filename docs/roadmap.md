@@ -1,9 +1,10 @@
 # Atlas Manager — Project Roadmap
 
-Issue #254 delivers the reproducible helper distribution and operator-controlled
-installation boundary for v0.6. Packaging does not complete the milestone:
-host qualification, application-user enrollment, production wiring, and real
-effect recovery remain later gates.
+Issue #254 delivered the reproducible helper distribution and
+operator-controlled installation boundary for v0.6. Issues #270, #272, #274,
+#276, #278, and #280 now complete the software-only deployment and
+mock-administrative gates. Physical execution and real power effects remain
+separate approvals.
 
 ## Document purpose
 
@@ -673,6 +674,27 @@ Deferred:
 - host qualification;
 - service enablement and startup;
 - real wake and shutdown certification.
+
+## Issue #280 — Mock-only administrative control plane and dashboard
+
+Delivered:
+
+- protected registered-service, availability, overview, and dashboard routes;
+- fixed service-operator role and bounded service/overview/dashboard
+  permissions;
+- Cloudflare-authenticated, locally role-authorized, persistently audited
+  administrative mutations;
+- managed mock-administrative profile with wake/shutdown disabled;
+- same-origin closed dashboard asset inventory and safe text rendering;
+- deterministic sandbox control-plane contracts and documentation.
+
+Deferred:
+
+- physical mock-administrative deployment;
+- Cloudflare Tunnel and production DNS configuration;
+- role-management and account-management UI;
+- helper installation and qualification;
+- real RTC, wake, shutdown, and machine-power certification.
 
 ## Issue #278 — Mock-only production activation readiness
 

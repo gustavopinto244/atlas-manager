@@ -15,6 +15,11 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "prepare_machine_shutdown_occurrence",
   "execute_machine_shutdown_occurrence",
   "run_machine_power_scheduler_tick",
+  "start_registered_service",
+  "stop_registered_service",
+  "restart_registered_service",
+  "update_registered_service_availability",
+  "remove_registered_service_availability",
 ] as const);
 export const ADMINISTRATIVE_EVENT_STATUSES = Object.freeze([
   "started",
@@ -345,6 +350,16 @@ function createDetails(
       "execute_machine_shutdown_occurrence",
       "run_machine_power_scheduler_tick",
       "read_administrative_event_history",
+      "read_registered_services",
+      "read_registered_service",
+      "start_registered_service",
+      "stop_registered_service",
+      "restart_registered_service",
+      "read_registered_service_availability",
+      "update_registered_service_availability",
+      "remove_registered_service_availability",
+      "read_operations_overview",
+      "read_administrative_dashboard",
     ].includes(requestedOperation as string);
     const validPermission = [
       "power.wake.read",
@@ -355,6 +370,14 @@ function createDetails(
       "power.shutdown.execute",
       "power.scheduler.tick",
       "event_history.read",
+      "services.read",
+      "services.start",
+      "services.stop",
+      "services.restart",
+      "services.availability.read",
+      "services.availability.write",
+      "operations.read",
+      "dashboard.read",
     ].includes(permission as string);
     const expected = {
       read_wake_alarm: "power.wake.read",
@@ -365,6 +388,16 @@ function createDetails(
       execute_machine_shutdown_occurrence: "power.shutdown.execute",
       run_machine_power_scheduler_tick: "power.scheduler.tick",
       read_administrative_event_history: "event_history.read",
+      read_registered_services: "services.read",
+      read_registered_service: "services.read",
+      start_registered_service: "services.start",
+      stop_registered_service: "services.stop",
+      restart_registered_service: "services.restart",
+      read_registered_service_availability: "services.availability.read",
+      update_registered_service_availability: "services.availability.write",
+      remove_registered_service_availability: "services.availability.write",
+      read_operations_overview: "operations.read",
+      read_administrative_dashboard: "dashboard.read",
     } as Record<string, string>;
     if (
       !validOperation ||
@@ -394,6 +427,46 @@ function createDetails(
       decision,
       reasonCode,
     });
+  }
+  if (
+    operation === "start_registered_service" ||
+    operation === "stop_registered_service" ||
+    operation === "restart_registered_service" ||
+    operation === "update_registered_service_availability" ||
+    operation === "remove_registered_service_availability"
+  ) {
+    const serviceId = record["serviceId"];
+    if (
+      typeof serviceId !== "string" ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(serviceId) ||
+      serviceId.length > 64
+    )
+      throw new AdministrativeEventValidationError("invalid_details");
+    if (status === "started") {
+      if (!hasExactFields(record, ["serviceId"]))
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ serviceId });
+    }
+    if (status === "succeeded") {
+      if (
+        !hasExactFields(record, ["serviceId", "outcome"]) ||
+        record["outcome"] !== "succeeded"
+      )
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({ serviceId, outcome: "succeeded" as const });
+    }
+    if (status === "failed") {
+      if (
+        !hasExactFields(record, ["serviceId", "failureCode"]) ||
+        record["failureCode"] !== "service_failed"
+      )
+        throw new AdministrativeEventValidationError("invalid_details");
+      return Object.freeze({
+        serviceId,
+        failureCode: "service_failed" as const,
+      });
+    }
+    throw new AdministrativeEventValidationError("invalid_details");
   }
   if (operation === "schedule_wake_alarm") {
     if (status === "started") {

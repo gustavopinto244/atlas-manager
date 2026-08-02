@@ -12,6 +12,10 @@ export function setAdministrativeSecurityHeaders(response: Response): void {
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("X-Frame-Options", "DENY");
   response.setHeader(
+    "Permissions-Policy",
+    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  );
+  response.setHeader(
     "Content-Security-Policy",
     "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
   );

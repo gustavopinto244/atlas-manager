@@ -254,6 +254,26 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
+    ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
+    ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
+    ADMINISTRATIVE_DASHBOARD_ENABLED: z
+      .enum(["true", "false"], {
+        error: "must be exactly true or false",
+      })
+      .default("false"),
     ADMINISTRATIVE_EVENT_HISTORY_FILE:
       administrativeEventHistoryFileSchema.optional(),
     ADMINISTRATIVE_ROLE_ASSIGNMENTS:
@@ -329,8 +349,22 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true";
     const shutdownHttpEnabled =
       environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED === "true";
+    const serviceManagementHttpEnabled =
+      environment.ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED === "true";
+    const serviceAvailabilityHttpEnabled =
+      environment.ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED === "true";
+    const overviewHttpEnabled =
+      environment.ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED === "true";
+    const dashboardEnabled =
+      environment.ADMINISTRATIVE_DASHBOARD_ENABLED === "true";
     const administrativeHttpEnabled =
-      eventHistoryHttpEnabled || wakeAlarmHttpEnabled || shutdownHttpEnabled;
+      eventHistoryHttpEnabled ||
+      wakeAlarmHttpEnabled ||
+      shutdownHttpEnabled ||
+      serviceManagementHttpEnabled ||
+      serviceAvailabilityHttpEnabled ||
+      overviewHttpEnabled ||
+      dashboardEnabled;
     const effectCapableSurfaceEnabled =
       wakeAlarmHttpEnabled ||
       shutdownHttpEnabled ||
@@ -469,6 +503,45 @@ const environmentSchema = z
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include a power operator or administrator",
             });
+          if (
+            (serviceManagementHttpEnabled || serviceAvailabilityHttpEnabled) &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(role, "services.read"),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a service operator or administrator",
+            });
+          if (
+            overviewHttpEnabled &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(role, "operations.read"),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include an operations reader",
+            });
+          if (
+            dashboardEnabled &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(role, "dashboard.read"),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a dashboard reader",
+            });
         } catch {
           // The field-level schema has already reported the safe category.
         }
@@ -594,6 +667,10 @@ export interface EnvironmentConfig {
   readonly administrativeEventHistoryHttpEnabled: boolean;
   readonly administrativeWakeAlarmHttpEnabled: boolean;
   readonly administrativeShutdownHttpEnabled: boolean;
+  readonly administrativeServiceManagementHttpEnabled?: boolean;
+  readonly administrativeServiceAvailabilityHttpEnabled?: boolean;
+  readonly administrativeOverviewHttpEnabled?: boolean;
+  readonly administrativeDashboardEnabled?: boolean;
   readonly administrativeEventHistoryFilePath?: string;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
   readonly machineShutdownOccurrenceClaimFilePath?: string;
@@ -654,6 +731,20 @@ export function parseEnvironment(
       parsedEnvironment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED === "true",
     administrativeShutdownHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED === "true",
+    ...(parsedEnvironment.ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED ===
+    "true"
+      ? { administrativeServiceManagementHttpEnabled: true }
+      : {}),
+    ...(parsedEnvironment.ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED ===
+    "true"
+      ? { administrativeServiceAvailabilityHttpEnabled: true }
+      : {}),
+    ...(parsedEnvironment.ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED === "true"
+      ? { administrativeOverviewHttpEnabled: true }
+      : {}),
+    ...(parsedEnvironment.ADMINISTRATIVE_DASHBOARD_ENABLED === "true"
+      ? { administrativeDashboardEnabled: true }
+      : {}),
     ...(parsedEnvironment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE ===
     undefined
       ? {}

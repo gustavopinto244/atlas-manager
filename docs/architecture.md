@@ -1,5 +1,22 @@
 # Atlas Manager — High-Level Architecture
 
+## Mock-only administrative control plane and dashboard
+
+ADR-022 adds the first protected product-facing control plane. Service,
+availability, overview, and dashboard routes use one process-local admission
+boundary and the existing Cloudflare authentication, fixed role policy,
+authorization audit, and persistent event history. HTTP maps explicit safe
+response objects and resolves service identifiers through the trusted catalog;
+it never calls Docker, Compose, PM2, shell commands, or infrastructure
+adapters directly.
+
+The dashboard is a same-origin closed asset inventory with restrictive CSP,
+safe DOM text rendering, no browser credential storage, no CORS, and no
+external assets. The managed profile is loopback-only and mock-first:
+administrative control is enabled, but wake/shutdown routes, Linux effects,
+and the machine-power scheduler remain disabled. Service activation and power
+activation are independent boundaries, and no physical host or VM was used.
+
 ## Reproducible helper installation boundary
 
 Issue #254 adds a separate release/build boundary around the helper:
