@@ -1,0 +1,530 @@
+package bundle
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/systemdunit"
+)
+
+const (
+	PinnedNode = "24.18.0"
+	PinnedNPM  = "11.16.0"
+	PinnedGo   = "1.23.0"
+	MaxOutput  = 64 * 1024
+)
+
+type Config struct {
+	Version         string
+	SourceCommit    string
+	SourceDateEpoch int64
+	SourceRoot      string
+	OutputDir       string
+	NodeVersion     string
+	NPMVersion      string
+	GoVersion       string
+	InstallerPath   string
+	Runner          Runner
+}
+
+type Runner interface {
+	Run(context.Context, string, []string, string, []string) (string, error)
+}
+
+type Result struct {
+	Directory string
+	Archive   string
+	Manifest  manifest.Manifest
+}
+
+type ToolRunner struct{}
+
+func (ToolRunner) Run(ctx context.Context, name string, args []string, dir string, environment []string) (string, error) {
+	toolContext, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	resolved, err := exec.LookPath(name)
+	if err != nil && name == "go" {
+		if _, statErr := os.Stat("/usr/local/go/bin/go"); statErr == nil {
+			resolved = "/usr/local/go/bin/go"
+			err = nil
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("build_tool_missing")
+	}
+	command := exec.CommandContext(toolContext, resolved, args...)
+	command.Dir = dir
+	command.Env = withToolPath(environment, filepath.Dir(resolved))
+	stdout := &boundedBuffer{limit: MaxOutput}
+	stderr := &boundedBuffer{limit: MaxOutput}
+	command.Stdout = stdout
+	command.Stderr = stderr
+	if err := command.Run(); err != nil {
+		return "", fmt.Errorf("build_tool_failed")
+	}
+	if stdout.overflow || stderr.overflow {
+		return "", fmt.Errorf("build_tool_output_oversized")
+	}
+	return string(stdout.data), nil
+}
+
+func withToolPath(environment []string, toolDirectory string) []string {
+	result := make([]string, 0, len(environment)+1)
+	for _, value := range environment {
+		if strings.HasPrefix(value, "PATH=") {
+			continue
+		}
+		result = append(result, value)
+	}
+	result = append(result, "PATH="+toolDirectory+":/usr/local/go/bin:/usr/bin:/bin")
+	return result
+}
+
+func Build(ctx context.Context, config Config) (Result, error) {
+	if err := validateConfig(config); err != nil {
+		return Result{}, err
+	}
+	if config.Runner == nil {
+		config.Runner = ToolRunner{}
+	}
+	if err := verifyPackageVersion(config.SourceRoot, config.Version); err != nil {
+		return Result{}, err
+	}
+	if err := verifyTools(ctx, config); err != nil {
+		return Result{}, err
+	}
+	work, err := os.MkdirTemp("", "atlas-manager-bundle-")
+	if err != nil {
+		return Result{}, fmt.Errorf("build_workspace_failed")
+	}
+	defer os.RemoveAll(work)
+	buildHome := filepath.Join(work, "home")
+	if err := os.MkdirAll(buildHome, 0o700); err != nil {
+		return Result{}, fmt.Errorf("build_workspace_failed")
+	}
+	buildRoot := filepath.Join(work, "build")
+	runtimeRoot := filepath.Join(work, "runtime")
+	if err := copyBuildInputs(config.SourceRoot, buildRoot); err != nil {
+		return Result{}, err
+	}
+	environment := controlledEnvironment(config.SourceDateEpoch, buildHome)
+	if _, err := config.Runner.Run(ctx, "npm", []string{"ci", "--ignore-scripts"}, buildRoot, environment); err != nil {
+		return Result{}, err
+	}
+	if _, err := config.Runner.Run(ctx, "node", []string{"node_modules/typescript/bin/tsc", "-p", "tsconfig.deployment.json"}, buildRoot, environment); err != nil {
+		return Result{}, err
+	}
+	if err := copyFile(filepath.Join(buildRoot, "package.json"), filepath.Join(runtimeRoot, "package.json"), 0o644); err != nil {
+		return Result{}, err
+	}
+	if err := copyFile(filepath.Join(buildRoot, "package-lock.json"), filepath.Join(runtimeRoot, "package-lock.json"), 0o644); err != nil {
+		return Result{}, err
+	}
+	if _, err := config.Runner.Run(ctx, "npm", []string{"ci", "--omit=dev", "--ignore-scripts"}, runtimeRoot, environment); err != nil {
+		return Result{}, err
+	}
+	if err := rejectDevelopmentDependencies(filepath.Join(runtimeRoot, "node_modules")); err != nil {
+		return Result{}, err
+	}
+
+	bundleName := fmt.Sprintf("atlas-manager_%s_linux_amd64", config.Version)
+	root := filepath.Join(config.OutputDir, bundleName)
+	archive := filepath.Join(config.OutputDir, bundleName+".tar.gz")
+	if _, err := os.Stat(root); err == nil {
+		return Result{}, fmt.Errorf("output_exists")
+	}
+	if _, err := os.Stat(archive); err == nil {
+		return Result{}, fmt.Errorf("output_exists")
+	}
+	if err := assemble(root, buildRoot, runtimeRoot, config); err != nil {
+		return Result{}, err
+	}
+	if err := writeMetadata(root, config); err != nil {
+		return Result{}, err
+	}
+	paths, err := manifest.Files(filepath.Join(root, "application"))
+	if err != nil {
+		return Result{}, err
+	}
+	for index := range paths {
+		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
+	}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	paths = append(paths, metadataPaths...)
+	files, err := manifest.Inventory(root, paths)
+	if err != nil {
+		return Result{}, err
+	}
+	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
+	value := manifest.Manifest{
+		SchemaVersion: SchemaVersion(), Name: "atlas-manager", Version: config.Version,
+		SourceCommit: config.SourceCommit, SourceDateEpoch: config.SourceDateEpoch,
+		Target: manifest.Target{OS: "linux", Arch: "amd64"}, NodeVersion: config.NodeVersion,
+		NPMVersion: config.NPMVersion, GoVersion: config.GoVersion,
+		RuntimeNodePath: "/usr/bin/node", SystemdUnitPath: "/etc/systemd/system/atlas-manager.service", Files: files,
+	}
+	encoded, err := manifest.Encode(value)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := os.WriteFile(filepath.Join(root, "MANIFEST.json"), append(encoded, '\n'), 0o644); err != nil {
+		return Result{}, fmt.Errorf("manifest_write_failed")
+	}
+	if err := writeChecksums(root, value); err != nil {
+		return Result{}, err
+	}
+	if err := archiveTree(ctx, root, archive, config.SourceDateEpoch); err != nil {
+		return Result{}, err
+	}
+	return Result{Directory: root, Archive: archive, Manifest: value}, nil
+}
+
+func SchemaVersion() int { return manifest.SchemaVersion }
+
+func validateConfig(config Config) error {
+	if config.Version == "" || config.SourceRoot == "" || config.OutputDir == "" || !filepath.IsAbs(config.SourceRoot) || !filepath.IsAbs(config.OutputDir) || config.SourceDateEpoch < 0 || !safeVersion(config.Version) {
+		return fmt.Errorf("build_input_invalid")
+	}
+	if config.NodeVersion != PinnedNode || config.NPMVersion != PinnedNPM || config.GoVersion != PinnedGo {
+		return fmt.Errorf("tool_version_invalid")
+	}
+	if len(config.SourceCommit) != 40 || strings.ToLower(config.SourceCommit) != config.SourceCommit {
+		return fmt.Errorf("source_commit_invalid")
+	}
+	for _, char := range config.SourceCommit {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f')) {
+			return fmt.Errorf("source_commit_invalid")
+		}
+	}
+	if config.NodeVersion == "" || config.NPMVersion == "" || config.GoVersion == "" {
+		return fmt.Errorf("tool_version_missing")
+	}
+	if _, err := time.Unix(config.SourceDateEpoch, 0).MarshalText(); err != nil {
+		return fmt.Errorf("source_epoch_invalid")
+	}
+	return nil
+}
+
+func safeVersion(value string) bool {
+	for _, char := range value {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || strings.ContainsRune("._+-", char)) {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyPackageVersion(root, expected string) error {
+	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	if err != nil {
+		return fmt.Errorf("package_metadata_missing")
+	}
+	var value struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(data, &value) != nil || value.Version != expected {
+		return fmt.Errorf("package_version_mismatch")
+	}
+	return nil
+}
+
+func verifyTools(ctx context.Context, config Config) error {
+	checks := []struct{ command, flag, expected string }{
+		{"node", "--version", "v" + config.NodeVersion},
+		{"npm", "--version", config.NPMVersion},
+		{"go", "version", "go" + config.GoVersion},
+	}
+	for _, check := range checks {
+		output, err := config.Runner.Run(ctx, check.command, []string{check.flag}, config.SourceRoot, controlledEnvironment(config.SourceDateEpoch, os.TempDir()))
+		if err != nil || !toolVersionMatches(check.command, output, check.expected) {
+			return fmt.Errorf("tool_version_invalid")
+		}
+	}
+	return nil
+}
+
+func toolVersionMatches(command, output, expected string) bool {
+	value := strings.TrimSpace(output)
+	if command == "go" {
+		return strings.HasPrefix(value, "go version "+expected+" ") && strings.Contains(value, " linux/amd64")
+	}
+	return value == expected
+}
+
+func controlledEnvironment(epoch int64, home string) []string {
+	return []string{"HOME=" + home, "LANG=C", "LC_ALL=C", "TZ=UTC", "SOURCE_DATE_EPOCH=" + strconv.FormatInt(epoch, 10), "NPM_CONFIG_CACHE=" + filepath.Join(home, ".npm-cache")}
+}
+
+func copyBuildInputs(source, destination string) error {
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		return fmt.Errorf("build_workspace_failed")
+	}
+	for _, name := range []string{"package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "tsconfig.deployment.json"} {
+		if err := copyFile(filepath.Join(source, name), filepath.Join(destination, name), 0o644); err != nil {
+			return err
+		}
+	}
+	return copyTree(filepath.Join(source, "src"), filepath.Join(destination, "src"))
+}
+
+func assemble(root, buildRoot, runtimeRoot string, config Config) error {
+	if err := os.MkdirAll(filepath.Join(root, "application", "dist"), 0o755); err != nil {
+		return fmt.Errorf("bundle_directory_failed")
+	}
+	if err := copyTree(filepath.Join(buildRoot, "dist"), filepath.Join(root, "application", "dist")); err != nil {
+		return err
+	}
+	if err := copyTree(filepath.Join(runtimeRoot, "node_modules"), filepath.Join(root, "application", "node_modules")); err != nil {
+		return err
+	}
+	if config.InstallerPath == "" {
+		return fmt.Errorf("installer_missing")
+	}
+	if err := copyFile(config.InstallerPath, filepath.Join(root, "atlas-manager-installer"), 0o755); err != nil {
+		return err
+	}
+	for _, name := range []string{"package.json", "package-lock.json"} {
+		if err := copyFile(filepath.Join(runtimeRoot, name), filepath.Join(root, "application", name), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeMetadata(root string, config Config) error {
+	if err := os.MkdirAll(filepath.Join(root, "systemd"), 0o755); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.MkdirAll(filepath.Join(root, "config"), 0o755); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.WriteFile(filepath.Join(root, "systemd", "atlas-manager.service"), []byte(systemdunit.Content), 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), envTemplate(config), 0o640); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "LICENSE"), []byte(mitLicense), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(root, "INSTALLATION.md"), []byte(installationText), 0o644)
+}
+
+const mitLicense = `MIT License
+
+Copyright (c) Gustavo Pinto
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`
+
+func envTemplate(config Config) []byte {
+	return []byte("# Atlas Manager safe disabled deployment template\nHOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\n# Runtime configuration is operator-owned and is not created by this installer.\n")
+}
+
+const installationText = `# Atlas Manager disabled installation
+
+This bundle is installed by a local administrator through
+atlas-manager-installer install-disabled. Installation does not create users
+or groups, create the real environment file, enable or start systemd, install
+the Linux power helper, or activate power effects.
+`
+
+func writeChecksums(root string, value manifest.Manifest) error {
+	paths := make([]string, 0, len(value.Files)+1)
+	for _, file := range value.Files {
+		paths = append(paths, file.Path)
+	}
+	paths = append(paths, "MANIFEST.json")
+	sort.Strings(paths)
+	var builder strings.Builder
+	for _, path := range paths {
+		digest, err := manifest.SHA256File(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			return fmt.Errorf("checksum_failed")
+		}
+		fmt.Fprintf(&builder, "%s  %s\n", digest, path)
+	}
+	return os.WriteFile(filepath.Join(root, "SHA256SUMS"), []byte(builder.String()), 0o644)
+}
+
+func archiveTree(ctx context.Context, root, archive string, epoch int64) error {
+	file, err := os.Create(archive)
+	if err != nil {
+		return fmt.Errorf("archive_create_failed")
+	}
+	defer file.Close()
+	gzipWriter, err := gzip.NewWriterLevel(file, gzip.BestCompression)
+	if err != nil {
+		return err
+	}
+	gzipWriter.Header.ModTime = time.Unix(epoch, 0).UTC()
+	gzipWriter.Header.OS = 3
+	tarWriter := tar.NewWriter(gzipWriter)
+	type archiveEntry struct {
+		path string
+		info os.FileInfo
+	}
+	var entries []archiveEntry
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(filepath.Dir(root), path)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, archiveEntry{path: filepath.ToSlash(rel), info: info})
+		return nil
+	}); err != nil {
+		return fmt.Errorf("archive_walk_failed")
+	}
+	sort.Slice(entries, func(left, right int) bool { return entries[left].path < entries[right].path })
+	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		full := filepath.Join(filepath.Dir(root), filepath.FromSlash(entry.path))
+		mode := entry.info.Mode().Perm()
+		header := &tar.Header{Name: entry.path, Mode: int64(mode), ModTime: time.Unix(epoch, 0).UTC(), Uid: 0, Gid: 0, Uname: "root", Gname: "root"}
+		if entry.info.IsDir() {
+			header.Name = strings.TrimSuffix(header.Name, "/") + "/"
+			header.Mode = 0o755
+			header.Typeflag = tar.TypeDir
+		} else {
+			data, err := os.ReadFile(full)
+			if err != nil {
+				return fmt.Errorf("archive_read_failed")
+			}
+			header.Size = int64(len(data))
+			header.Typeflag = tar.TypeReg
+			if err := tarWriter.WriteHeader(header); err != nil {
+				return err
+			}
+			if _, err := tarWriter.Write(data); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		return err
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return err
+	}
+	return file.Sync()
+}
+
+func copyTree(source, destination string) error {
+	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() && info.Name() == ".bin" && strings.Contains(filepath.ToSlash(path), "/node_modules/") {
+			return filepath.SkipDir
+		}
+		if strings.Contains(filepath.ToSlash(path), "/node_modules/") {
+			if info.IsDir() && isDevelopmentDirectory(info.Name()) {
+				return filepath.SkipDir
+			}
+			if !info.IsDir() && isDevelopmentFile(info.Name()) {
+				return nil
+			}
+		}
+		target := filepath.Join(destination, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return fmt.Errorf("bundle_file_type_invalid")
+		}
+		return copyFile(path, target, info.Mode().Perm())
+	})
+}
+
+func isDevelopmentDirectory(name string) bool {
+	return name == "test" || name == "tests" || name == "__tests__" || name == "coverage"
+}
+
+func isDevelopmentFile(name string) bool {
+	return strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx") || strings.HasSuffix(name, ".map") || strings.HasSuffix(name, ".d.cts") || strings.HasSuffix(name, ".d.mts")
+}
+
+func copyFile(source, destination string, mode os.FileMode) error {
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return fmt.Errorf("source_file_missing")
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		return fmt.Errorf("copy_directory_failed")
+	}
+	if err := os.WriteFile(destination, data, mode); err != nil {
+		return fmt.Errorf("copy_file_failed")
+	}
+	return os.Chmod(destination, mode)
+}
+
+func rejectDevelopmentDependencies(root string) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return fmt.Errorf("runtime_dependencies_missing")
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "typescript" || name == "tsx" || name == "vitest" || name == "eslint" || name == "prettier" || name == "supertest" || strings.HasPrefix(name, "@types") {
+			return fmt.Errorf("development_dependency_packaged")
+		}
+	}
+	return nil
+}
+
+type boundedBuffer struct {
+	data     []byte
+	limit    int
+	overflow bool
+}
+
+func (buffer *boundedBuffer) Write(value []byte) (int, error) {
+	if len(buffer.data)+len(value) > buffer.limit {
+		buffer.overflow = true
+		return len(value), nil
+	}
+	buffer.data = append(buffer.data, value...)
+	return len(value), nil
+}

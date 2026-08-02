@@ -28,7 +28,25 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.0"
-          cache-dependency-path: power-helper/go.mod
+          cache-dependency-path: |
+            power-helper/go.mod
+            deployment/go.mod
+
+      - name: Check deployment Go formatting
+        working-directory: deployment
+        run: test -z "$(gofmt -l .)"
+
+      - name: Verify deployment Go modules
+        working-directory: deployment
+        run: go mod verify
+
+      - name: Run deployment Go vet
+        working-directory: deployment
+        run: go vet ./...
+
+      - name: Run deployment Go tests
+        working-directory: deployment
+        run: go test ./...
 
       - name: Check Go formatting
         working-directory: power-helper
@@ -66,6 +84,14 @@ jobs:
         working-directory: power-helper
         run: mkdir -p ../dist/power-helper && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/power-helper/atlas-manager-power-helper-host-qualification ./cmd/atlas-manager-power-helper-host-qualification
 
+      - name: Build Atlas Manager deployment tools
+        working-directory: deployment
+        run: |
+          mkdir -p ../dist/deployment
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-installer ./cmd/atlas-manager-installer
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-bundle ./cmd/atlas-manager-bundle
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-smoke ./cmd/atlas-manager-smoke
+
       - name: Build reproducible installation bundle
         run: |
           mkdir -p dist/power-helper-bundle
@@ -99,6 +125,34 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build Atlas Manager deployment bundle
+        run: |
+          mkdir -p dist/atlas-manager-bundle
+          bundle_version="$(node -p "require('./package.json').version")"
+          ./dist/deployment/atlas-manager-bundle build \
+            -version "$bundle_version" \
+            -source-commit "$(git rev-parse HEAD)" \
+            -source-date-epoch 0 \
+            -source-root "$GITHUB_WORKSPACE" \
+            -output-dir "$GITHUB_WORKSPACE/dist/atlas-manager-bundle"
+          (cd "dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64" && ./atlas-manager-installer inspect-bundle)
+          ./dist/deployment/atlas-manager-smoke run \
+            --node "$(command -v node)" \
+            --application-root "$GITHUB_WORKSPACE/dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64/application"
+
+      - name: Rebuild Atlas Manager deployment bundle reproducibly
+        run: |
+          mkdir -p dist/atlas-manager-bundle-repeat
+          bundle_version="$(node -p "require('./package.json').version")"
+          ./dist/deployment/atlas-manager-bundle build \
+            -version "$bundle_version" \
+            -source-commit "$(git rev-parse HEAD)" \
+            -source-date-epoch 0 \
+            -source-root "$GITHUB_WORKSPACE" \
+            -output-dir "$GITHUB_WORKSPACE/dist/atlas-manager-bundle-repeat"
+          cmp "dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64.tar.gz" \
+            "dist/atlas-manager-bundle-repeat/atlas-manager_${bundle_version}_linux_amd64.tar.gz"
 
       - name: Check formatting
         run: npm run format:check

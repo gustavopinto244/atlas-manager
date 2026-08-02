@@ -1220,3 +1220,18 @@ exact admitted helper-group GID is shared by startup preflight and
 operation-time transport inspection. Enrollment, systemd configuration,
 deployment, host qualification, and real-effect certification remain
 deferred.
+
+### Disabled Atlas Manager deployment boundary
+
+Application deployment is an operator-only Go boundary independent from the
+Linux power-helper installer. A bundle is accepted only when its closed
+manifest, file modes, file types, and SHA-256 inventory agree. The installer
+rejects unsafe identity data, an unsafe fixed Node runtime, active or enabled
+service state, unknown releases, modified managed files, and lock conflicts.
+
+The systemd unit fixes `atlas-manager:atlas-manager`, supplies
+`atlas-manager-power` as a supplementary group, uses `Restart=no`, and keeps
+the helper-compatible privilege model. Installation does not create or modify
+accounts, group membership, configuration secrets, helper files, RTC state,
+D-Bus state, or service activation. Physical deployment and real-effect
+certification remain deferred.

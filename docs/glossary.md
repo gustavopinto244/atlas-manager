@@ -1794,3 +1794,15 @@ The relationship in which the local `atlas-manager-power` GID, the running
 process supplementary membership, the startup helper preflight, and every
 operation-time helper inspection all use the same admitted numeric GID. A
 different positive non-root group cannot authorize the helper.
+
+### Disabled deployment bundle
+
+A reproducible Linux amd64 archive containing the compiled application,
+production dependencies, strict file inventory, disabled systemd unit, safe
+environment template, and operator installer. It does not activate Atlas.
+
+### Deployment state
+
+Root-private state recording only releases managed by the Atlas Manager
+installer. It is not application runtime state and is never used to adopt
+unknown files.

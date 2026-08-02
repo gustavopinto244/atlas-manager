@@ -4,6 +4,10 @@ node_modules/
 # Compiled output
 dist/
 
+# Deployment release artifacts are generated only in release workflows
+*.tar.gz
+deployment/releases/
+
 # Environment variables
 .env
 .env.*
