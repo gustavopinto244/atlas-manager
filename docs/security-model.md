@@ -1262,3 +1262,12 @@ A synchronized private journal is written before the first mutation and
 updated after each verified step. Same-process rollback removes only resources
 created in that invocation; changed or ambiguous resources stop rollback and
 preserve the journal. Committed identities have no public deletion action.
+
+### Disabled deployment rehearsal
+
+The end-to-end deployment rehearsal is deliberately sandbox-only. It reuses
+production package boundaries while replacing account commands, Node.js,
+systemd, and host observations with deterministic fakes. Filesystem snapshots
+and per-step allowlists detect writes outside the expected identity or
+deployment boundary. The rehearsal creates no real account, service, helper,
+configuration, RTC state, D-Bus request, or power effect.

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "result": "",
+  "baselineCommit": "",
+  "releaseA": {
+    "version": "",
+    "sourceCommit": "",
+    "archiveSha256": "",
+    "repeatedBuildSha256": ""
+  },
+  "releaseB": {
+    "version": "",
+    "sourceCommit": "",
+    "archiveSha256": "",
+    "repeatedBuildSha256": ""
+  },
+  "steps": [],
+  "finalState": "",
+  "mutationSummary": [],
+  "evidenceChain": "",
+  "operatorReview": "",
+  "notes": ""
+}
