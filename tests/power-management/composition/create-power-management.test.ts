@@ -269,4 +269,49 @@ describe("createPowerManagement", () => {
     expect(after).toEqual(before);
     expect(shutdownController.requestShutdown).not.toHaveBeenCalled();
   });
+
+  it("keeps direct occurrence execution separate from scheduler confirmation", async () => {
+    const wakeAlarmController: WakeAlarmController = {
+      schedule: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const shutdownController: MachineShutdownController = {
+      requestShutdown: vi.fn(),
+    };
+    const capabilities = createPowerManagement({
+      clock: {
+        now: vi.fn(() => new Date("2026-08-03T21:00:00.000Z")),
+      },
+      wakeAlarmController,
+      machineShutdownController: shutdownController,
+      machineOperatingPolicy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        weeklySchedule: {
+          windows: [
+            { dayOfWeek: "monday", start: "08:00", end: "18:00" },
+            { dayOfWeek: "tuesday", start: "09:00", end: "17:00" },
+          ],
+        },
+      },
+    });
+
+    await expect(
+      capabilities.executeMachineShutdownOccurrence.executeAt(
+        {
+          operation: "shutdown",
+          scheduledFor: "2026-08-03T21:00:00.000Z",
+          wakeScheduledFor: "2026-08-04T12:00:00.000Z",
+        },
+        "2026-08-03T21:00:00.000Z",
+      ),
+    ).resolves.toMatchObject({
+      outcome: "rejected",
+      decision: {
+        blockers: [{ area: "confirmation", code: "not_confirmed" }],
+      },
+    });
+    expect(wakeAlarmController.schedule).not.toHaveBeenCalled();
+    expect(shutdownController.requestShutdown).not.toHaveBeenCalled();
+  });
 });

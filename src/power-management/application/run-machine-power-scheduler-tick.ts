@@ -21,6 +21,7 @@ import {
   SCHEDULER_POWER_AUDIT_SOURCE,
 } from "./administrative-audit-context.js";
 import type { AdministrativeEventSource } from "../../event-history/domain/administrative-event.js";
+import type { MachineShutdownConfirmationReader } from "./ports/machine-shutdown-readiness-readers.js";
 
 const MAX_INTERVAL = 8 * 24 * 60 * 60 * 1000;
 export class RunMachinePowerSchedulerTick {
@@ -29,6 +30,7 @@ export class RunMachinePowerSchedulerTick {
   readonly #cursorStore: MachinePowerSchedulerCursorStore;
   readonly #claims: MachineShutdownOccurrenceClaimStore;
   readonly #executor: MachineShutdownOccurrenceExecutor;
+  readonly #confirmationReader: MachineShutdownConfirmationReader;
   readonly #audit: AdministrativeAuditTrail | undefined;
   public constructor(
     clock: PowerManagementClock,
@@ -36,6 +38,7 @@ export class RunMachinePowerSchedulerTick {
     cursorStore: MachinePowerSchedulerCursorStore,
     claims: MachineShutdownOccurrenceClaimStore,
     executor: MachineShutdownOccurrenceExecutor,
+    confirmationReader: MachineShutdownConfirmationReader,
     audit?: AdministrativeAuditTrail,
   ) {
     this.#clock = clock;
@@ -43,6 +46,7 @@ export class RunMachinePowerSchedulerTick {
     this.#cursorStore = cursorStore;
     this.#claims = claims;
     this.#executor = executor;
+    this.#confirmationReader = confirmationReader;
     this.#audit = audit;
     Object.freeze(this);
   }
@@ -140,13 +144,15 @@ export class RunMachinePowerSchedulerTick {
     const items = [];
     for (const occurrence of occurrences) {
       try {
-        const execution = this.#executor.executeAt
-          ? await this.#executor.executeAt(
-              occurrence,
-              tickedAt,
-              SCHEDULER_POWER_AUDIT_SOURCE,
-            )
-          : await this.#executor.execute(occurrence);
+        const execution = await this.#executor.executeAt(
+          occurrence,
+          tickedAt,
+          SCHEDULER_POWER_AUDIT_SOURCE,
+          {
+            confirmationReader: this.#confirmationReader,
+            automaticallyPrepare: true,
+          },
+        );
         if (execution.outcome === "rejected")
           items.push({
             kind: "rejected" as const,
@@ -206,13 +212,14 @@ export class RunMachinePowerSchedulerTick {
 }
 
 export interface MachineShutdownOccurrenceExecutor {
-  execute(
-    occurrence: unknown,
-  ): Promise<MachineShutdownOccurrenceExecutionResult>;
-  executeAt?(
+  executeAt(
     occurrence: unknown,
     processedAt: string,
     source: typeof SCHEDULER_POWER_AUDIT_SOURCE,
+    options: Readonly<{
+      readonly confirmationReader: MachineShutdownConfirmationReader;
+      readonly automaticallyPrepare: true;
+    }>,
   ): Promise<MachineShutdownOccurrenceExecutionResult>;
 }
 

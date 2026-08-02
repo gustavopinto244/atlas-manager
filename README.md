@@ -2605,3 +2605,17 @@ flags, and scheduler lifecycle. A scheduled policy affects only planning and
 explicitly invoked scheduler ticks; no scheduler loop, helper request, RTC
 operation, D-Bus request, wake mutation, or shutdown is started by parsing or
 composition.
+
+### Policy-bound scheduler confirmation
+
+ADR-013 adds a narrow confirmation authority for explicitly invoked scheduler
+ticks. It confirms only an exact shutdown occurrence regenerated from the
+immutable configured policy. `always_on` and `manual` never authorize automatic
+shutdown occurrences. Due, stale, readiness, preparation, claim, wake, and
+shutdown checks remain separate and authoritative.
+
+Direct and administrative shutdown execution retain their own confirmation
+contracts. The scheduler supplies its policy-bound reader, scheduler audit
+source, and explicit automatic-preparation option through `executeAt`; there
+is no weaker `execute` fallback. No scheduler loop, timer, helper request, or
+real power effect is added.

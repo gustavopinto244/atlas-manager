@@ -82,6 +82,7 @@ import { AdministrativeAuditTrail } from "../../event-history/application/admini
 import type { AdministrativeEventAttemptIdGenerator } from "../../event-history/application/ports/administrative-event-attempt-id-generator.js";
 import { NodeAdministrativeEventAttemptIdGenerator } from "../../event-history/infrastructure/node-administrative-event-attempt-id-generator.js";
 import { AdministrativeEventHistoryMachineShutdownReadinessReader } from "../infrastructure/administrative-event-history-readiness-reader.js";
+import { ScheduledPolicyMachineShutdownConfirmationReader } from "../infrastructure/scheduled-policy-machine-shutdown-confirmation-reader.js";
 
 export interface PowerManagementCapabilities {
   readonly getRtcInformation: GetRtcInformation;
@@ -258,12 +259,17 @@ export function createPowerManagement(
     preparation,
     audit,
   );
+  const schedulerConfirmationReader =
+    new ScheduledPolicyMachineShutdownConfirmationReader(
+      machineOperatingPolicy,
+    );
   const runMachinePowerSchedulerTick = new RunMachinePowerSchedulerTick(
     clock,
     machineOperatingPolicy,
     cursorStore,
     claimStore,
     executeMachineShutdownOccurrence,
+    schedulerConfirmationReader,
     audit,
   );
 

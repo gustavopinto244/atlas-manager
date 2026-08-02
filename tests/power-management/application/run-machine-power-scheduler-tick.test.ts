@@ -14,6 +14,9 @@ const policy = createMachineOperatingPolicy({
     ],
   },
 });
+const confirmationReader = {
+  read: vi.fn(async () => "confirmed" as const),
+};
 describe("run machine power scheduler tick", () => {
   it("keeps the cursor unchanged for an inconsistent not_due occurrence", async () => {
     const occurrence = {
@@ -29,7 +32,7 @@ describe("run machine power scheduler tick", () => {
         .mockReturnValueOnce(new Date("2026-08-03T21:00:00.000Z")),
     };
     const executor = {
-      execute: vi.fn(async () => ({
+      executeAt: vi.fn(async () => ({
         occurrence,
         processedAt: "2026-08-03T21:00:00.000Z",
         outcome: "not_due" as const,
@@ -41,6 +44,7 @@ describe("run machine power scheduler tick", () => {
       new InMemoryMachinePowerSchedulerCursorStore(),
       new InMemoryMachineShutdownOccurrenceClaimStore(),
       executor,
+      confirmationReader,
     );
     await tick.execute();
     await expect(tick.execute()).resolves.toMatchObject({
@@ -51,7 +55,7 @@ describe("run machine power scheduler tick", () => {
       kind: "incomplete",
       report: { complete: false },
     });
-    expect(executor.execute).toHaveBeenCalledTimes(2);
+    expect(executor.executeAt).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the cursor unchanged for preparation-incomplete execution and retries later", async () => {
@@ -88,7 +92,7 @@ describe("run machine power scheduler tick", () => {
         .mockReturnValueOnce(new Date("2026-08-03T21:00:00.000Z")),
     };
     const executor = {
-      execute: vi
+      executeAt: vi
         .fn()
         .mockResolvedValueOnce({
           occurrence,
@@ -123,6 +127,7 @@ describe("run machine power scheduler tick", () => {
       new InMemoryMachinePowerSchedulerCursorStore(),
       new InMemoryMachineShutdownOccurrenceClaimStore(),
       executor,
+      confirmationReader,
     );
     await tick.execute();
     await expect(tick.execute()).resolves.toMatchObject({
@@ -133,7 +138,7 @@ describe("run machine power scheduler tick", () => {
       kind: "advanced",
       report: { complete: true },
     });
-    expect(executor.execute).toHaveBeenCalledTimes(2);
+    expect(executor.executeAt).toHaveBeenCalledTimes(2);
   });
   it("initializes safely, advances idle intervals, and executes chronologically", async () => {
     const values = [
@@ -144,7 +149,7 @@ describe("run machine power scheduler tick", () => {
     ];
     const clock = { now: vi.fn(() => new Date(values.shift()!)) };
     const executor = {
-      execute: vi.fn(async () => ({
+      executeAt: vi.fn(async () => ({
         occurrence: {
           operation: "shutdown" as const,
           scheduledFor: "2026-08-03T21:00:00.000Z",
@@ -175,6 +180,7 @@ describe("run machine power scheduler tick", () => {
       new InMemoryMachinePowerSchedulerCursorStore(),
       new InMemoryMachineShutdownOccurrenceClaimStore(),
       executor,
+      confirmationReader,
     );
     await expect(tick.execute()).resolves.toMatchObject({
       kind: "initialized",
@@ -187,7 +193,16 @@ describe("run machine power scheduler tick", () => {
       kind: "advanced",
       report: { complete: true, occurrenceResults: [{ kind: "completed" }] },
     });
-    expect(executor.execute).toHaveBeenCalledOnce();
+    expect(executor.executeAt).toHaveBeenCalledOnce();
+    expect(executor.executeAt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "shutdown",
+        scheduledFor: "2026-08-03T21:00:00.000Z",
+      }),
+      "2026-08-03T21:00:00.000Z",
+      { kind: "automated", actorId: "machine-power-scheduler" },
+      { confirmationReader, automaticallyPrepare: true },
+    );
   });
   it("blocks regression and oversized intervals without execution", async () => {
     const clock = {
@@ -196,19 +211,20 @@ describe("run machine power scheduler tick", () => {
         .mockReturnValueOnce(new Date("2026-08-10T00:00:00.000Z"))
         .mockReturnValueOnce(new Date("2026-08-09T23:59:00.000Z")),
     };
-    const executor = { execute: vi.fn() };
+    const executor = { executeAt: vi.fn() };
     const tick = new RunMachinePowerSchedulerTick(
       clock,
       policy,
       new InMemoryMachinePowerSchedulerCursorStore(),
       new InMemoryMachineShutdownOccurrenceClaimStore(),
       executor,
+      confirmationReader,
     );
     await tick.execute();
     await expect(tick.execute()).resolves.toMatchObject({
       kind: "blocked",
       reason: "clock_regression",
     });
-    expect(executor.execute).not.toHaveBeenCalled();
+    expect(executor.executeAt).not.toHaveBeenCalled();
   });
 });

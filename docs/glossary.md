@@ -1747,3 +1747,11 @@ effect.
 The bounded configuration format for `MACHINE_OPERATING_POLICY`. It is one
 JSON object with duplicate-key detection, no unknown fields, no arbitrary
 timezone, and validation through the existing machine-policy domain.
+
+### Policy-bound scheduler confirmation
+
+The scheduler-only authority introduced by ADR-013. It regenerates the
+one-minute policy interval ending at a candidate shutdown and confirms only
+when exactly one generated occurrence matches every field. It does not replace
+readiness, preparation, direct confirmation, administrative confirmation, or
+automatic scheduler lifecycle.
