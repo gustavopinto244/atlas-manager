@@ -103,6 +103,29 @@ func TestSandboxVerificationRejectsModifiedManagedRelease(t *testing.T) {
 	}
 }
 
+func TestSandboxRejectsUnknownReleaseArtifact(t *testing.T) {
+	root := t.TempDir()
+	bundle := createBundle(t, filepath.Join(root, "bundle"), "0.1.0")
+	paths := sandboxPaths(filepath.Join(root, "host"))
+	identity := runtimeidentity.Identity{UserID: 1001, PrimaryGroupID: 1001, HelperGroupID: 1002}
+	newInstaller := func() *Installer {
+		return New(Config{
+			Paths: paths, BundleRoot: bundle, EffectiveUID: func() int { return 0 },
+			ResolveIdentity: func() (runtimeidentity.Identity, error) { return identity, nil },
+			CheckNode: func(_ context.Context) error { return nil },
+		})
+	}
+	if err := newInstaller().Run(context.Background(), InstallDisabled); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(paths.ReleaseRoot, "unmanaged"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := newInstaller().Run(context.Background(), VerifyDisabled); err == nil {
+		t.Fatal("unknown release artifact was accepted")
+	}
+}
+
 func TestRejectsActivationActions(t *testing.T) {
 	installer := New(Config{BundleRoot: t.TempDir()})
 	for _, action := range []Action{"install", "enable", "start", "restart", "repair", "adopt", "force"} {

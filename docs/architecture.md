@@ -1075,3 +1075,18 @@ transaction journal before mutation, verifies every transition, and rolls
 back only resources created by the current failed attempt. The helper group
 remains textually empty and no home, deployment, service, configuration,
 helper, or power state is created.
+
+### Deterministic disabled deployment rehearsal
+
+ADR-020 adds test-only integration infrastructure in
+\`deployment/internal/rehearsal\`. It composes the existing production
+qualification, identity preparation, installer, release switching, rollback,
+uninstall, and verification packages over one synthetic Linux amd64 host with
+injected account commands, Node.js, systemd, filesystem, and capacity
+observations. Two valid releases are built through the existing bundle builder.
+
+The rehearsal snapshots the sandbox before and after every step and enforces
+exact mutation allowlists. It emits bounded canonical evidence with report
+digests and a deterministic hash chain. It is not a production command and
+never reads the real account database, invokes account tools or systemd,
+executes the application or helper, or accesses RTC or D-Bus.

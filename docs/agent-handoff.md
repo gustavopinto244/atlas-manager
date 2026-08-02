@@ -1251,3 +1251,35 @@ The three skipped Node tests are the deterministic Go-helper compatibility
 tests requiring `ATLAS_MANAGER_POWER_HELPER_FIXTURE`; that variable is
 intentionally absent from the standard suite. No real account command, host
 path, service, helper, RTC, D-Bus, VM, or power effect has been used.
+
+## Current work — Issue #276
+
+The active branch is:
+
+\`feat/deterministic-disabled-deployment-rehearsal\`
+
+The authoritative merged baseline is:
+
+\`41614fc8c9b757ffa4a4a1264d2baec7f9b1b93b\`
+
+Issue #276 adds the deterministic sandbox-only disabled deployment rehearsal.
+It builds releases A and B through the existing bundle builder and composes
+the production qualification, identity preparation, installer, verification,
+upgrade, rollback, uninstall, and removed-state packages over one synthetic
+Linux amd64 host. Fake account commands verify exact arguments; no real
+account command, systemd command, application, helper, RTC, D-Bus, physical
+host, or VM is used.
+
+The rehearsal records filesystem snapshots, mutation allowlists, bounded
+canonical step digests, and a deterministic evidence chain. It also covers
+identity rollback, interrupted identity state, lock conflict, and unknown
+release-artifact protection. The installer removes its deployment lock on
+successful completion and rejects unknown release directories rather than
+adopting them.
+
+Node format, lint, typecheck, the full Node test suite (181 files, 2,607
+tests, 3 intentional skips), build, production audit, and \`git diff --check\`
+pass. Go validation is pending because the current development environment
+does not provide \`go\` or \`gofmt\`; CI must run deployment formatting,
+verification, vet, tests, and the dedicated rehearsal. Generated bundle
+archives and rehearsal evidence remain outside the repository.

@@ -48,6 +48,10 @@ jobs:
         working-directory: deployment
         run: go test ./...
 
+      - name: Run deterministic disabled deployment rehearsal
+        working-directory: deployment
+        run: go test ./internal/rehearsal -count=1
+
       - name: Check Go formatting
         working-directory: power-helper
         run: test -z "$(gofmt -l .)"

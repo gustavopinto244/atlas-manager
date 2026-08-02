@@ -143,7 +143,10 @@ func (installer *Installer) Run(ctx context.Context, action Action) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer func() {
+		_ = lock.Close()
+		_ = os.Remove(installer.config.Paths.Lock)
+	}()
 	if err := validateStateMetadata(installer.config); err != nil {
 		return err
 	}
@@ -225,6 +228,9 @@ func VerifyManagedDisabled(paths Paths, identity runtimeidentity.Identity, enfor
 		return fmt.Errorf("state_invalid")
 	}
 	config := Config{Paths: paths, ApplyOwnership: enforceOwnership}
+	if err := verifyReleaseSet(paths.ReleaseRoot, state); err != nil {
+		return err
+	}
 	if err := verifyCurrent(paths.Current, paths.ReleaseRoot, state.Version, state.Files); err != nil {
 		return err
 	}
@@ -298,6 +304,9 @@ func (installer *Installer) install(ctx context.Context, identity runtimeidentit
 		return fmt.Errorf("state_invalid")
 	}
 	if stateExists {
+		if err := verifyReleaseSet(installer.config.Paths.ReleaseRoot, state); err != nil {
+			return err
+		}
 		if err := verifyCurrent(installer.config.Paths.Current, installer.config.Paths.ReleaseRoot, state.Version, state.Files); err != nil {
 			return err
 		}
@@ -306,6 +315,8 @@ func (installer *Installer) install(ctx context.Context, identity runtimeidentit
 		}
 	} else if exists(installer.config.Paths.Current) || exists(installer.config.Paths.Unit) || exists(installer.config.Paths.Template) {
 		return fmt.Errorf("unknown_current")
+	} else if hasReleaseDirectory(installer.config.Paths.ReleaseRoot) {
+		return fmt.Errorf("unknown_release")
 	}
 	if err := verifyEnvironmentMetadata(installer.config, identity); err != nil {
 		return err
@@ -369,6 +380,9 @@ func (installer *Installer) verify(identity runtimeidentity.Identity) error {
 	if err := verifyCurrent(installer.config.Paths.Current, installer.config.Paths.ReleaseRoot, state.Version, state.Files); err != nil {
 		return err
 	}
+	if err := verifyReleaseSet(installer.config.Paths.ReleaseRoot, state); err != nil {
+		return err
+	}
 	if err := verifyStatic(installer.config, identity); err != nil {
 		return err
 	}
@@ -382,6 +396,9 @@ func (installer *Installer) rollback(ctx context.Context) error {
 	}
 	previous := filepath.Join(installer.config.Paths.ReleaseRoot, state.Previous)
 	if err := verifyReleaseDirectory(previous); err != nil {
+		return err
+	}
+	if err := verifyReleaseSet(installer.config.Paths.ReleaseRoot, state); err != nil {
 		return err
 	}
 	if err := verifyReleaseFiles(previous, state.PreviousFiles); err != nil {
@@ -401,6 +418,9 @@ func (installer *Installer) uninstall() error {
 		return fmt.Errorf("state_invalid")
 	}
 	if err := verifyCurrent(installer.config.Paths.Current, installer.config.Paths.ReleaseRoot, state.Version, state.Files); err != nil {
+		return err
+	}
+	if err := verifyReleaseSet(installer.config.Paths.ReleaseRoot, state); err != nil {
 		return err
 	}
 	if err := os.Remove(installer.config.Paths.Current); err != nil {
@@ -512,6 +532,37 @@ func verifyReleaseDirectory(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("release_invalid")
+	}
+	return nil
+}
+
+func verifyReleaseSet(root string, state State) error {
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("release_set_invalid")
+	}
+	if err != nil {
+		return fmt.Errorf("release_set_invalid")
+	}
+	allowed := map[string]struct{}{state.Version: {}}
+	if state.Previous != "" {
+		allowed[state.Previous] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if _, ok := allowed[name]; !ok || entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+			return fmt.Errorf("release_set_invalid")
+		}
+		seen[name] = struct{}{}
+	}
+	if _, ok := seen[state.Version]; !ok {
+		return fmt.Errorf("release_set_invalid")
+	}
+	if state.Previous != "" {
+		if _, ok := seen[state.Previous]; !ok {
+			return fmt.Errorf("release_set_invalid")
+		}
 	}
 	return nil
 }

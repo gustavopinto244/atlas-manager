@@ -708,3 +708,23 @@ Deferred:
 - service enablement and startup;
 - helper installation and qualification;
 - Linux power activation and real-effect certification.
+
+## Issue #276 — Deterministic disabled deployment rehearsal
+
+Delivered:
+
+- deterministic sandbox rehearsal using the existing production packages;
+- reproducible release A and release B bundle builds;
+- qualification, identity preparation, prepared-host verification, disabled
+  installation, upgrade, rollback, uninstall, and removed-state coverage;
+- filesystem snapshots, mutation allowlists, independent lock assertions,
+  failure scenarios, and bounded canonical evidence.
+
+Deferred:
+
+- physical host qualification;
+- physical identity preparation;
+- physical disabled installation drill;
+- service enablement and startup;
+- power-helper installation and qualification;
+- real wake and shutdown certification.

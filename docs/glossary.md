@@ -1838,3 +1838,17 @@ enable the service.
 Root-private version-one evidence containing the fixed identity names,
 host-assigned numeric IDs, source commit, and bundle version. It does not
 adopt or authorize unrelated accounts and is not a removal instruction.
+
+### Disabled deployment rehearsal
+
+The deterministic sandbox integration test introduced by ADR-020. It builds
+two valid releases and composes host qualification, runtime identity
+preparation, disabled installation, upgrade, rollback, uninstall, and state
+verification without touching a physical host or executing Atlas Manager.
+
+### Rehearsal evidence
+
+Bounded canonical JSON containing release digests, step classifications,
+filesystem mutation classifications, and a deterministic report hash chain.
+It is integrity evidence for the sandbox rehearsal, not release authenticity
+or production deployment approval.

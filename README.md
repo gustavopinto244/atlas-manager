@@ -2715,3 +2715,19 @@ the current failed attempt. It never creates the home directory, changes
 textual group membership, installs Atlas or the helper, creates configuration,
 enables or starts systemd, or performs a power operation. Committed identities
 have no public removal action; physical preparation remains deferred.
+
+### Deterministic disabled deployment rehearsal
+
+Issue #276 adds sandbox-only Go test infrastructure that builds two valid
+deterministic bundles and reuses the production qualification,
+identity-preparation, installer, upgrade, rollback, uninstall, and verification
+packages against one synthetic Linux amd64 host. Fake account commands and
+injected Node.js and systemd observations keep the rehearsal independent from
+the real host.
+
+Filesystem snapshots, mutation allowlists, bounded canonical step digests, and
+a deterministic evidence chain prove that each transition changes only its
+reviewed boundary. The rehearsal never reads or mutates real account databases
+or production paths, calls systemd, executes Atlas Manager or the power helper,
+accesses RTC or D-Bus, enables or starts a service, or performs a physical-host
+or VM drill. The packaged mock-only application smoke test remains separate.
