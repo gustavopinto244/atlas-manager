@@ -1235,3 +1235,15 @@ the helper-compatible privilege model. Installation does not create or modify
 accounts, group membership, configuration secrets, helper files, RTC state,
 D-Bus state, or service activation. Physical deployment and real-effect
 certification remain deferred.
+
+### Deployment host qualification
+
+The deployment bundle also contains the separate root-run
+`atlas-manager-host-qualification` executable. It is read-only and fixed-path:
+it validates Linux amd64, safe parents and systemd directories, the exact Node
+runtime, bounded account files, bundle integrity, deployment capacity, and
+managed state. It emits no account IDs, account-file contents, environment
+contents, host identifiers, or raw operating-system errors. It does not create
+or acquire locks, repair state, invoke systemd, start a service, execute the
+installer, or inspect or execute the power helper. The power-helper
+qualification executable remains an independent authority.

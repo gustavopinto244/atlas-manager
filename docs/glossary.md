@@ -1806,3 +1806,21 @@ environment template, and operator installer. It does not activate Atlas.
 Root-private state recording only releases managed by the Atlas Manager
 installer. It is not application runtime state and is never used to adopt
 unknown files.
+
+### Deployment host qualification
+
+The separate read-only Linux amd64 inspection boundary introduced by ADR-018.
+It validates fixed deployment assumptions and emits bounded canonical JSON;
+it does not prepare, install, enable, start, or repair Atlas Manager.
+
+### Preparation required
+
+A qualification result meaning the fixed runtime identities are completely
+absent while other inspected host assumptions are safe. It is not permission
+to create accounts or groups and does not pass prepared-host verification.
+
+### Disabled-installation evidence
+
+A canonical report proving that the managed application release, unit, and
+template are intact while the service remains disabled and inactive. It does
+not prove application startup or power-effect readiness.

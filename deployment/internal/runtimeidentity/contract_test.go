@@ -89,3 +89,21 @@ func TestValidateRejectsDuplicateRelevantRecords(t *testing.T) {
 		t.Fatal("expected duplicate helper GID rejection")
 	}
 }
+
+func TestClassifyAccountContractDistinguishesAbsentAndPartialState(t *testing.T) {
+	state, _, err := ClassifyAccountContract("root:x:0:0::/root:/usr/sbin/nologin\n", "root:x:0:\n")
+	if err != nil || state != Absent {
+		t.Fatalf("state = %q, err = %v", state, err)
+	}
+	state, _, err = ClassifyAccountContract(validPasswd, "root:x:0:\n")
+	if err == nil || state != Blocked {
+		t.Fatalf("partial state = %q, err = %v", state, err)
+	}
+}
+
+func TestClassifyAccountContractRejectsHelperMembers(t *testing.T) {
+	state, _, err := ClassifyAccountContract(validPasswd, "root:x:0:\natlas-manager:x:1001:\natlas-manager-power:x:1002:atlas-manager\n")
+	if err == nil || state != Blocked {
+		t.Fatalf("state = %q, err = %v", state, err)
+	}
+}
