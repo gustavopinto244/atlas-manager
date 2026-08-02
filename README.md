@@ -2669,3 +2669,20 @@ membership, and helper ownership by another group fail closed. Disabled,
 mock, and inert Linux configurations do not inspect account files and do not
 require these accounts. Account creation, group enrollment, deployment, and
 host qualification remain operator-controlled deferred gates.
+
+### Reproducible disabled deployment bundle
+
+Issue #270 adds a separate Linux amd64 deployment module that builds an
+isolated application bundle with production-only dependencies, a strict
+manifest, SHA-256 inventory, and normalized archive metadata. The bundle
+contains a disabled systemd unit, a safe environment template, and the
+operator-run `atlas-manager-installer`.
+
+The installer uses fixed production paths and exact `atlas-manager` runtime
+identity settings. It supports only bundle inspection, disabled installation,
+verification, file-level rollback, and disabled uninstall. It never creates
+users or groups, enrolls `atlas-manager-power`, reads the real configuration,
+calls npm or systemd, starts the service, installs the power helper, or
+activates Linux effects. The actual environment, application state, helper
+installation, host qualification, and service enablement remain separate
+operator-controlled gates.

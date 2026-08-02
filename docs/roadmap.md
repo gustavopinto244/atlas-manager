@@ -654,3 +654,22 @@ validation.
 Account and group creation, application enrollment, systemd service
 configuration, the Atlas deployment bundle, host qualification, and
 real-effect certification remain deferred.
+
+## Issue #270 — Reproducible disabled deployment bundle
+
+Delivered:
+
+- reproducible Linux amd64 Atlas Manager application bundle;
+- production-only dependency tree and strict manifest/checksum inventory;
+- disabled systemd runtime contract;
+- operator-only inspection, installation, verification, upgrade, rollback,
+  and uninstall tooling;
+- sandboxed installation and application smoke validation.
+
+Deferred:
+
+- runtime account and group creation;
+- physical disabled installation drill;
+- host qualification;
+- service enablement and startup;
+- real wake and shutdown certification.

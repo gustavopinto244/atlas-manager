@@ -1043,3 +1043,13 @@ Identity failure happens before helper hashing, power composition, HTTP
 creation, and scheduler startup. Account creation, group enrollment, systemd
 configuration, deployment, host qualification, and real-effect certification
 remain separate gates.
+
+### Reproducible disabled application deployment
+
+The application deployment boundary is separate from `power-helper/`. The
+`deployment/` Go module builds an isolated TypeScript payload and production
+npm tree, validates a closed manifest, and emits a normalized Linux amd64
+archive. Its installer uses fixed paths, fixed Node.js `/usr/bin/node`, the
+exact `atlas-manager` identity, and a nonblocking deployment lock. It installs
+only a disabled unit and template; it does not enable systemd, create the real
+environment, execute Atlas, or install the helper.

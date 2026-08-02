@@ -1030,3 +1030,86 @@ and no account or group was created or modified. The exact resolved helper GID
 is shared by startup preflight and operation-time inspection. No host or VM
 drill, helper execution, real RTC/D-Bus operation, wake effect, reboot, or
 shutdown occurred.
+
+## Current work — Issue #270
+
+The active branch is:
+
+`feat/reproducible-disabled-atlas-manager-deployment-bundle`
+
+The authoritative merged PR #269 baseline for this delivery is:
+
+`a3d73c18ee55bc528280a6944b351c6ea3916255`
+
+Issue #270 adds ADR-017, the separate `deployment/` Go module, a reproducible
+Linux amd64 application bundle, a disabled systemd unit, and an operator-only
+installer. The builder compiles in temporary workspaces, installs production
+dependencies with `npm ci --omit=dev --ignore-scripts`, excludes source maps,
+declarations, TypeScript, tests, and developer dependencies, and normalizes
+archive metadata. The installer uses fixed paths, exact runtime identity,
+fixed `/usr/bin/node`, a nonblocking lock, and file-level disabled
+install/verify/upgrade/rollback/uninstall actions.
+
+No user or group is created or modified. The real environment file, runtime
+state, helper installation, service enablement, and service startup are not
+managed. No systemctl, npm lifecycle, shell, helper, RTC, D-Bus, host, VM,
+reboot, shutdown, or real power operation is used by the deployment contract.
+
+Final validation for Issue #270:
+
+```text
+baseline                          → a3d73c18ee55bc528280a6944b351c6ea3916255
+branch                            → feat/reproducible-disabled-atlas-manager-deployment-bundle
+Node.js                           → 24.18.0
+npm                               → 11.16.0
+Go                                → 1.23.0 linux/amd64
+Node test files                   → 181 passed
+Node tests                        → 2,607 passed
+Node skipped tests                → 3
+power-helper Go tests             → 111
+deployment Go tests               → 20
+format                            → passed
+lint                              → passed
+typecheck                         → passed
+build                             → passed
+power-helper gofmt                → passed
+power-helper go mod verify        → passed
+power-helper go vet               → passed
+deployment gofmt                  → passed
+deployment go mod verify          → passed
+deployment go vet                 → passed
+npm audit --omit=dev              → 0 production vulnerabilities
+git diff --check                  → passed
+dependencies                      → unchanged; deployment module is stdlib-only
+bundle archive                    → atlas-manager_0.1.0_linux_amd64.tar.gz
+bundle SHA-256                    → bb850a86dfc00da43491c5881720609a01deae2a3557a91cb63c02a5c4e1a6ad
+second-build SHA-256              → bb850a86dfc00da43491c5881720609a01deae2a3557a91cb63c02a5c4e1a6ad
+reproducibility                   → identical archive bytes
+bundle inspection                 → passed
+packaged mock-only smoke test     → passed
+local helper/archive artifacts    → none in the repository
+```
+
+The three skipped Node tests, recorded from the standard command
+`npm test -- --maxWorkers=1`, are:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They are skipped because `ATLAS_MANAGER_POWER_HELPER_FIXTURE` is intentionally
+absent from the standard suite. The dedicated compatibility workflow supplies
+the separately built nonproduction fixture executable. No skipped test
+requires the production helper, a host installation, RTC, D-Bus, or a power
+operation.
+
+The deployment builder used isolated temporary workspaces, explicit pinned
+tool versions, production-only dependencies, disabled npm lifecycle scripts,
+and normalized archive metadata. The installer was tested only with sandbox
+roots and does not create users or groups, invoke systemd, create the real
+environment file, enable or start the service, or execute application/helper
+power operations. No physical Atlas host or VM was used; no production path,
+account database, helper, setuid state, RTC, D-Bus, wake alarm, reboot,
+shutdown, or other real power effect was touched.

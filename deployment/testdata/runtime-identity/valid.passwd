@@ -1,0 +1,2 @@
+root:x:0:0::/root:/usr/sbin/nologin
+atlas-manager:x:1001:1001::/var/lib/atlas-manager:/usr/sbin/nologin
