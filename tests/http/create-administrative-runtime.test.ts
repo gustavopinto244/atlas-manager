@@ -15,6 +15,7 @@ function shutdownConfig(): EnvironmentConfig {
     port: 3000,
     logLevel: "info",
     powerManagementBackend: "mock",
+    machinePowerSchedulerEnabled: false,
     machineOperatingPolicy: createMachineOperatingPolicy({ mode: "always_on" }),
     administrativeEventHistoryHttpEnabled: false,
     administrativeWakeAlarmHttpEnabled: false,
@@ -92,5 +93,27 @@ describe("administrative shutdown runtime composition", () => {
       throw new Error("Expected power-management composition arguments");
     }
     expect(call[0].machineOperatingPolicy).toBe(config.machineOperatingPolicy);
+  });
+
+  it("does not construct power infrastructure for event-history-only HTTP", () => {
+    const createAdapters = vi.fn(() =>
+      createLinuxPowerHelperAdapters({
+        transport: new InMemoryLinuxPowerHelperTransport(),
+      }),
+    );
+    const runtime = createAdministrativeRuntime(
+      {
+        ...shutdownConfig(),
+        administrativeEventHistoryHttpEnabled: true,
+        administrativeShutdownHttpEnabled: false,
+      },
+      undefined,
+      { createLinuxPowerHelperAdapters: createAdapters },
+    );
+
+    expect(runtime.eventHistory).toBeDefined();
+    expect(runtime.shutdown).toBeUndefined();
+    expect(runtime.wakeAlarm).toBeUndefined();
+    expect(createAdapters).not.toHaveBeenCalled();
   });
 });

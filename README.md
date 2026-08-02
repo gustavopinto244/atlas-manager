@@ -2619,3 +2619,17 @@ contracts. The scheduler supplies its policy-bound reader, scheduler audit
 source, and explicit automatic-preparation option through `executeAt`; there
 is no weaker `execute` fallback. No scheduler loop, timer, helper request, or
 real power effect is added.
+
+### Disabled machine-power scheduler lifecycle
+
+ADR-014 adds an automatic machine-power scheduler lifecycle behind the exact
+`MACHINE_POWER_SCHEDULER_ENABLED=true` setting. It is disabled by default and
+requires persistent cursor, occurrence-claim, and event-history files. The
+first tick starts only after HTTP listening, then uses a fixed one-shot
+60-second cadence without overlap. Blocked, incomplete, conflict, and failed
+outcomes terminate the application fail-closed without retry.
+
+The scheduler shares the configured power and event-history capability bundles
+with administrative surfaces but does not enable HTTP routes, select the Linux
+helper, or start because a scheduled policy exists. No Atlas or VM drill was
+performed and no helper, RTC, D-Bus, wake, reboot, or shutdown effect occurred.

@@ -27,7 +27,7 @@ import { MachineShutdownOccurrenceExecutionError } from "../../power-management/
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
-  readonly powerManagement: PowerManagementCapabilities;
+  readonly powerManagement?: PowerManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
   readonly clock: PowerManagementClock;
   readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
@@ -75,11 +75,16 @@ export function createProtectedAdministration(
     input.clock,
   );
   const power = input.powerManagement;
+  const requirePower = (): PowerManagementCapabilities => {
+    if (power === undefined)
+      throw new Error("Power-management composition is unavailable");
+    return power;
+  };
   const confirmationReader = input.machineShutdownConfirmationReader;
   const getNextWakeAlarm = Object.freeze({
     execute: () =>
       runner.run("read_wake_alarm", (at) =>
-        power.getNextWakeAlarm.executeAt(at),
+        requirePower().getNextWakeAlarm.executeAt(at),
       ),
   });
   const scheduleWakeAlarm = Object.freeze({
@@ -87,7 +92,11 @@ export function createProtectedAdministration(
       runner.run(
         "schedule_wake_alarm",
         (at, source) =>
-          power.scheduleWakeAlarm.executeAsAuthorized(value, at, source),
+          requirePower().scheduleWakeAlarm.executeAsAuthorized(
+            value,
+            at,
+            source,
+          ),
         (at) => {
           const schedule = createWakeAlarmSchedule(value);
           assertWakeAlarmScheduleIsFuture(at, schedule.scheduledFor);
@@ -97,19 +106,19 @@ export function createProtectedAdministration(
   const cancelWakeAlarm = Object.freeze({
     execute: () =>
       runner.run("cancel_wake_alarm", (at, source) =>
-        power.cancelWakeAlarm.executeAsAuthorized(at, source),
+        requirePower().cancelWakeAlarm.executeAsAuthorized(at, source),
       ),
   });
   const requestMachineShutdown = Object.freeze({
     execute: () =>
       runner.run("request_machine_shutdown", (at, source) =>
-        power.requestMachineShutdown.executeAsAuthorized(at, source),
+        requirePower().requestMachineShutdown.executeAsAuthorized(at, source),
       ),
   });
   const prepareMachineShutdownOccurrence = Object.freeze({
     execute: (value: unknown) =>
       runner.run("prepare_machine_shutdown_occurrence", (at, source) =>
-        power.prepareMachineShutdownOccurrence.executeAsAuthorized(
+        requirePower().prepareMachineShutdownOccurrence.executeAsAuthorized(
           value,
           at,
           source,
@@ -120,7 +129,7 @@ export function createProtectedAdministration(
   const executeMachineShutdownOccurrence = Object.freeze({
     execute: (value: unknown) =>
       runner.run("execute_machine_shutdown_occurrence", (at, source) =>
-        power.executeMachineShutdownOccurrence.executeAt(
+        requirePower().executeMachineShutdownOccurrence.executeAt(
           value,
           at,
           source,
@@ -133,7 +142,10 @@ export function createProtectedAdministration(
   const runMachinePowerSchedulerTick = Object.freeze({
     execute: () =>
       runner.run("run_machine_power_scheduler_tick", (at, source) =>
-        power.runMachinePowerSchedulerTick.executeAsAuthorized(at, source),
+        requirePower().runMachinePowerSchedulerTick.executeAsAuthorized(
+          at,
+          source,
+        ),
       ),
   });
   const getAdministrativeEventHistory = Object.freeze({

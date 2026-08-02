@@ -617,3 +617,14 @@ real power effect is introduced.
 
 The automatic machine-power scheduler lifecycle, Atlas deployment,
 application-user enrollment, and real-effect certification remain deferred.
+
+## Issue #264 delivery notes
+
+Issue #264 delivers the disabled-by-default machine-power scheduler lifecycle.
+Exact `MACHINE_POWER_SCHEDULER_ENABLED=true` requires persistent cursor, claim,
+and event-history files, starts only after HTTP listening, runs the existing
+tick at a fixed 60-second one-shot cadence, prevents overlap, and terminates
+fail-closed on blocked, incomplete, conflict, or failed outcomes. The default
+remains disabled and mock-first; helper deployment, application-user
+enrollment, Atlas host qualification, and real-effect certification remain
+deferred.

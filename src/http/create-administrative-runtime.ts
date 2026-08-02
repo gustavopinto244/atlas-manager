@@ -3,16 +3,15 @@ import { createAdministrativeAccessControl } from "../access-control/composition
 import { createCloudflareAccessAdministrativeAuthentication } from "../access-control/composition/create-cloudflare-access-administrative-authentication.js";
 import { createProtectedAdministration } from "../access-control/composition/create-protected-administration.js";
 import { InMemoryAdministrativeRoleAssignmentReader } from "../access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
-import { createEventHistory } from "../event-history/composition/create-event-history.js";
 import {
-  createPowerManagement,
-  type PowerManagementCapabilities,
-  type PowerManagementCompositionOverrides,
-} from "../power-management/composition/create-power-management.js";
+  createEventHistory,
+  type EventHistoryCapabilities,
+} from "../event-history/composition/create-event-history.js";
+import { type PowerManagementCapabilities } from "../power-management/composition/create-power-management.js";
 import {
-  createConfiguredPowerManagementInfrastructure,
-  type ConfiguredPowerManagementInfrastructureDependencies,
-} from "../power-management/composition/create-configured-power-management-infrastructure.js";
+  createConfiguredPowerManagementRuntime,
+  type ConfiguredPowerManagementRuntimeDependencies,
+} from "../power-management/composition/create-configured-power-management-runtime.js";
 import type { MachineShutdownConfirmationReader } from "../power-management/application/ports/machine-shutdown-readiness-readers.js";
 import type { ServiceManagementCapabilities } from "../service-management/composition/create-service-management.js";
 import type { AdministrativeEventHistoryPage } from "../event-history/domain/administrative-event-history-page.js";
@@ -32,10 +31,9 @@ export interface AdministrativeRuntime {
   readonly shutdown?: AdministrativeShutdownRouteDependencies;
 }
 
-export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementInfrastructureDependencies {
-  readonly createPowerManagement?: (
-    overrides: PowerManagementCompositionOverrides,
-  ) => PowerManagementCapabilities;
+export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
+  readonly eventHistory?: EventHistoryCapabilities;
+  readonly powerManagement?: PowerManagementCapabilities;
 }
 
 export function createAdministrativeRuntime(
@@ -54,7 +52,8 @@ export function createAdministrativeRuntime(
   const clock: AdministrativeRequestClock = Object.freeze({
     now: () => new Date(),
   });
-  const eventHistory = createEventHistory({ filePath });
+  const eventHistory =
+    compositionDependencies.eventHistory ?? createEventHistory({ filePath });
   const roleAssignmentReader = new InMemoryAdministrativeRoleAssignmentReader({
     assignments: roleAssignments.map((assignment) => ({
       principalId: assignment.principal.principalId,
@@ -66,41 +65,19 @@ export function createAdministrativeRuntime(
       configuration: cloudflareAccess,
       clock,
     });
-  const powerInfrastructure = createConfiguredPowerManagementInfrastructure(
-    config.powerManagementBackend,
-    compositionDependencies,
-  );
-  const createCapabilities =
-    compositionDependencies.createPowerManagement ?? createPowerManagement;
-  const powerManagement = createCapabilities({
-    clock,
-    administrativeEventHistoryCapabilities: eventHistory,
-    machineOperatingPolicy: config.machineOperatingPolicy,
-    ...powerInfrastructure.adapters,
-    ...(config.machineShutdownOccurrenceClaimFilePath === undefined ||
-    config.machinePowerSchedulerCursorFilePath === undefined
-      ? {}
-      : {
-          persistence: {
-            occurrenceClaimFilePath:
-              config.machineShutdownOccurrenceClaimFilePath,
-            schedulerCursorFilePath: config.machinePowerSchedulerCursorFilePath,
-          },
-        }),
-    ...(serviceManagement === undefined
-      ? {}
-      : {
-          serviceManagementReadinessCapabilities: {
-            listRegisteredServices: serviceManagement.listRegisteredServices,
-            getRegisteredServiceAvailabilityForInterval:
-              serviceManagement.getRegisteredServiceAvailabilityForInterval,
-            getRegisteredServiceStatus:
-              serviceManagement.getRegisteredServiceStatus,
-          },
-          serviceManagementPreparationCapabilities:
-            serviceManagement.orchestrateRegisteredServicesStop,
-        }),
-  });
+  const needsPowerManagement =
+    config.administrativeWakeAlarmHttpEnabled ||
+    config.administrativeShutdownHttpEnabled;
+  const powerManagement = needsPowerManagement
+    ? (compositionDependencies.powerManagement ??
+      createConfiguredPowerManagementRuntime(
+        config,
+        serviceManagement,
+        eventHistory,
+        compositionDependencies,
+      ))
+    : compositionDependencies.powerManagement;
+
   const admission = new FixedAdministrativeRequestAdmission(clock);
   const powerOperationGate = new FixedAdministrativePowerOperationGate();
 
@@ -115,7 +92,7 @@ export function createAdministrativeRuntime(
     });
     return createProtectedAdministration({
       accessControl,
-      powerManagement,
+      ...(powerManagement === undefined ? {} : { powerManagement }),
       eventHistory,
       clock,
       ...(confirmationReader === undefined

@@ -1158,3 +1158,18 @@ The policy check is necessary but not sufficient: readiness, preparation,
 permanent claims, wake-before-shutdown ordering, and failure boundaries remain
 in force. Direct and administrative paths retain separate confirmations, and
 the scheduler has no fallback from `executeAt` to a weaker execution method.
+
+## Disabled machine-power scheduler lifecycle
+
+The machine-power scheduler is a separate disabled-by-default activation gate.
+Only exact `MACHINE_POWER_SCHEDULER_ENABLED=true` starts it, and startup also
+requires persistent cursor, occurrence-claim, and event-history paths. The
+loop runs one explicit tick immediately after HTTP listening and then waits a
+fixed 60 seconds after each successful continuing tick. It never overlaps,
+retries, repairs state, or falls back to mock behavior.
+
+Blocked, incomplete, conflict, and failed ticks terminate the process
+fail-closed through coordinated shutdown. Administrative HTTP flags,
+`POWER_MANAGEMENT_BACKEND`, policy selection, helper installation, and user
+enrollment do not activate the loop. No host or VM drill, helper execution,
+RTC access, D-Bus request, wake mutation, reboot, or shutdown was performed.
