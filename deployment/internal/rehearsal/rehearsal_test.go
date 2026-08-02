@@ -274,7 +274,7 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 	if err := writeFile(filepath.Join(source, "package-lock.json"), `{"name":"atlas-manager","version":"`+version+`","lockfileVersion":3,"requires":true,"packages":{}}`, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tools := map[string]string{"atlas-manager-installer": "installer", "atlas-manager-host-qualification": "qualification", "atlas-manager-runtime-identity-installer": "identity"}
+	tools := map[string]string{"atlas-manager-installer": "installer", "atlas-manager-host-qualification": "qualification", "atlas-manager-runtime-identity-installer": "identity", "atlas-manager-runtime-configuration": "configuration", "atlas-manager-service-lifecycle": "lifecycle"}
 	toolPaths := map[string]string{}
 	for name, content := range tools {
 		path := filepath.Join(source, "tools", name)
@@ -284,7 +284,7 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 		toolPaths[name] = path
 	}
 	buildOnce := func(output string) string {
-		result, err := bundle.Build(context.Background(), bundle.Config{Version: version, SourceCommit: commit, SourceDateEpoch: 0, SourceRoot: source, OutputDir: output, NodeVersion: bundle.PinnedNode, NPMVersion: bundle.PinnedNPM, GoVersion: bundle.PinnedGo, InstallerPath: toolPaths["atlas-manager-installer"], QualificationPath: toolPaths["atlas-manager-host-qualification"], IdentityInstallerPath: toolPaths["atlas-manager-runtime-identity-installer"], Runner: buildRunner{}})
+		result, err := bundle.Build(context.Background(), bundle.Config{Version: version, SourceCommit: commit, SourceDateEpoch: 0, SourceRoot: source, OutputDir: output, NodeVersion: bundle.PinnedNode, NPMVersion: bundle.PinnedNPM, GoVersion: bundle.PinnedGo, InstallerPath: toolPaths["atlas-manager-installer"], QualificationPath: toolPaths["atlas-manager-host-qualification"], IdentityInstallerPath: toolPaths["atlas-manager-runtime-identity-installer"], RuntimeConfigurationPath: toolPaths["atlas-manager-runtime-configuration"], ServiceLifecyclePath: toolPaths["atlas-manager-service-lifecycle"], Runner: buildRunner{}})
 		if err != nil {
 			t.Fatal(err)
 		}

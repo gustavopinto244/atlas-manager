@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "result": "active_mock_verified",
+  "sourceCommit": "",
+  "applicationVersion": "",
+  "deploymentBundleSha256": "",
+  "runtimeConfigurationSha256": "",
+  "systemdUnitSha256": "",
+  "activationSteps": [],
+  "healthChecks": [],
+  "finalState": "",
+  "operatorReview": "",
+  "notes": ""
+}

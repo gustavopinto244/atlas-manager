@@ -47,11 +47,11 @@ type Evidence struct {
 }
 
 type Entry struct {
-	Path string
-	Type string
-	Mode fs.FileMode
-	Size int64
-	Hash string
+	Path   string
+	Type   string
+	Mode   fs.FileMode
+	Size   int64
+	Hash   string
 	Target string
 }
 

@@ -674,6 +674,25 @@ Deferred:
 - service enablement and startup;
 - real wake and shutdown certification.
 
+## Issue #278 — Mock-only production activation readiness
+
+Delivered:
+
+- strict canonical mock-only runtime configuration installation and removal;
+- operator-controlled systemd daemon reload, enablement, startup, stop, and
+  disable lifecycle;
+- bounded loopback health, route-absence, systemd, and runtime-identity
+  verification;
+- activation journals, rollback, private state, canonical evidence, and a
+  deterministic sandbox rehearsal.
+
+Deferred:
+
+- production authentication and administrative route activation;
+- Linux power-helper installation and activation;
+- machine-power scheduler activation;
+- physical deployment and real-effect certification.
+
 ## Issue #272 — Read-only deployment host qualification
 
 Delivered:

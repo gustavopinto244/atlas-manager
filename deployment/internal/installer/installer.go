@@ -211,6 +211,12 @@ func inspectBundle(root string) error {
 	if _, err := os.Stat(filepath.Join(root, "atlas-manager-runtime-identity-installer")); err != nil {
 		return fmt.Errorf("identity_installer_missing")
 	}
+	if _, err := os.Stat(filepath.Join(root, "atlas-manager-runtime-configuration")); err != nil {
+		return fmt.Errorf("runtime_configuration_missing")
+	}
+	if _, err := os.Stat(filepath.Join(root, "atlas-manager-service-lifecycle")); err != nil {
+		return fmt.Errorf("service_lifecycle_missing")
+	}
 	return nil
 }
 
@@ -565,6 +571,23 @@ func verifyReleaseSet(root string, state State) error {
 		}
 	}
 	return nil
+}
+
+func hasReleaseDirectory(root string) bool {
+	entries, err := os.ReadDir(root)
+	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	for _, entry := range entries {
+		if entry.Name() == "." || entry.Name() == ".." {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func verifyReleaseFiles(root string, expected []manifest.File) error {

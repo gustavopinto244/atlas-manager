@@ -1271,3 +1271,14 @@ systemd, and host observations with deterministic fakes. Filesystem snapshots
 and per-step allowlists detect writes outside the expected identity or
 deployment boundary. The rehearsal creates no real account, service, helper,
 configuration, RTC state, D-Bus request, or power effect.
+
+### Mock-only service activation
+
+The first service activation profile is intentionally limited to loopback and
+the mock power backend. A fixed runtime configuration is installed atomically;
+unknown or modified configuration is never adopted. Service lifecycle changes
+use only `/usr/bin/systemctl`, the fixed unit, exact confirmations, a
+nonblocking lock, and same-process rollback. Health verification rejects
+redirects and proxies, checks route absence with `404`, and reuses the exact
+runtime identity contract. No helper, RTC, D-Bus, scheduler, or power effect is
+reachable through this profile.
