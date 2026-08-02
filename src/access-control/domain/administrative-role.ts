@@ -2,6 +2,7 @@ export const ADMINISTRATIVE_ROLES = Object.freeze([
   "power_operator",
   "scheduler_operator",
   "auditor",
+  "service_operator",
   "administrator",
 ] as const);
 
@@ -29,7 +30,7 @@ export function createAdministrativeRole(input: unknown): AdministrativeRole {
 export function createAdministrativeRoleCollection(
   input: unknown,
 ): readonly AdministrativeRole[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > 4)
+  if (!Array.isArray(input) || input.length < 1 || input.length > 5)
     throw new AdministrativeRoleValidationError("invalid_role_collection");
   const roles = input.map(createAdministrativeRole);
   if (new Set(roles).size !== roles.length)

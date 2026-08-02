@@ -162,7 +162,7 @@ export function createServiceManagement(
   const mockStatusReader = MockServiceStatusReader.create(
     mockStatusConfiguration,
   );
-  const mockController = new MockServiceController();
+  const mockController = new MockServiceController(mockStatusReader);
   const pm2StatusReader = new Pm2ServiceStatusReader(processListExecutor);
   const pm2Controller = new Pm2ServiceController(
     processListExecutor,

@@ -2105,7 +2105,7 @@ describe("createServiceManagement", () => {
     expect(clock.now).not.toHaveBeenCalled();
   });
 
-  it("accepts configured mock status and keeps mock control stateless", async () => {
+  it("accepts configured mock status and exposes authoritative mock control state", async () => {
     const service = createConfiguredService("mock");
     const clock = createClock(firstTimestamp, secondTimestamp);
     const capabilities = createServiceManagement(createEnvironment([service]), {
@@ -2121,7 +2121,7 @@ describe("createServiceManagement", () => {
       capabilities.getRegisteredServiceStatus.execute(service.id),
     ).resolves.toEqual({
       serviceId: service.id,
-      state: "running",
+      state: "stopped",
       observedAt: secondTimestamp,
     });
   });

@@ -146,7 +146,11 @@ function start(): void {
     const eventHistoryRequired =
       config.administrativeEventHistoryHttpEnabled ||
       administrativePowerEnabled ||
-      config.machinePowerSchedulerEnabled;
+      config.machinePowerSchedulerEnabled ||
+      config.administrativeServiceManagementHttpEnabled === true ||
+      config.administrativeServiceAvailabilityHttpEnabled === true ||
+      config.administrativeOverviewHttpEnabled === true ||
+      config.administrativeDashboardEnabled === true;
     if (
       eventHistoryRequired &&
       config.administrativeEventHistoryFilePath === undefined
@@ -176,10 +180,16 @@ function start(): void {
     const administrativeRuntime =
       config.administrativeEventHistoryHttpEnabled ||
       config.administrativeWakeAlarmHttpEnabled ||
-      config.administrativeShutdownHttpEnabled
+      config.administrativeShutdownHttpEnabled ||
+      config.administrativeServiceManagementHttpEnabled === true ||
+      config.administrativeServiceAvailabilityHttpEnabled === true ||
+      config.administrativeOverviewHttpEnabled === true ||
+      config.administrativeDashboardEnabled === true
         ? createAdministrativeRuntime(config, serviceManagement, {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
+            getServerHealth,
+            applicationVersion: "0.1.0",
           })
         : undefined;
     const machinePowerSchedulerLoop = config.machinePowerSchedulerEnabled
@@ -200,6 +210,21 @@ function start(): void {
       ...(administrativeRuntime?.shutdown === undefined
         ? {}
         : { administrativeShutdown: administrativeRuntime.shutdown }),
+      ...(administrativeRuntime?.services === undefined
+        ? {}
+        : { administrativeServices: administrativeRuntime.services }),
+      ...(administrativeRuntime?.availability === undefined
+        ? {}
+        : {
+            administrativeServiceAvailability:
+              administrativeRuntime.availability,
+          }),
+      ...(administrativeRuntime?.overview === undefined
+        ? {}
+        : { administrativeOverview: administrativeRuntime.overview }),
+      ...(administrativeRuntime?.dashboard === undefined
+        ? {}
+        : { administrativeDashboard: administrativeRuntime.dashboard }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

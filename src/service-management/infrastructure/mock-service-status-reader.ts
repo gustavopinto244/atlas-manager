@@ -26,10 +26,7 @@ export class MockServiceStatusReaderError extends Error {
 
 export class MockServiceStatusReader implements ServiceStatusReader {
   private constructor(
-    private readonly statesByExternalResource: ReadonlyMap<
-      string,
-      ServiceRuntimeState
-    >,
+    private readonly statesByExternalResource: Map<string, ServiceRuntimeState>,
   ) {
     Object.freeze(this);
   }
@@ -74,5 +71,19 @@ export class MockServiceStatusReader implements ServiceStatusReader {
     }
 
     return Promise.resolve(state);
+  }
+
+  public apply(
+    service: RegisteredService,
+    operation: "start" | "stop" | "restart",
+  ): void {
+    if (service.managementAdapter !== "mock")
+      throw new MockServiceStatusReaderError("unsupported_status_adapter");
+    if (!this.statesByExternalResource.has(service.externalResourceId))
+      throw new MockServiceStatusReaderError("service_status_unavailable");
+    this.statesByExternalResource.set(
+      service.externalResourceId,
+      operation === "stop" ? "stopped" : "running",
+    );
   }
 }

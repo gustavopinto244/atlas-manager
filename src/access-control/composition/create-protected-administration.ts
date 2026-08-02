@@ -24,10 +24,14 @@ import {
 } from "../../power-management/domain/wake-alarm-schedule.js";
 import type { MachineShutdownConfirmationReader } from "../../power-management/application/ports/machine-shutdown-readiness-readers.js";
 import { MachineShutdownOccurrenceExecutionError } from "../../power-management/application/execute-machine-shutdown-occurrence.js";
+import type { ServiceManagementCapabilities } from "../../service-management/composition/create-service-management.js";
+import { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
+import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly serviceManagement?: ServiceManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
   readonly clock: PowerManagementClock;
   readonly machineShutdownConfirmationReader?: MachineShutdownConfirmationReader;
@@ -53,6 +57,32 @@ export interface ProtectedAdministrationCapabilities {
   readonly getAdministrativeEventHistory: Readonly<{
     execute(input?: unknown): Promise<unknown>;
   }>;
+  readonly getRegisteredServices: Readonly<{ execute(): Promise<unknown> }>;
+  readonly getRegisteredService: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly startRegisteredService: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly stopRegisteredService: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly restartRegisteredService: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly getRegisteredServiceAvailability: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly setRegisteredServiceAvailability: Readonly<{
+    execute(serviceId: string, input: unknown): Promise<unknown>;
+  }>;
+  readonly removeRegisteredServiceAvailability: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly getOperationsOverview: Readonly<{ execute(): Promise<unknown> }>;
+  readonly getAdministrativeDashboard: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
 }
 
 export function createProtectedAdministration(
@@ -67,6 +97,11 @@ export function createProtectedAdministration(
     input.administrativeEventAttemptIdGenerator ??
       new NodeAdministrativeEventAttemptIdGenerator(),
     Object.freeze({ kind: "machine", id: "atlas" }),
+  );
+  const operationAudit = new AdministrativeAuditTrail(
+    recorder,
+    input.administrativeEventAttemptIdGenerator ??
+      new NodeAdministrativeEventAttemptIdGenerator(),
   );
   const runner = new ExecuteProtectedAdministrativeOperation(
     input.accessControl.authenticateAdministrativeRequest,
@@ -154,6 +189,214 @@ export function createProtectedAdministration(
         input.eventHistory.getAdministrativeEventHistory.execute(value),
       ),
   });
+  const requireServices = (): ServiceManagementCapabilities => {
+    if (input.serviceManagement === undefined)
+      throw new Error("Service-management composition is unavailable");
+    return input.serviceManagement;
+  };
+  const readService = async (serviceId: string): Promise<unknown> => {
+    const services = requireServices();
+    const service = (await services.listRegisteredServices.execute()).find(
+      (candidate) => candidate.id === serviceId,
+    );
+    if (service === undefined) throw new Error("registered_service_not_found");
+    const [status, effectiveAvailability] = await Promise.all([
+      services.getRegisteredServiceStatus.execute(serviceId),
+      services.getRegisteredServiceEffectiveAvailability.execute(serviceId),
+    ]);
+    return Object.freeze({ service, status, effectiveAvailability });
+  };
+  const getRegisteredServices = Object.freeze({
+    execute: () =>
+      runner.run("read_registered_services", async () => {
+        const services =
+          await requireServices().listRegisteredServices.execute();
+        return Promise.all(services.map((service) => readService(service.id)));
+      }),
+  });
+  const getRegisteredService = Object.freeze({
+    execute: (serviceId: string) =>
+      runner.run("read_registered_service", () => readService(serviceId)),
+  });
+  const runServiceMutation = (
+    operation:
+      | "start_registered_service"
+      | "stop_registered_service"
+      | "restart_registered_service"
+      | "update_registered_service_availability"
+      | "remove_registered_service_availability",
+    serviceId: string,
+    invoke: () => Promise<unknown>,
+  ): Promise<unknown> =>
+    runner.run(operation, async (occurredAt, source) => {
+      const attempt = await operationAudit.begin({
+        occurredAt,
+        source,
+        target: Object.freeze({ kind: "machine", id: "atlas" }),
+        operation,
+        details: Object.freeze({ serviceId }),
+      });
+      try {
+        const result = await invoke();
+        try {
+          await operationAudit.complete(
+            attempt,
+            "succeeded",
+            Object.freeze({ serviceId, outcome: "succeeded" }),
+          );
+        } catch {
+          throw new AdministrativeAuditPartialEffectError(
+            "audit_failed_after_service_operation",
+            result,
+          );
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof AdministrativeAuditPartialEffectError) throw error;
+        try {
+          await operationAudit.complete(
+            attempt,
+            "failed",
+            Object.freeze({ serviceId, failureCode: "service_failed" }),
+          );
+        } catch {
+          throw new AdministrativeAuditTrailError(
+            "administrative_audit_failed",
+          );
+        }
+        throw error;
+      }
+    });
+  const startRegisteredService = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation("start_registered_service", serviceId, () =>
+        requireServices().orchestrateRegisteredServiceControl.execute(
+          serviceId,
+          "start",
+        ),
+      ),
+  });
+  const stopRegisteredService = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation("stop_registered_service", serviceId, () =>
+        requireServices().orchestrateRegisteredServiceControl.execute(
+          serviceId,
+          "stop",
+        ),
+      ),
+  });
+  const restartRegisteredService = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation("restart_registered_service", serviceId, () =>
+        requireServices().orchestrateRegisteredServiceControl.execute(
+          serviceId,
+          "restart",
+        ),
+      ),
+  });
+  const getRegisteredServiceAvailability = Object.freeze({
+    execute: (serviceId: string) =>
+      runner.run("read_registered_service_availability", async (observedAt) => {
+        const service = (
+          await requireServices().listRegisteredServices.execute()
+        ).find((candidate) => candidate.id === serviceId);
+        if (service === undefined)
+          throw new Error("registered_service_not_found");
+        return Object.freeze({
+          serviceId,
+          policy: service.availabilityPolicy,
+          effectiveAvailability:
+            await requireServices().getRegisteredServiceEffectiveAvailability.execute(
+              serviceId,
+            ),
+          observedAt,
+        });
+      }),
+  });
+  const setRegisteredServiceAvailability = Object.freeze({
+    execute: (serviceId: string, value: unknown) =>
+      runServiceMutation(
+        "update_registered_service_availability",
+        serviceId,
+        () =>
+          requireServices().setRegisteredServiceAvailabilityOverride.execute(
+            serviceId,
+            value,
+          ),
+      ),
+  });
+  const removeRegisteredServiceAvailability = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation(
+        "remove_registered_service_availability",
+        serviceId,
+        () =>
+          requireServices().cancelRegisteredServiceAvailabilityOverride.execute(
+            serviceId,
+          ),
+      ),
+  });
+  const getOperationsOverview = Object.freeze({
+    execute: () =>
+      runner.run("read_operations_overview", async (observedAt) => {
+        const services =
+          await requireServices().listRegisteredServices.execute();
+        const entries = (await Promise.all(
+          services.map((service) => readService(service.id)),
+        )) as readonly Readonly<{
+          status: { state: string };
+          effectiveAvailability: string;
+        }>[];
+        const stateCounts: Record<string, number> = {};
+        const availabilityCounts: Record<string, number> = {};
+        for (const entry of entries) {
+          stateCounts[entry.status.state] =
+            (stateCounts[entry.status.state] ?? 0) + 1;
+          availabilityCounts[entry.effectiveAvailability] =
+            (availabilityCounts[entry.effectiveAvailability] ?? 0) + 1;
+        }
+        return Object.freeze({
+          observedAt,
+          services: Object.freeze({
+            registered: entries.length,
+            ...stateCounts,
+          }),
+          availability: Object.freeze(availabilityCounts),
+          powerSafety: Object.freeze({
+            backend: "mock",
+            effects: "disabled",
+            machineScheduler: "disabled",
+            helper: "unused",
+          }),
+        });
+      }),
+  });
+  const getAdministrativeDashboard = Object.freeze({
+    execute: () =>
+      runner.run("read_administrative_dashboard", async (observedAt) => {
+        const services =
+          await requireServices().listRegisteredServices.execute();
+        const entries = (await Promise.all(
+          services.map((service) => readService(service.id)),
+        )) as readonly Readonly<{
+          status: { state: string };
+          effectiveAvailability: string;
+        }>[];
+        const states: Record<string, number> = {};
+        for (const entry of entries)
+          states[entry.status.state] = (states[entry.status.state] ?? 0) + 1;
+        return Object.freeze({
+          observedAt,
+          services: Object.freeze({ registered: entries.length, ...states }),
+          powerSafety: Object.freeze({
+            backend: "mock",
+            effects: "disabled",
+            machineScheduler: "disabled",
+            helper: "unused",
+          }),
+        });
+      }),
+  });
   return Object.freeze({
     getNextWakeAlarm,
     scheduleWakeAlarm,
@@ -163,6 +406,16 @@ export function createProtectedAdministration(
     executeMachineShutdownOccurrence,
     runMachinePowerSchedulerTick,
     getAdministrativeEventHistory,
+    getRegisteredServices,
+    getRegisteredService,
+    startRegisteredService,
+    stopRegisteredService,
+    restartRegisteredService,
+    getRegisteredServiceAvailability,
+    setRegisteredServiceAvailability,
+    removeRegisteredServiceAvailability,
+    getOperationsOverview,
+    getAdministrativeDashboard,
   });
 }
 
@@ -265,6 +518,12 @@ class ExecuteProtectedAdministrativeOperation {
         error instanceof AdministrativeAuditTrailError
       )
         throw error;
+      if (
+        error instanceof Error &&
+        error.message === "registered_service_not_found"
+      )
+        throw error;
+      if (error instanceof RegisteredServiceNotFoundError) throw error;
       if (error instanceof WakeAlarmScheduleValidationError) throw error;
       if (error instanceof MachineShutdownOccurrenceExecutionError) throw error;
       throw new AdministrativeAccessControlError(

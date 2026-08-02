@@ -2745,3 +2745,17 @@ systemd unit. Activation verifies loopback health, route absence, and the exact
 Automated activation coverage is sandbox-only. It uses fake account/systemd
 boundaries, emits bounded canonical evidence, and does not touch real systemd,
 account databases, production paths, RTC, D-Bus, a host, or a VM.
+
+### Mock-only administrative control plane and dashboard
+
+Issue #280 adds the first product-facing administrative surface. Protected
+registered-service, availability, overview, and event-history APIs use
+Cloudflare Access plus local role authorization, persistent audit, strict
+confirmations, and trusted catalog identifiers. The same-origin dashboard is
+loopback-only, uses a closed static asset inventory, and renders values safely.
+
+The managed administrative profile enables those read/control surfaces while
+keeping wake and shutdown routes disabled, the power backend at `mock`, power
+effects disabled, the machine-power scheduler disabled, and the Linux helper
+unused. Automated control-plane rehearsal is synthetic and does not contact
+Cloudflare, Docker, Compose, PM2, systemd, or a physical host.

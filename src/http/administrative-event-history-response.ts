@@ -98,6 +98,14 @@ function fieldsForOperation(
       "failureCode",
       "blockerCodes",
     ];
+  if (
+    operation === "start_registered_service" ||
+    operation === "stop_registered_service" ||
+    operation === "restart_registered_service" ||
+    operation === "update_registered_service_availability" ||
+    operation === "remove_registered_service_availability"
+  )
+    return ["serviceId", "outcome", "failureCode"];
   return [
     "tickedThrough",
     "schedulerOutcome",

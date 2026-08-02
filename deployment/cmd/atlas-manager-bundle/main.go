@@ -40,11 +40,12 @@ func main() {
 		Version: *version, SourceCommit: *commit, SourceDateEpoch: parsedEpoch,
 		SourceRoot: *source, OutputDir: *output, NodeVersion: *nodeVersion,
 		NPMVersion: *npmVersion, GoVersion: *goVersion,
-		InstallerPath:            filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
-		QualificationPath:        filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),
-		IdentityInstallerPath:    filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-identity-installer"),
-		RuntimeConfigurationPath: filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-configuration"),
-		ServiceLifecyclePath:     filepath.Join(filepath.Dir(executable), "atlas-manager-service-lifecycle"),
+		InstallerPath:                          filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
+		QualificationPath:                      filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),
+		IdentityInstallerPath:                  filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-identity-installer"),
+		RuntimeConfigurationPath:               filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-configuration"),
+		ServiceLifecyclePath:                   filepath.Join(filepath.Dir(executable), "atlas-manager-service-lifecycle"),
+		AdministrativeRuntimeConfigurationPath: filepath.Join(filepath.Dir(executable), "atlas-manager-administrative-runtime-configuration"),
 	})
 	if err != nil {
 		fail(errorCode(err))

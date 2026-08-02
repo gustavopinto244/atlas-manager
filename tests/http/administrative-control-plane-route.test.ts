@@ -1,0 +1,258 @@
+import request from "supertest";
+import { describe, expect, it, vi } from "vitest";
+
+import { RegisteredService } from "../../src/service-management/domain/registered-service.js";
+import { RegisteredServiceStatus } from "../../src/service-management/domain/registered-service-status.js";
+import { FixedAdministrativeRequestAdmission } from "../../src/http/administrative-request-admission.js";
+import { FixedAdministrativePowerOperationGate } from "../../src/http/administrative-power-operation-gate.js";
+import { createApp } from "../../src/http/create-app.js";
+import type { ServerHealthSnapshot } from "../../src/server-health/domain/server-health-snapshot.js";
+
+const service = RegisteredService.create({
+  id: "atlas-api",
+  displayName: "Atlas API",
+  managementAdapter: "mock",
+  externalResourceId: "atlas-api-target",
+  supportedOperations: ["readStatus", "start", "stop", "restart"],
+  availabilityPolicy: { mode: "always" },
+});
+const status = RegisteredServiceStatus.create({
+  serviceId: service.id,
+  state: "stopped",
+  observedAt: "2026-01-01T00:00:00.000Z",
+});
+
+function base() {
+  const clock = { now: vi.fn(() => new Date("2026-01-01T00:00:00.000Z")) };
+  const snapshot: ServerHealthSnapshot = {
+    capturedAtIso: "2026-01-01T00:00:00.000Z",
+    uptimeSeconds: 1,
+    totalMemoryBytes: 100,
+    freeMemoryBytes: 50,
+    usedMemoryBytes: 50,
+    memoryUsagePercent: 50,
+    cpuUsagePercent: 1,
+    cpuTemperatureCelsius: null,
+    cpuLoadAverage1Minute: 0,
+    cpuLoadAverage5Minutes: 0,
+    cpuLoadAverage15Minutes: 0,
+    diskTotalBytes: 100,
+    diskAvailableBytes: 50,
+    diskUsedBytes: 50,
+    diskUsagePercent: 50,
+  };
+  return {
+    logger: { error: vi.fn() },
+    getServerHealth: { execute: vi.fn(async () => snapshot) },
+    clock,
+  };
+}
+
+function serviceDependencies(overrides: Record<string, unknown> = {}) {
+  const values = {
+    getRegisteredServices: {
+      execute: vi.fn(async () => [
+        { service, status, effectiveAvailability: "available" },
+      ]),
+    },
+    getRegisteredService: {
+      execute: vi.fn(async () => ({
+        service,
+        status,
+        effectiveAvailability: "available",
+      })),
+    },
+    startRegisteredService: {
+      execute: vi.fn(async () => ({
+        targetServiceId: service.id,
+        requestedOperation: "start",
+        successful: true,
+      })),
+    },
+    stopRegisteredService: {
+      execute: vi.fn(async () => ({
+        targetServiceId: service.id,
+        requestedOperation: "stop",
+        successful: true,
+      })),
+    },
+    restartRegisteredService: {
+      execute: vi.fn(async () => ({
+        targetServiceId: service.id,
+        requestedOperation: "restart",
+        successful: true,
+      })),
+    },
+    ...overrides,
+  };
+  return {
+    admission: new FixedAdministrativeRequestAdmission(base().clock),
+    mutationGate: new FixedAdministrativePowerOperationGate(),
+    createProtectedAdministration: vi.fn(() => values),
+    values,
+  };
+}
+
+describe("administrative control-plane routes", () => {
+  it("remain absent when the service surface is disabled", async () => {
+    const response = await request(createApp({ ...base() })).get(
+      "/admin/services",
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it("maps and sorts the registered-service list", async () => {
+    const dependencies = serviceDependencies({
+      getRegisteredServices: {
+        execute: vi.fn(async () => [
+          {
+            service: { ...service, id: "zeta" },
+            status,
+            effectiveAvailability: "available",
+          },
+          { service, status, effectiveAvailability: "unavailable" },
+        ]),
+      },
+    });
+    const response = await request(
+      createApp({ ...base(), administrativeServices: dependencies }),
+    ).get("/admin/services");
+    expect(response.status).toBe(200);
+    const body = response.body as {
+      services: readonly { id: string }[];
+    };
+    expect(body.services.map((entry) => entry.id)).toEqual([
+      "atlas-api",
+      "zeta",
+    ]);
+    expect(body.services[0]).toEqual(
+      expect.objectContaining({
+        id: "atlas-api",
+        displayName: "Atlas API",
+        managementKind: "mock",
+        dependencies: [],
+      }),
+    );
+    expect(response.headers["cache-control"]).toBe("no-store, private");
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("requires the exact mutation confirmation and never passes it to the capability", async () => {
+    const dependencies = serviceDependencies();
+    const app = createApp({ ...base(), administrativeServices: dependencies });
+    const invalid = await request(app)
+      .post("/admin/services/atlas-api/actions/start")
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_service_start", extra: true });
+    expect(invalid.status).toBe(400);
+    expect(
+      dependencies.values.startRegisteredService.execute,
+    ).not.toHaveBeenCalled();
+
+    const valid = await request(app)
+      .post("/admin/services/atlas-api/actions/start")
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_service_start" });
+    expect(valid.status).toBe(200);
+    expect(
+      dependencies.values.startRegisteredService.execute,
+    ).toHaveBeenCalledWith("atlas-api");
+    expect(JSON.stringify(valid.body)).not.toContain("confirm_");
+  });
+
+  it("supports availability reads and strict update/removal bodies", async () => {
+    const availability = {
+      getRegisteredServiceAvailability: {
+        execute: vi.fn(async () => ({
+          serviceId: service.id,
+          policy: { mode: "always" },
+          effectiveAvailability: "available",
+          observedAt: "2026-01-01T00:00:00.000Z",
+        })),
+      },
+      setRegisteredServiceAvailability: {
+        execute: vi.fn(async (_id: string, policy: unknown) => policy),
+      },
+      removeRegisteredServiceAvailability: {
+        execute: vi.fn(async () => undefined),
+      },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => availability),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeServiceAvailability: dependencies,
+    });
+    expect(
+      (await request(app).get("/admin/services/atlas-api/availability")).status,
+    ).toBe(200);
+    const updated = await request(app)
+      .put("/admin/services/atlas-api/availability")
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_registered_service_availability_update",
+        policy: { mode: "always" },
+      });
+    expect(updated.status).toBe(200);
+    expect(
+      availability.setRegisteredServiceAvailability.execute,
+    ).toHaveBeenCalledWith("atlas-api", { mode: "always" });
+    expect(
+      (
+        await request(app)
+          .delete("/admin/services/atlas-api/availability")
+          .set("content-type", "application/json")
+          .send({
+            confirmation: "confirm_registered_service_availability_removal",
+          })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("protects overview and dashboard delivery with the shared headers", async () => {
+    const protectedAdministration = {
+      getOperationsOverview: {
+        execute: vi.fn(async () => ({
+          services: { registered: 0 },
+          availability: {},
+          powerSafety: {
+            backend: "mock",
+            effects: "disabled",
+            machineScheduler: "disabled",
+            helper: "unused",
+          },
+        })),
+      },
+      getAdministrativeDashboard: { execute: vi.fn(async () => ({})) },
+    };
+    const admission = new FixedAdministrativeRequestAdmission(base().clock);
+    const app = createApp({
+      ...base(),
+      administrativeOverview: {
+        admission,
+        createProtectedAdministration: vi.fn(() => protectedAdministration),
+        getServerHealth: base().getServerHealth,
+        applicationVersion: "0.1.0",
+      },
+      administrativeDashboard: {
+        admission,
+        createProtectedAdministration: vi.fn(() => protectedAdministration),
+      },
+    });
+    const overview = await request(app).get("/admin/overview");
+    expect(overview.status).toBe(200);
+    const overviewBody = overview.body as {
+      powerSafety: { backend: string };
+    };
+    expect(overviewBody.powerSafety.backend).toBe("mock");
+    const dashboard = await request(app).get("/admin");
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.headers["content-security-policy"]).toContain(
+      "default-src 'none'",
+    );
+    expect(dashboard.text).toContain("Power safety");
+  });
+});

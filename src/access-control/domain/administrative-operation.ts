@@ -10,6 +10,16 @@ export const ADMINISTRATIVE_OPERATIONS = Object.freeze([
   "execute_machine_shutdown_occurrence",
   "run_machine_power_scheduler_tick",
   "read_administrative_event_history",
+  "read_registered_services",
+  "read_registered_service",
+  "start_registered_service",
+  "stop_registered_service",
+  "restart_registered_service",
+  "read_registered_service_availability",
+  "update_registered_service_availability",
+  "remove_registered_service_availability",
+  "read_operations_overview",
+  "read_administrative_dashboard",
 ] as const);
 
 export type AdministrativeOperation =
@@ -25,11 +35,29 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
     "power.shutdown.request",
     "power.shutdown.prepare",
     "power.shutdown.execute",
+    "operations.read",
+    "dashboard.read",
   ] as AdministrativePermission[]),
   scheduler_operator: Object.freeze([
     "power.scheduler.tick",
+    "operations.read",
+    "dashboard.read",
   ] as AdministrativePermission[]),
-  auditor: Object.freeze(["event_history.read"] as AdministrativePermission[]),
+  auditor: Object.freeze([
+    "event_history.read",
+    "operations.read",
+    "dashboard.read",
+  ] as AdministrativePermission[]),
+  service_operator: Object.freeze([
+    "services.read",
+    "services.start",
+    "services.stop",
+    "services.restart",
+    "services.availability.read",
+    "services.availability.write",
+    "operations.read",
+    "dashboard.read",
+  ] as AdministrativePermission[]),
   administrator: Object.freeze([
     "power.wake.read",
     "power.wake.schedule",
@@ -39,6 +67,14 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
     "power.shutdown.execute",
     "power.scheduler.tick",
     "event_history.read",
+    "services.read",
+    "services.start",
+    "services.stop",
+    "services.restart",
+    "services.availability.read",
+    "services.availability.write",
+    "operations.read",
+    "dashboard.read",
   ] as AdministrativePermission[]),
 });
 
@@ -53,6 +89,16 @@ const OPERATION_PERMISSIONS: Readonly<
   execute_machine_shutdown_occurrence: "power.shutdown.execute",
   run_machine_power_scheduler_tick: "power.scheduler.tick",
   read_administrative_event_history: "event_history.read",
+  read_registered_services: "services.read",
+  read_registered_service: "services.read",
+  start_registered_service: "services.start",
+  stop_registered_service: "services.stop",
+  restart_registered_service: "services.restart",
+  read_registered_service_availability: "services.availability.read",
+  update_registered_service_availability: "services.availability.write",
+  remove_registered_service_availability: "services.availability.write",
+  read_operations_overview: "operations.read",
+  read_administrative_dashboard: "dashboard.read",
 });
 
 export class AdministrativeOperationValidationError extends Error {

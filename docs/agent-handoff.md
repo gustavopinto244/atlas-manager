@@ -1,5 +1,35 @@
 # Agent handoff
 
+## Current work — Issue #280
+
+The active branch is:
+
+```text
+feat/mock-only-administrative-control-plane-dashboard
+```
+
+The authoritative post-PR #279 baseline in this checkout is:
+
+```text
+f1a0963930c673899233c747d554fa0bf7d5172d
+```
+
+Issue #280 adds the protected mock-only administrative control plane, service
+availability and overview routes, a same-origin dashboard, the managed
+administrative runtime profile, and sandbox-only control-plane coverage. The
+profile enables administrative APIs but keeps loopback binding, mock power,
+disabled effects, disabled machine scheduler, and disabled wake/shutdown
+routes. Service identifiers remain catalog-owned; mutations require fixed
+roles, exact confirmations, and persistent audit. The dashboard uses a closed
+asset inventory, restrictive CSP, safe DOM rendering, and no browser storage.
+
+Validation is pending until the final implementation pass. No real Cloudflare
+request, service adapter, systemd command, account command, helper operation,
+RTC/D-Bus access, production-path mutation, host drill, or VM work is allowed.
+
+Do not reset, discard, commit, push, merge, or open a Pull Request without the
+project owner's approval.
+
 ## Current work — Issue #254
 
 The active branch is:

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atlas-manager/atlas-manager/deployment/internal/administrativeconfiguration"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/systemdunit"
 )
@@ -26,20 +27,21 @@ const (
 )
 
 type Config struct {
-	Version                  string
-	SourceCommit             string
-	SourceDateEpoch          int64
-	SourceRoot               string
-	OutputDir                string
-	NodeVersion              string
-	NPMVersion               string
-	GoVersion                string
-	InstallerPath            string
-	QualificationPath        string
-	IdentityInstallerPath    string
-	RuntimeConfigurationPath string
-	ServiceLifecyclePath     string
-	Runner                   Runner
+	Version                                string
+	SourceCommit                           string
+	SourceDateEpoch                        int64
+	SourceRoot                             string
+	OutputDir                              string
+	NodeVersion                            string
+	NPMVersion                             string
+	GoVersion                              string
+	InstallerPath                          string
+	QualificationPath                      string
+	IdentityInstallerPath                  string
+	RuntimeConfigurationPath               string
+	ServiceLifecyclePath                   string
+	AdministrativeRuntimeConfigurationPath string
+	Runner                                 Runner
 }
 
 type Runner interface {
@@ -164,7 +166,10 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	if config.AdministrativeRuntimeConfigurationPath != "" {
+		metadataPaths = append(metadataPaths, "atlas-manager-administrative-runtime-configuration")
+	}
 	paths = append(paths, metadataPaths...)
 	files, err := manifest.Inventory(root, paths)
 	if err != nil {
@@ -322,6 +327,11 @@ func assemble(root, buildRoot, runtimeRoot string, config Config) error {
 	if err := copyFile(config.ServiceLifecyclePath, filepath.Join(root, "atlas-manager-service-lifecycle"), 0o755); err != nil {
 		return err
 	}
+	if config.AdministrativeRuntimeConfigurationPath != "" {
+		if err := copyFile(config.AdministrativeRuntimeConfigurationPath, filepath.Join(root, "atlas-manager-administrative-runtime-configuration"), 0o755); err != nil {
+			return err
+		}
+	}
 	for _, name := range []string{"package.json", "package-lock.json"} {
 		if err := copyFile(filepath.Join(runtimeRoot, name), filepath.Join(root, "application", name), 0o644); err != nil {
 			return err
@@ -335,6 +345,21 @@ func writeMetadata(root string, config Config) error {
 		return fmt.Errorf("bundle_metadata_failed")
 	}
 	if err := os.MkdirAll(filepath.Join(root, "config"), 0o755); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.MkdirAll(filepath.Join(root, "dashboard"), 0o755); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.WriteFile(filepath.Join(root, "dashboard", "index.html"), []byte("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Atlas Manager</title><link rel=\"stylesheet\" href=\"styles.css\"></head><body><main><h1>Atlas Manager</h1><p id=\"status\" role=\"status\">Loading administrative state…</p><section><h2>Overview</h2><pre id=\"app\">Loading…</pre></section><section><h2>Services</h2><div id=\"services\"></div></section><section><h2>Availability</h2><pre id=\"availability\">Loading…</pre></section><section><h2>Audit</h2><pre id=\"audit\">Loading…</pre></section><section><h2>Power safety</h2><p>Backend is mock. Power effects and the machine scheduler are disabled. The Linux helper is unused. Wake and shutdown controls are unavailable.</p></section></main><script src=\"app.js\" defer></script></body></html>\n"), 0o644); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.WriteFile(filepath.Join(root, "dashboard", "styles.css"), []byte("body{font-family:system-ui,sans-serif;margin:0;background:#10141c;color:#f3f4f6}main{max-width:72rem;margin:auto;padding:1rem}section,article{background:#1b2330;padding:1rem;margin:1rem 0;border-radius:.5rem}pre{white-space:pre-wrap;overflow:auto}label{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}input,button{font:inherit;padding:.4rem;background:#10141c;color:inherit;border:1px solid #718096;border-radius:.25rem}button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}.mutation{margin:.5rem 0}:focus-visible{outline:3px solid #75bfff;outline-offset:2px}@media (max-width:40rem){label{align-items:stretch;flex-direction:column}}\n"), 0o644); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.WriteFile(filepath.Join(root, "dashboard", "app.js"), []byte("const root=document.querySelector('#app'),services=document.querySelector('#services'),audit=document.querySelector('#audit'),status=document.querySelector('#status');async function readJson(path){const response=await fetch(path,{credentials:'same-origin',redirect:'error'});if(!response.ok)throw new Error('request_failed');return response.json()}function addText(parent,value){parent.append(document.createTextNode(typeof value==='string'?value:JSON.stringify(value)))}function renderServices(value){if(!services)return;services.replaceChildren();const list=value&&Array.isArray(value.services)?value.services:[];if(!list.length){addText(services,'No registered services.');return}for(const service of list){const article=document.createElement('article'),heading=document.createElement('h3'),summary=document.createElement('p');addText(heading,service.id);addText(summary,`${String(service.displayName)} — ${String(service.status)} — ${String(service.availability)}`);article.append(heading,summary);for(const operation of ['start','stop','restart']){const form=document.createElement('form');form.className='mutation';const label=document.createElement('label');addText(label,`${operation} confirmation`);const input=document.createElement('input');input.type='text';input.required=true;input.autocomplete='off';label.append(input);const button=document.createElement('button');button.type='submit';addText(button,operation);form.append(label,button);form.addEventListener('submit',event=>{event.preventDefault();button.disabled=true;void fetch(`/admin/services/${encodeURIComponent(String(service.id))}/actions/${operation}`,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({confirmation:input.value}),redirect:'error'}).then(async response=>{input.value='';if(!response.ok)throw new Error('operation_failed');await refresh()}).catch(()=>{input.value='';if(status)status.textContent='Operation failed; authoritative state was not assumed.'}).finally(()=>{button.disabled=false})});article.append(form)}services.append(article)}}function renderAudit(value){if(audit){audit.textContent='';addText(audit,value)}}async function refresh(){const [overview,serviceList,history]=await Promise.all([readJson('/admin/overview'),readJson('/admin/services'),readJson('/admin/event-history?limit=20')]);if(root)root.textContent=JSON.stringify(overview,null,2);renderServices(serviceList);renderAudit(history)}void refresh().catch(()=>{if(status)status.textContent='Administrative overview unavailable.'});\n"), 0o644); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
+	if err := os.WriteFile(filepath.Join(root, "atlas-manager.mock-admin.input.example.json"), administrativeconfiguration.ExampleInputBytes(), 0o644); err != nil {
 		return fmt.Errorf("bundle_metadata_failed")
 	}
 	if err := os.WriteFile(filepath.Join(root, "systemd", "atlas-manager.service"), []byte(systemdunit.Content), 0o644); err != nil {
