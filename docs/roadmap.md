@@ -673,3 +673,20 @@ Deferred:
 - host qualification;
 - service enablement and startup;
 - real wake and shutdown certification.
+
+## Issue #272 — Read-only deployment host qualification
+
+Delivered:
+
+- standalone read-only `atlas-manager-host-qualification` executable;
+- canonical bounded JSON reports for qualification and evidence states;
+- prepared-host, disabled-installation, and removed-state verification;
+- deterministic qualification report template and operator runbook.
+
+Deferred:
+
+- runtime account and group creation;
+- physical host qualification and disabled installation drill;
+- service enablement and startup;
+- power-helper installation and qualification;
+- real wake and shutdown certification.

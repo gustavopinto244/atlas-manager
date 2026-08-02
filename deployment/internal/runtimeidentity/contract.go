@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -22,6 +23,14 @@ type Identity struct {
 	HelperGroupID  int
 }
 
+type State string
+
+const (
+	Absent  State = "absent"
+	Ready   State = "ready"
+	Blocked State = "blocked"
+)
+
 type Process struct {
 	UID    int
 	EUID   int
@@ -31,11 +40,12 @@ type Process struct {
 }
 
 type Entry struct {
-	Name  string
-	ID    int
-	GID   int
-	Home  string
-	Shell string
+	Name    string
+	ID      int
+	GID     int
+	Home    string
+	Shell   string
+	Members string
 }
 
 func Validate(passwd, group string, process Process) (Identity, error) {
@@ -88,6 +98,32 @@ func ValidateAccountContract(passwd, group string) (Identity, error) {
 	return validateEntries(users, groups)
 }
 
+// ClassifyAccountContract reuses the deployment identity parser while
+// distinguishing a completely absent account contract from a partial or
+// inconsistent one. It never creates or changes account state.
+func ClassifyAccountContract(passwd, group string) (State, Identity, error) {
+	users, err := parsePasswd(passwd)
+	if err != nil {
+		return Blocked, Identity{}, err
+	}
+	groups, err := parseGroups(group)
+	if err != nil {
+		return Blocked, Identity{}, err
+	}
+	if !hasName(users, RuntimeUser) && !hasName(groups, RuntimeGroup) && !hasName(groups, HelperGroup) {
+		return Absent, Identity{}, nil
+	}
+	identity, err := validateEntries(users, groups)
+	if err != nil {
+		return Blocked, Identity{}, err
+	}
+	helper, _ := exactlyNamed(groups, HelperGroup, "runtime_helper_group")
+	if helper.Members != "" {
+		return Blocked, Identity{}, fmt.Errorf("runtime_helper_group_members_nonempty")
+	}
+	return Ready, identity, nil
+}
+
 func validateEntries(users, groups []Entry) (Identity, error) {
 	user, err := exactlyNamed(users, RuntimeUser, "runtime_user")
 	if err != nil {
@@ -120,7 +156,7 @@ func validateEntries(users, groups []Entry) (Identity, error) {
 }
 
 func parsePasswd(value string) ([]Entry, error) {
-	if len(value) > MaxAccountBytes || strings.IndexByte(value, 0) >= 0 {
+	if len(value) > MaxAccountBytes || strings.IndexByte(value, 0) >= 0 || !utf8.ValidString(value) {
 		return nil, fmt.Errorf("runtime_identity_files_oversized")
 	}
 	var result []Entry
@@ -149,7 +185,7 @@ func parsePasswd(value string) ([]Entry, error) {
 }
 
 func parseGroups(value string) ([]Entry, error) {
-	if len(value) > MaxAccountBytes || strings.IndexByte(value, 0) >= 0 {
+	if len(value) > MaxAccountBytes || strings.IndexByte(value, 0) >= 0 || !utf8.ValidString(value) {
 		return nil, fmt.Errorf("runtime_identity_files_oversized")
 	}
 	var result []Entry
@@ -168,9 +204,18 @@ func parseGroups(value string) ([]Entry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("runtime_identity_malformed")
 		}
-		result = append(result, Entry{Name: fields[0], ID: gid})
+		result = append(result, Entry{Name: fields[0], ID: gid, Members: fields[3]})
 	}
 	return result, nil
+}
+
+func hasName(entries []Entry, name string) bool {
+	for _, entry := range entries {
+		if entry.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalID(value string) (int, error) {

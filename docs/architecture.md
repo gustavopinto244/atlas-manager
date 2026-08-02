@@ -1053,3 +1053,13 @@ archive. Its installer uses fixed paths, fixed Node.js `/usr/bin/node`, the
 exact `atlas-manager` identity, and a nonblocking deployment lock. It installs
 only a disabled unit and template; it does not enable systemd, create the real
 environment, execute Atlas, or install the helper.
+
+### Read-only deployment qualification
+
+ADR-018 adds a separate Go qualification executable beside the deployment
+installer. Its four actions inspect the fixed Linux amd64 deployment contract
+and produce bounded canonical JSON. The qualifier reuses bundle, identity,
+manifest, systemd, and managed-release rules without acquiring the installer
+lock or invoking installer actions. It may run only the fixed
+`/usr/bin/node --version` check; it never executes Atlas Manager, npm,
+systemd commands, the helper, RTC, or D-Bus.

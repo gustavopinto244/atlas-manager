@@ -60,3 +60,7 @@ or the Linux power helper. It performs no host qualification, RTC operation,
 D-Bus request, wake mutation, reboot, or shutdown. A failed or ambiguous
 state is preserved for inspection and must not be repaired or adopted
 manually under this contract.
+
+Before and after these actions, use the separate
+`atlas-manager-host-qualification` executable for read-only evidence. The
+installer does not invoke it, and the qualifier does not invoke the installer.

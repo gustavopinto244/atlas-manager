@@ -2686,3 +2686,17 @@ calls npm or systemd, starts the service, installs the power helper, or
 activates Linux effects. The actual environment, application state, helper
 installation, host qualification, and service enablement remain separate
 operator-controlled gates.
+
+### Read-only deployment host qualification
+
+Issue #272 adds `atlas-manager-host-qualification` to the deployment bundle.
+It supports only `qualify`, `verify-prepared`,
+`verify-disabled-installation`, and `verify-removed`. The executable requires
+effective root in production, inspects only fixed resources, emits one bounded
+canonical JSON report, and never creates a lock or changes host state.
+
+Completely absent runtime identities produce `preparation_required`; partial
+or conflicting identities block. Prepared-host, disabled-installation, and
+removed-state checks remain separate from account creation, installation,
+systemd enablement/startup, helper installation, power-helper qualification,
+and real-effect certification. No physical host or VM qualification was run.

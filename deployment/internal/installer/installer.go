@@ -181,6 +181,29 @@ func inspectBundle(root string) error {
 	return nil
 }
 
+// InspectBundle validates a bundle without acquiring locks or changing state.
+func InspectBundleReadOnly(root string) error { return inspectBundle(root) }
+
+// ReadState reads managed deployment state without creating or mutating files.
+func ReadState(path string) (State, bool, error) { return readState(path) }
+
+// VerifyManagedDisabled validates an existing disabled installation without
+// acquiring the deployment lock. Qualification uses it for evidence only.
+func VerifyManagedDisabled(paths Paths, identity runtimeidentity.Identity, enforceOwnership bool) error {
+	state, existsState, err := readState(paths.StateFile)
+	if err != nil || !existsState || state.Version == "" {
+		return fmt.Errorf("state_invalid")
+	}
+	config := Config{Paths: paths, ApplyOwnership: enforceOwnership}
+	if err := verifyCurrent(paths.Current, paths.ReleaseRoot, state.Version, state.Files); err != nil {
+		return err
+	}
+	if err := verifyStatic(config, identity); err != nil {
+		return err
+	}
+	return nil
+}
+
 func verifyChecksums(root string, value manifest.Manifest) error {
 	data, err := os.ReadFile(filepath.Join(root, "SHA256SUMS"))
 	if err != nil {

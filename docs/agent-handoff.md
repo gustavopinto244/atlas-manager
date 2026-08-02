@@ -1113,3 +1113,78 @@ environment file, enable or start the service, or execute application/helper
 power operations. No physical Atlas host or VM was used; no production path,
 account database, helper, setuid state, RTC, D-Bus, wake alarm, reboot,
 shutdown, or other real power effect was touched.
+
+## Current work — Issue #272
+
+The active branch is:
+
+`feat/read-only-atlas-manager-deployment-host-qualification`
+
+The authoritative merged PR #271 baseline for this delivery is:
+
+`049d564ca8e4c978745e9eb465f8e3faee46340c`
+
+Issue #272 adds ADR-018, the read-only
+`atlas-manager-host-qualification` executable, bounded canonical reports,
+prepared-host and disabled-installation verification, removed-state evidence,
+and the qualification evidence template/runbook. The executable accepts only
+`qualify`, `verify-prepared`, `verify-disabled-installation`, and
+`verify-removed`, requires effective root in production, and inspects only
+fixed Linux amd64 deployment resources. It may execute only the fixed
+`/usr/bin/node --version` check.
+
+The qualification executable is included beside the installer in the
+reproducible bundle and is covered by the manifest and SHA-256 inventory. It
+does not invoke the installer, acquire the deployment lock, create or modify
+accounts/groups, start or stop systemd, execute Atlas Manager or the helper,
+inspect RTC/D-Bus, or perform any power effect. Sandbox/fake dependencies are
+used for validation; no physical host or VM qualification was run.
+
+Final validation for Issue #272:
+
+```text
+baseline                          → 049d564ca8e4c978745e9eb465f8e3faee46340c
+branch                            → feat/read-only-atlas-manager-deployment-host-qualification
+Node.js                           → 24.18.0
+npm                               → 11.16.0
+Go                                → 1.23.0 linux/amd64
+Node test files                   → 181 passed
+Node tests                        → 2,607 passed
+Node skipped tests                → 3
+power-helper Go tests             → 111
+deployment Go tests               → 31
+format                            → passed
+lint                              → passed
+typecheck                         → passed
+build                             → passed
+power-helper gofmt                → passed
+power-helper go mod verify        → passed
+power-helper go vet               → passed
+deployment gofmt                  → passed
+deployment go mod verify          → passed
+deployment go vet                 → passed
+npm audit --omit=dev              → 0 production vulnerabilities
+git diff --check                  → passed
+dependencies                      → unchanged; deployment module stdlib-only
+bundle archive                    → atlas-manager_0.1.0_linux_amd64.tar.gz
+bundle SHA-256                    → 185cd2997fac7fc1ce74eaf020d49f1a0a85e637a199010d56cf72a5be508ca1
+second-build SHA-256              → 185cd2997fac7fc1ce74eaf020d49f1a0a85e637a199010d56cf72a5be508ca1
+reproducibility                   → identical archive bytes
+qualification inclusion           → manifest and SHA256SUMS passed
+bundle inspection                 → passed
+packaged mock-only smoke test     → passed
+local helper/archive artifacts    → none in the repository
+```
+
+The three skipped Node tests are:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They require `ATLAS_MANAGER_POWER_HELPER_FIXTURE`, intentionally absent from
+the standard suite. The dedicated workflow supplies only the nonproduction
+fixture executable. No skipped test requires the production helper, host
+qualification, RTC, D-Bus, or a power operation.
