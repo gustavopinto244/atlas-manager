@@ -605,3 +605,15 @@ planning, and `scheduled` uses immutable canonical weekly windows in
 administrative HTTP activation, and scheduler lifecycle. No automatic
 machine-power scheduler exists yet; Atlas deployment, user enrollment, and
 real-effect certification remain deferred.
+
+## Issue #262 delivery notes
+
+Issue #262 delivers policy-bound scheduler confirmation. An explicitly invoked
+tick may confirm only an exact shutdown occurrence regenerated from the same
+immutable configured policy used for planning. Direct and administrative
+shutdown confirmations remain separate, and readiness and preparation remain
+authoritative. No automatic scheduler loop, helper activation, host drill, or
+real power effect is introduced.
+
+The automatic machine-power scheduler lifecycle, Atlas deployment,
+application-user enrollment, and real-effect certification remain deferred.

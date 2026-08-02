@@ -973,3 +973,15 @@ Policy configuration does not select the Linux helper, enable HTTP routes, or
 start a scheduler. Parsing and composition perform no plan execution, helper
 request, RTC access, D-Bus request, wake mutation, shutdown, lock creation, or
 background work.
+
+### Policy-bound scheduler confirmation
+
+ADR-013 keeps scheduler authorization source-specific. The scheduler receives
+one confirmation reader built from the same immutable policy used for
+occurrence generation. The reader regenerates the one-minute interval ending
+at the candidate shutdown and confirms only one exact matching occurrence.
+
+Direct occurrence execution and administrative HTTP execution do not inherit
+this authority. Readiness still owns due, stale, service, task, backup,
+filesystem, event-recording, and preparation decisions. The scheduler remains
+an explicitly invoked tick; no lifecycle loop or timer is configured.

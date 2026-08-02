@@ -753,3 +753,70 @@ operation availability.
 No host or VM was used for validation. No helper was executed, no group or
 user membership was changed, no setuid state was changed, and no RTC, wake,
 D-Bus, reboot, shutdown, or other real power effect occurred.
+
+## Current work — Issue #262
+
+The active branch is:
+
+```text
+feat/policy-bound-machine-power-scheduler-confirmation
+```
+
+The authoritative merged PR #261 baseline for this delivery is:
+
+```text
+8f521432b38483ee7f09048f4cf1bf3a1ea8df28
+```
+
+Issue #262 adds ADR-013 and a scheduler-only confirmation reader built from
+the same immutable canonical machine policy used by planning and occurrence
+generation. It regenerates the one-minute interval ending at each candidate
+shutdown and confirms only one exact matching occurrence. `always_on` and
+`manual` never confirm scheduler shutdowns. Scheduler execution now requires
+`executeAt` and receives the scheduler source, policy-bound confirmation, and
+`automaticallyPrepare: true`; there is no fallback to `execute`.
+
+Direct and administrative shutdown paths retain their existing confirmation
+contracts. Readiness, preparation, claims, wake-before-shutdown ordering, and
+failure handling remain authoritative. No scheduler loop, timer, startup tick,
+helper request, RTC access, D-Bus request, host or VM drill, reboot, shutdown,
+or other real power effect is part of this delivery.
+
+Final validation for Issue #262:
+
+```text
+Node.js       → 24.18.0
+npm           → 11.16.0
+Node files    → 174 passed
+Node tests    → 2,481 passed
+Node skipped  → 3
+Go tests      → 111 individual tests
+format        → passed
+lint          → passed
+typecheck     → passed
+build         → passed
+Go format     → passed
+go mod verify → passed
+go vet        → passed
+npm audit     → 0 production vulnerabilities
+git diff      → passed
+dependencies  → unchanged
+```
+
+The three skipped tests are the conditional compatibility checks in
+`tests/power-management/integration/linux-power-helper-protocol-compatibility.test.ts`:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They require `ATLAS_MANAGER_POWER_HELPER_FIXTURE`, which is intentionally
+unset in the ordinary test command. The dedicated compatibility workflow
+provides the separately built nonproduction fixture path; no production
+helper, host RTC, D-Bus, installation, privilege, or power operation is used.
+
+No automatic scheduler loop, timer, startup tick, host or VM drill, helper
+installation or execution, group or user membership change, setuid change,
+RTC access or mutation, D-Bus power request, reboot, or shutdown occurred.

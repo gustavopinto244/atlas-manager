@@ -1145,3 +1145,16 @@ request. A scheduled policy does not select `linux_helper`, grant any user
 access, enable administrative routes, or start a scheduler. Configuration and
 composition perform no helper, RTC, D-Bus, wake, shutdown, filesystem, or
 background scheduler effect.
+
+## Policy-bound scheduler confirmation
+
+ADR-013 authorizes scheduler shutdowns only through an exact occurrence
+regenerated from the immutable configured machine policy. The reader performs
+no environment, file, RTC, D-Bus, helper, or HTTP access and never selects a
+nearest transition or applies a timestamp tolerance. `always_on` and `manual`
+policies always return `not_confirmed`.
+
+The policy check is necessary but not sufficient: readiness, preparation,
+permanent claims, wake-before-shutdown ordering, and failure boundaries remain
+in force. Direct and administrative paths retain separate confirmations, and
+the scheduler has no fallback from `executeAt` to a weaker execution method.
