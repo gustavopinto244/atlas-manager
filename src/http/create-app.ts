@@ -45,6 +45,13 @@ import {
   registerAdministrativeEventHistoryOperationsRoutes,
   type AdministrativeEventHistoryOperationsRouteDependencies,
 } from "./administrative-event-history-operations-route.js";
+import {
+  registerAdministrativeSecurityStatusRoute,
+  type AdministrativeSecurityStatusRouteDependencies,
+} from "./administrative-security-status-route.js";
+import { createAdministrativeSecurityEnvelope } from "./administrative-security-envelope.js";
+import type { AdministrativePublicOrigin } from "./administrative-public-origin.js";
+import { validateAdministrativeRouteSecurityCatalog } from "./administrative-route-security-catalog.js";
 
 export interface CreateAppDependencies {
   logger: HttpErrorLogger;
@@ -58,6 +65,8 @@ export interface CreateAppDependencies {
   administrativeDashboard?: AdministrativeDashboardRouteDependencies;
   administrativeBackups?: AdministrativeBackupsRouteDependencies;
   administrativeEventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
+  administrativeSecurityStatus?: AdministrativeSecurityStatusRouteDependencies;
+  administrativePublicOrigin?: AdministrativePublicOrigin;
 }
 
 export function createApp({
@@ -72,8 +81,12 @@ export function createApp({
   administrativeDashboard,
   administrativeBackups,
   administrativeEventHistoryOperations,
+  administrativeSecurityStatus,
+  administrativePublicOrigin,
 }: CreateAppDependencies): Express {
   const app = express();
+  app.set("trust proxy", false);
+  validateAdministrativeRouteSecurityCatalog();
 
   if (
     administrativeEventHistory !== undefined ||
@@ -84,11 +97,19 @@ export function createApp({
     administrativeOverview !== undefined ||
     administrativeDashboard !== undefined ||
     administrativeBackups !== undefined ||
-    administrativeEventHistoryOperations !== undefined
+    administrativeEventHistoryOperations !== undefined ||
+    administrativeSecurityStatus !== undefined
   ) {
     app.disable("etag");
     app.disable("x-powered-by");
   }
+  if (administrativePublicOrigin !== undefined)
+    app.use(
+      "/admin",
+      createAdministrativeSecurityEnvelope({
+        publicOrigin: administrativePublicOrigin,
+      }),
+    );
   if (administrativeEventHistory !== undefined) {
     registerAdministrativeEventHistoryRoute(app, administrativeEventHistory);
   }
@@ -113,6 +134,11 @@ export function createApp({
     registerAdministrativeEventHistoryOperationsRoutes(
       app,
       administrativeEventHistoryOperations,
+    );
+  if (administrativeSecurityStatus !== undefined)
+    registerAdministrativeSecurityStatusRoute(
+      app,
+      administrativeSecurityStatus,
     );
 
   app.get("/health/live", (_request, response) => {

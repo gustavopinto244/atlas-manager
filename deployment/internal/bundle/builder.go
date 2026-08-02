@@ -166,9 +166,15 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "dashboard/backup.js", "dashboard/event-history.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "dashboard/backup.js", "dashboard/event-history.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service", "contracts/atlas-manager-administrative-api.json", "contracts/atlas-manager-release-contract.json"}
 	if config.AdministrativeRuntimeConfigurationPath != "" {
 		metadataPaths = append(metadataPaths, "atlas-manager-administrative-runtime-configuration")
+	}
+	if err := copyFile(filepath.Join(config.SourceRoot, "docs", "contracts", "atlas-manager-administrative-api.json"), filepath.Join(root, "contracts", "atlas-manager-administrative-api.json"), 0o644); err != nil {
+		return err
+	}
+	if err := copyFile(filepath.Join(config.SourceRoot, "docs", "contracts", "atlas-manager-release-contract.json"), filepath.Join(root, "contracts", "atlas-manager-release-contract.json"), 0o644); err != nil {
+		return err
 	}
 	paths = append(paths, metadataPaths...)
 	files, err := manifest.Inventory(root, paths)

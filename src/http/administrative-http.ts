@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { randomUUID } from "node:crypto";
 
 import { AdministrativeAccessControlError } from "../access-control/application/errors.js";
 import { HttpError } from "./errors/http-error.js";
@@ -6,6 +7,8 @@ import { HttpError } from "./errors/http-error.js";
 export const ADMINISTRATIVE_MAX_REQUEST_TARGET_BYTES = 4_096;
 
 export function setAdministrativeSecurityHeaders(response: Response): void {
+  if (!response.getHeader("X-Atlas-Request-ID"))
+    response.setHeader("X-Atlas-Request-ID", randomUUID());
   response.setHeader("Cache-Control", "no-store, private");
   response.setHeader("Pragma", "no-cache");
   response.setHeader("X-Content-Type-Options", "nosniff");

@@ -15,7 +15,7 @@ func main() {
 	}
 	action := administrativeconfiguration.Action(os.Args[1])
 	confirmation := ""
-	if action == administrativeconfiguration.InstallDisabled || action == administrativeconfiguration.RemoveDisabled {
+	if action == administrativeconfiguration.InstallDisabled || action == administrativeconfiguration.RemoveDisabled || action == administrativeconfiguration.ReplaceDisabled || action == administrativeconfiguration.RollbackDisabled {
 		if len(os.Args) != 3 {
 			fail("confirmation_invalid")
 		}

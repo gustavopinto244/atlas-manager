@@ -32,6 +32,9 @@ import type { GetServerHealthCapability } from "../server-health/http/server-hea
 import type { BackupManagementCapabilities } from "../backup-management/composition/create-backup-management.js";
 import type { AdministrativeBackupsRouteDependencies } from "./administrative-backups-route.js";
 import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
+import type { AdministrativeSecurityStatusRouteDependencies } from "./administrative-security-status-route.js";
+import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
+import { ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "./administrative-route-security-catalog.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
@@ -43,6 +46,7 @@ export interface AdministrativeRuntime {
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
   readonly backups?: AdministrativeBackupsRouteDependencies;
   readonly eventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
+  readonly securityStatus?: AdministrativeSecurityStatusRouteDependencies;
 }
 
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
@@ -89,6 +93,24 @@ export function createAdministrativeRuntime(
       configuration: cloudflareAccess,
       clock,
     });
+  const securityPostureReader = Object.freeze({
+    execute: async (): Promise<unknown> => {
+      const identityReadiness: AdministrativeIdentityReadiness =
+        await cloudflareAuthentication.readIdentityProviderReadiness();
+      return Object.freeze({
+        identityReadiness,
+        routeCatalog: Object.freeze({
+          reconciled: true,
+          routeCount: ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.length,
+        }),
+        featureCounts: Object.freeze({ enabled: 1, disabled: 2 }),
+        loopbackBinding: true,
+        noApplicationSession: true,
+        corsDisabled: true,
+        auditAvailable: true,
+      });
+    },
+  });
   const needsPowerManagement =
     config.administrativeWakeAlarmHttpEnabled ||
     config.administrativeShutdownHttpEnabled;
@@ -132,6 +154,7 @@ export function createAdministrativeRuntime(
       ...(confirmationReader === undefined
         ? {}
         : { machineShutdownConfirmationReader: confirmationReader }),
+      securityPostureReader,
     });
   };
 
@@ -210,7 +233,7 @@ export function createAdministrativeRuntime(
               execute: () => Promise.resolve({ status: "ok" }),
             },
             applicationVersion:
-              compositionDependencies.applicationVersion ?? "0.1.0",
+              compositionDependencies.applicationVersion ?? "1.0.0-rc.1",
           }),
         }
       : {}),
@@ -240,6 +263,16 @@ export function createAdministrativeRuntime(
           eventHistoryOperations: Object.freeze({
             admission,
             mutationGate: eventHistoryMaintenanceGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...(config.administrativeSecurityStatusHttpEnabled === true
+      ? {
+          securityStatus: Object.freeze({
+            admission,
             createProtectedAdministration: (
               reader: CloudflareAccessAssertionReader,
             ) => createProtected(reader),

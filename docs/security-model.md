@@ -1336,3 +1336,17 @@ private paths, process identifiers, or raw operating-system errors. SHA-256
 provides deterministic integrity evidence only; it does not provide external
 authenticity, non-repudiation, trusted timestamping, or third-party
 attestation.
+
+## v1 software release-candidate envelope
+
+Administrative routes are registered through one closed security catalog and
+remain bound to loopback. The configured HTTPS public origin is checked against
+the Host and optional Origin headers; Fetch Metadata rejects cross-site browser
+requests. Express `trust proxy` is false and forwarded headers are ignored.
+Cloudflare Access assertions remain stateless authentication inputs only; JWT
+claims never assign application roles. The dashboard stores no assertions or
+roles and mutations remain strictly parsed, confirmed, and audited.
+
+The `1.0.0-rc.1` result is software qualification only. It does not certify a
+physical Atlas host, Cloudflare ingress, RTC, helper, or real machine-power
+effect.

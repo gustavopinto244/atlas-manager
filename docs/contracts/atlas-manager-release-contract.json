@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "1.0.0-rc.1",
+  "sourceCommit": "add695dcb988ce48033cd1cf736c53998deda7d9",
+  "sourceDateEpoch": 0,
+  "targetPlatform": "linux-amd64",
+  "nodeVersion": ">=24 <25",
+  "npmVersion": "repository-pinned",
+  "goVersion": "repository-pinned",
+  "administrativeApiContractSha256": "3971df6e1a67ebbba21298a7191ae71d1936faf78374e0d7dbbabc4826ce2574",
+  "dashboardAssetsSha256": "ebfe45dd9d1cbeb3ac7feb187119e9eee0a71e3dfb1c4de315fa674e6bbaf335",
+  "productionDependenciesSha256": "9a996a9fe3c66af896ba9d89f8777c3eb501ea3af44de1d62dd5de4f11575c28",
+  "documentationInventorySha256": "be6950b56bfc78afa4ebab8c86c8fb9acf5fcaaf566a791ff302eaefc2405124",
+  "bundleSha256": "ci-generated-from-two-identical-builds",
+  "requirementsTraceabilitySha256": "be6950b56bfc78afa4ebab8c86c8fb9acf5fcaaf566a791ff302eaefc2405124",
+  "releaseAcceptanceEvidenceSha256": "ci-generated-from-two-identical-rehearsals"
+}

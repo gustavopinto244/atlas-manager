@@ -176,6 +176,9 @@ jobs:
           grep -q 'application/dist/backup-management' "$bundle_root/MANIFEST.json"
           grep -q 'dashboard/backup.js' "$bundle_root/MANIFEST.json"
           grep -q 'dashboard/backup.js' "$bundle_root/SHA256SUMS"
+          test -f "$bundle_root/contracts/atlas-manager-administrative-api.json"
+          test -f "$bundle_root/contracts/atlas-manager-release-contract.json"
+          grep -q 'contracts/atlas-manager-administrative-api.json' "$bundle_root/MANIFEST.json"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
             --application-root "$GITHUB_WORKSPACE/$bundle_root/application"
@@ -223,3 +226,12 @@ jobs:
 
       - name: Build production application
         run: npm run build
+
+      - name: Release candidate security and contract gate
+        run: |
+          test "$(node -p "require('./package.json').version")" = "1.0.0-rc.1"
+          node --import tsx/esm -e 'import { validateAdministrativeRouteSecurityCatalog, ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "./src/http/administrative-route-security-catalog.ts"; validateAdministrativeRouteSecurityCatalog(); if (ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.length !== 41) process.exit(1)'
+          test -f docs/contracts/atlas-manager-administrative-api.json
+          test -f docs/contracts/atlas-manager-release-contract.json
+          test -f docs/release/atlas-manager-v1-requirements-traceability.md
+          test -f docs/release/atlas-manager-v1-security-review.md

@@ -15,6 +15,7 @@ export const ADMINISTRATIVE_PERMISSIONS = Object.freeze([
   "services.availability.write",
   "operations.read",
   "dashboard.read",
+  "security.posture.read",
   "backups.targets.read",
   "backups.runs.read",
   "backups.run",

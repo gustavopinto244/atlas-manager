@@ -18,6 +18,10 @@ import {
 import { parseStrictJson } from "./strict-json.js";
 import { createBackupTargetCatalogFromEnvironment } from "../backup-management/infrastructure/environment-backup-target-catalog.js";
 import { createRetentionPolicy } from "../event-history/domain/event-history-record.js";
+import {
+  parseAdministrativePublicOrigin,
+  type AdministrativePublicOrigin,
+} from "../http/administrative-public-origin.js";
 
 export const LOG_LEVELS = [
   "trace",
@@ -97,6 +101,19 @@ const cloudflareAccessAudienceSchema = z
         code: "custom",
         message: "must be one non-empty ASCII audience value",
       });
+  });
+
+const administrativePublicOriginSchema = z
+  .string()
+  .superRefine((value, context) => {
+    try {
+      parseAdministrativePublicOrigin(value);
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "must be a valid HTTPS administrative origin",
+      });
+    }
   });
 
 const administrativeEventHistoryFileSchema = z
@@ -289,6 +306,10 @@ const environmentSchema = z
         error: "must be exactly true or false",
       })
       .default("false"),
+    ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED: z
+      .enum(["true", "false"], { error: "must be exactly true or false" })
+      .default("false"),
+    ADMINISTRATIVE_PUBLIC_ORIGIN: administrativePublicOriginSchema.optional(),
     REGISTERED_BACKUP_TARGETS_JSON: z.string().default("[]"),
     BACKUP_RUN_HISTORY_FILE: persistenceFilePathSchema.optional(),
     BACKUP_SCHEDULER_CURSOR_FILE: persistenceFilePathSchema.optional(),
@@ -389,6 +410,8 @@ const environmentSchema = z
       environment.ADMINISTRATIVE_DASHBOARD_ENABLED === "true";
     const backupHttpEnabled =
       environment.ADMINISTRATIVE_BACKUP_HTTP_ENABLED === "true";
+    const securityStatusHttpEnabled =
+      environment.ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED === "true";
     const backupSchedulerEnabled =
       environment.BACKUP_SCHEDULER_ENABLED === "true";
     const administrativeHttpEnabled =
@@ -400,7 +423,8 @@ const environmentSchema = z
       serviceAvailabilityHttpEnabled ||
       overviewHttpEnabled ||
       dashboardEnabled ||
-      backupHttpEnabled;
+      backupHttpEnabled ||
+      securityStatusHttpEnabled;
     const effectCapableSurfaceEnabled =
       wakeAlarmHttpEnabled ||
       shutdownHttpEnabled ||
@@ -481,6 +505,12 @@ const environmentSchema = z
         context.addIssue({
           code: "custom",
           path: ["CLOUDFLARE_ACCESS_TEAM_NAME"],
+          message: "is required when administration is enabled",
+        });
+      if (environment.ADMINISTRATIVE_PUBLIC_ORIGIN === undefined)
+        context.addIssue({
+          code: "custom",
+          path: ["ADMINISTRATIVE_PUBLIC_ORIGIN"],
           message: "is required when administration is enabled",
         });
       if (
@@ -630,6 +660,19 @@ const environmentSchema = z
               code: "custom",
               path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
               message: "must include an event-history integrity reader",
+            });
+          if (
+            securityStatusHttpEnabled &&
+            !assignments.some((assignment) =>
+              assignment.roles.some((role) =>
+                roleHasAdministrativePermission(role, "security.posture.read"),
+              ),
+            )
+          )
+            context.addIssue({
+              code: "custom",
+              path: ["ADMINISTRATIVE_ROLE_ASSIGNMENTS"],
+              message: "must include a security posture reader",
             });
         } catch {
           // The field-level schema has already reported the safe category.
@@ -869,6 +912,8 @@ export interface EnvironmentConfig {
     readonly audience: string;
   }>;
   readonly administrativeEventHistoryHttpEnabled: boolean;
+  readonly administrativePublicOrigin?: AdministrativePublicOrigin;
+  readonly administrativeSecurityStatusHttpEnabled?: boolean;
   readonly administrativeEventHistoryOperationsHttpEnabled?: boolean;
   readonly administrativeWakeAlarmHttpEnabled: boolean;
   readonly administrativeShutdownHttpEnabled: boolean;
@@ -920,6 +965,12 @@ export function parseEnvironment(
           issuer: cloudflareAccessConfiguration.issuer,
           audience: cloudflareAccessConfiguration.audience,
         });
+  const administrativePublicOrigin =
+    parsedEnvironment.ADMINISTRATIVE_PUBLIC_ORIGIN === undefined
+      ? undefined
+      : parseAdministrativePublicOrigin(
+          parsedEnvironment.ADMINISTRATIVE_PUBLIC_ORIGIN,
+        );
   const administrativeRoleAssignments =
     parsedEnvironment.ADMINISTRATIVE_ROLE_ASSIGNMENTS === undefined
       ? undefined
@@ -952,6 +1003,12 @@ export function parseEnvironment(
     machineOperatingPolicy: parsedEnvironment.MACHINE_OPERATING_POLICY,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
+    ...(administrativePublicOrigin === undefined
+      ? {}
+      : { administrativePublicOrigin }),
+    ...(parsedEnvironment.ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED === "true"
+      ? { administrativeSecurityStatusHttpEnabled: true }
+      : {}),
     ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED ===
     "true"
       ? { administrativeEventHistoryOperationsHttpEnabled: true }

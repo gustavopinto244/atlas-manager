@@ -801,3 +801,17 @@ Deferred:
 - service enablement and startup;
 - power-helper installation and qualification;
 - real wake and shutdown certification.
+
+## v0.9 authentication and API hardening — completed
+
+The administrative route catalog, transport envelope, identity readiness,
+configuration replacement/rollback, and software release qualification are
+implemented.
+
+## v1.0 software release candidate — qualified
+
+`1.0.0-rc.1` is qualified as a software-only candidate.
+
+## v1.0 stable physical release — pending physical Atlas qualification
+
+Physical deployment and ingress qualification remain separate gates.

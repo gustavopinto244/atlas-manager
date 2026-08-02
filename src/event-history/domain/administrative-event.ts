@@ -38,6 +38,7 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "list_event_history_exports",
   "read_event_history_export",
   "download_event_history_export",
+  "read_administrative_security_posture",
 ] as const);
 export const ADMINISTRATIVE_EVENT_STATUSES = Object.freeze([
   "started",
@@ -385,6 +386,7 @@ function createDetails(
       "run_backup_scheduler_tick",
       "read_operations_overview",
       "read_administrative_dashboard",
+      "read_administrative_security_posture",
       "verify_event_history_integrity",
       "rotate_administrative_event_history",
       "update_administrative_event_history_retention",
@@ -413,6 +415,7 @@ function createDetails(
       "services.availability.write",
       "operations.read",
       "dashboard.read",
+      "security.posture.read",
       "backups.targets.read",
       "backups.runs.read",
       "backups.run",
@@ -457,6 +460,7 @@ function createDetails(
       run_backup_scheduler_tick: "backups.scheduler.tick",
       read_operations_overview: "operations.read",
       read_administrative_dashboard: "dashboard.read",
+      read_administrative_security_posture: "security.posture.read",
       verify_event_history_integrity: "event_history.integrity.read",
       rotate_administrative_event_history: "event_history.rotation.run",
       update_administrative_event_history_retention:

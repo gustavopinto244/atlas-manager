@@ -8,6 +8,7 @@ const input = JSON.stringify({
   schemaVersion: 1,
   cloudflareTeamName: "example-team",
   cloudflareAudience: "example-audience",
+  publicOrigin: "https://atlas.example.com",
   roleAssignments: [
     {
       principalId: "00000000-0000-4000-8000-000000000001",
@@ -75,6 +76,10 @@ describe("mock administrative runtime profile", () => {
           createMockAdministrativeEnvironment(
             parseMockAdministrativeInput(JSON.stringify(value)),
           ),
+        ).toThrow();
+      else if (role === "service_operator")
+        expect(() =>
+          parseMockAdministrativeInput(JSON.stringify(value)),
         ).toThrow();
       else
         expect(() =>

@@ -2778,3 +2778,11 @@ keeping wake and shutdown routes disabled, the power backend at `mock`, power
 effects disabled, the machine-power scheduler disabled, and the Linux helper
 unused. Automated control-plane rehearsal is synthetic and does not contact
 Cloudflare, Docker, Compose, PM2, systemd, or a physical host.
+
+## Software release candidate
+
+The repository currently qualifies `1.0.0-rc.1` as a software-only release
+candidate. Administrative HTTP remains loopback-only and Cloudflare
+Access-authenticated with application authorization. Real ingress, physical
+Atlas deployment, helper activation, RTC, and machine-power effects remain
+separate approval gates.

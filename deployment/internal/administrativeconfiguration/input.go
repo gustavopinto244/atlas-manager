@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"path/filepath"
 	"strings"
 )
@@ -18,7 +20,7 @@ const (
 	MaxInputBytes    = 65_536
 )
 
-const ExampleInput = `{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"replace-with-access-application-audience","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]}],"registeredServices":[],"backupSchedulerEnabled":false,"backupTargets":[{"id":"example-backup","displayName":"Example backup","kind":"mock","schedule":{"mode":"manual"},"retention":{"keepLastSuccessful":7},"limits":{"maxFiles":1000,"maxTotalBytes":1073741824,"maxFileBytes":268435456,"maxDepth":16,"maxRelativePathBytes":4096}}]}
+const ExampleInput = `{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"replace-with-access-application-audience","publicOrigin":"https://atlas.example.com","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]}],"registeredServices":[],"backupSchedulerEnabled":false,"backupTargets":[{"id":"example-backup","displayName":"Example backup","kind":"mock","schedule":{"mode":"manual"},"retention":{"keepLastSuccessful":7},"limits":{"maxFiles":1000,"maxTotalBytes":1073741824,"maxFileBytes":268435456,"maxDepth":16,"maxRelativePathBytes":4096}}]}
 `
 
 func ExampleInputBytes() []byte {
@@ -46,6 +48,7 @@ type Input struct {
 	SchemaVersion          int                    `json:"schemaVersion"`
 	CloudflareTeam         string                 `json:"cloudflareTeamName"`
 	CloudflareAudience     string                 `json:"cloudflareAudience"`
+	PublicOrigin           string                 `json:"publicOrigin"`
 	RoleAssignments        []RoleAssignment       `json:"roleAssignments"`
 	RegisteredServices     json.RawMessage        `json:"registeredServices"`
 	BackupSchedulerEnabled bool                   `json:"backupSchedulerEnabled"`
@@ -105,7 +108,7 @@ func ValidateInput(data []byte) (Input, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
 	}
-	if input.SchemaVersion != 1 || input.CloudflareTeam == "" || input.CloudflareTeam != strings.TrimSpace(input.CloudflareTeam) || len(input.CloudflareTeam) > 63 || !validTeam(input.CloudflareTeam) || input.CloudflareAudience == "" || input.CloudflareAudience != strings.TrimSpace(input.CloudflareAudience) || len(input.CloudflareAudience) > 256 || strings.ContainsAny(input.CloudflareAudience, "\" ,\t\r\n") || len(input.RoleAssignments) == 0 || len(input.RoleAssignments) > 32 || len(input.RegisteredServices) == 0 || len(input.BackupTargets) == 0 {
+	if input.SchemaVersion != 1 || input.CloudflareTeam == "" || input.CloudflareTeam != strings.TrimSpace(input.CloudflareTeam) || len(input.CloudflareTeam) > 63 || !validTeam(input.CloudflareTeam) || input.CloudflareAudience == "" || input.CloudflareAudience != strings.TrimSpace(input.CloudflareAudience) || len(input.CloudflareAudience) > 256 || strings.ContainsAny(input.CloudflareAudience, "\" ,\t\r\n") || !validPublicOrigin(input.PublicOrigin) || len(input.RoleAssignments) == 0 || len(input.RoleAssignments) > 32 || len(input.RegisteredServices) == 0 || len(input.BackupTargets) == 0 {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
 	}
 	var topLevel map[string]json.RawMessage
@@ -139,6 +142,17 @@ func ValidateInput(data []byte) (Input, error) {
 			seenRoles[role] = struct{}{}
 		}
 	}
+	hasAdministrator := false
+	for _, assignment := range input.RoleAssignments {
+		for _, role := range assignment.Roles {
+			if role == "administrator" {
+				hasAdministrator = true
+			}
+		}
+	}
+	if !hasAdministrator {
+		return Input{}, fmt.Errorf("administrative_input_invalid")
+	}
 	var services []json.RawMessage
 	if json.Unmarshal(input.RegisteredServices, &services) != nil || len(services) > 100 {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
@@ -166,6 +180,14 @@ func ValidateInput(data []byte) (Input, error) {
 		}
 	}
 	return input, nil
+}
+
+func validPublicOrigin(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Host == "" || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(parsed.Hostname(), "*") || net.ParseIP(parsed.Hostname()) != nil || (parsed.Port() != "" && parsed.Port() != "443") {
+		return false
+	}
+	return parsed.Hostname() == strings.ToLower(parsed.Hostname()) && strings.TrimSpace(value) == value
 }
 
 func validBackupTarget(data []byte) (string, string, bool) {
@@ -343,6 +365,14 @@ func CanonicalInput(input Input) ([]byte, error) {
 }
 
 func Environment(input Input) ([]byte, error) {
+	environment, err := environmentWithoutPublicOrigin(input)
+	if err != nil {
+		return nil, err
+	}
+	return addPublicOrigin(environment, input.PublicOrigin), nil
+}
+
+func environmentWithoutPublicOrigin(input Input) ([]byte, error) {
 	canonical, err := json.Marshal(input.RoleAssignments)
 	if err != nil {
 		return nil, fmt.Errorf("administrative_input_invalid")
@@ -369,6 +399,20 @@ func Environment(input Input) ([]byte, error) {
 		return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nADMINISTRATIVE_EVENT_HISTORY_DIRECTORY=/var/lib/atlas-manager-event-history\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS=%d\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES=%d\nADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY=%s\nADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED=%t\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.EventHistoryOperations.Segment.MaxEvents, input.EventHistoryOperations.Segment.MaxBytes, bytes.TrimSpace(retention), input.EventHistoryOperations.Retention.AutomaticPruneEnabled, input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
 	}
 	return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nADMINISTRATIVE_EVENT_HISTORY_FILE=/var/lib/atlas-manager/admin-events.jsonl\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
+}
+
+func addPublicOrigin(environment []byte, origin string) []byte {
+	line := []byte("ADMINISTRATIVE_PUBLIC_ORIGIN=" + origin + "\nADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED=true\n")
+	marker := []byte("ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\n")
+	index := bytes.Index(environment, marker)
+	if index < 0 {
+		return environment
+	}
+	result := make([]byte, 0, len(environment)+len(line))
+	result = append(result, environment[:index+len(marker)]...)
+	result = append(result, line...)
+	result = append(result, environment[index+len(marker):]...)
+	return result
 }
 
 func validEventHistoryOperations(value EventHistoryOperations) bool {
