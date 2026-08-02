@@ -684,3 +684,72 @@ The artifact check found no remaining helper binaries, installer/bundle/
 qualification binaries, or `.tar.gz` archives outside `.git`. A previously
 generated ignored `dist/power-helper/atlas-manager-power-helper` artifact was
 removed; no release artifact is retained in the working tree.
+
+## Current work — Issue #260
+
+The active branch is:
+
+```text
+feat/configured-machine-operating-policy
+```
+
+The authoritative merged PR #259 baseline for this delivery is:
+
+```text
+884f6afa724570f07f3cb1a6dda9e3e3fa659817
+```
+
+Issue #260 adds ADR-012 and strict immutable `MACHINE_OPERATING_POLICY`
+startup configuration. The absent-value default is `{"mode":"always_on"}`;
+`manual` and scheduled policies remain available, with scheduled windows
+restricted to `America/Sao_Paulo`. A project-owned strict JSON decoder rejects
+duplicate fields and bounded malformed input before the existing policy domain
+validator canonicalizes the result. The administrative runtime passes one
+policy to power composition; backend selection, HTTP activation, and
+scheduler activation remain independent.
+
+No automatic scheduler loop or startup tick was added. No helper was installed
+or executed, no group or setuid state changed, no host or VM drill occurred,
+and no RTC, wake, D-Bus, reboot, shutdown, or other real power effect was
+performed.
+
+Final validation for Issue #260:
+
+```text
+Node.js       → 24.18.0
+npm           → 11.16.0
+Node files    → 172 passed
+Node tests    → 2,466 passed
+Node skipped  → 3
+Go tests      → 111 individual tests
+format        → passed
+lint          → passed
+typecheck     → passed
+build         → passed
+Go format     → passed
+go mod verify → passed
+go vet        → passed
+npm audit     → 0 production vulnerabilities
+git diff      → passed
+dependencies  → unchanged
+```
+
+The three skipped tests are intentionally conditional compatibility checks in
+`tests/power-management/integration/linux-power-helper-protocol-compatibility.test.ts`:
+
+```text
+round-trips read requests through the deterministic Go fixture
+round-trips shutdown requests through the deterministic Go fixture
+round-trips mutation requests through the deterministic Go fixture
+```
+
+They are skipped because the ordinary test command does not set
+`ATLAS_MANAGER_POWER_HELPER_FIXTURE`. The dedicated compatibility workflow
+provides the separately built nonproduction fixture path. This prevents the
+standard suite from selecting or executing a helper binary implicitly; the
+tests do not depend on host RTC, D-Bus, installation, privilege, or power
+operation availability.
+
+No host or VM was used for validation. No helper was executed, no group or
+user membership was changed, no setuid state was changed, and no RTC, wake,
+D-Bus, reboot, shutdown, or other real power effect occurred.

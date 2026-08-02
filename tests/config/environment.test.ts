@@ -7,6 +7,226 @@ import {
 } from "../../src/config/environment.js";
 
 describe("parseEnvironment", () => {
+  const scheduledPolicy = {
+    mode: "scheduled",
+    timezone: "America/Sao_Paulo",
+    weeklySchedule: {
+      windows: [
+        { dayOfWeek: "monday", start: "08:00", end: "22:00" },
+        { dayOfWeek: "tuesday", start: "08:00", end: "22:00" },
+      ],
+    },
+  };
+
+  it("defaults the machine operating policy to immutable always-on", () => {
+    const config = parseEnvironment({});
+    expect(config.machineOperatingPolicy).toEqual({ mode: "always_on" });
+    expect(Object.isFrozen(config.machineOperatingPolicy)).toBe(true);
+  });
+
+  it.each([{ mode: "always_on" }, { mode: "manual" }, scheduledPolicy])(
+    "accepts a strict machine operating policy",
+    (policy) => {
+      const config = parseEnvironment({
+        MACHINE_OPERATING_POLICY: JSON.stringify(policy),
+      });
+      expect(config.machineOperatingPolicy).toEqual(policy);
+    },
+  );
+
+  it("accepts the exact 16384-byte policy boundary", () => {
+    const compact = '{"mode":"always_on"}';
+    const policy = "{" + " ".repeat(16_384 - compact.length) + compact.slice(1);
+    expect(Buffer.byteLength(policy, "utf8")).toBe(16_384);
+    expect(
+      parseEnvironment({ MACHINE_OPERATING_POLICY: policy })
+        .machineOperatingPolicy,
+    ).toEqual({
+      mode: "always_on",
+    });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["whitespace-only", "   \n\t"],
+    ["surrounding whitespace", ' {"mode":"always_on"}'],
+    ["BOM", '\ufeff{"mode":"always_on"}'],
+    ["NUL", '{"mode":"always_on"}\u0000'],
+    ["malformed JSON", '{"mode":"always_on"'],
+    ["trailing bytes", '{"mode":"always_on"} trailing'],
+    ["multiple roots", '{"mode":"always_on"}{"mode":"manual"}'],
+    ["primitive root", '"always_on"'],
+    ["array root", "[]"],
+    ["duplicate root field", '{"mode":"always_on","mode":"manual"}'],
+    [
+      "duplicate nested field",
+      '{"mode":"scheduled","timezone":"America/Sao_Paulo","weeklySchedule":{"windows":[],"windows":[]}}',
+    ],
+    ["unknown field", '{"mode":"always_on","unexpected":true}'],
+    [
+      "unknown nested field",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: scheduledPolicy.weeklySchedule.windows,
+          unexpected: true,
+        },
+      }),
+    ],
+    ["invalid mode", '{"mode":"Always_On"}'],
+    [
+      "invalid timezone",
+      JSON.stringify({ ...scheduledPolicy, timezone: "UTC" }),
+    ],
+    [
+      "empty windows",
+      JSON.stringify({ ...scheduledPolicy, weeklySchedule: { windows: [] } }),
+    ],
+    [
+      "excessive windows",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: Array.from({ length: 65 }, (_, index) => ({
+            dayOfWeek: [
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday",
+            ][index % 7],
+            start: `${String(Math.floor(index / 7) * 2).padStart(2, "0")}:00`,
+            end: `${String(Math.floor(index / 7) * 2 + 1).padStart(2, "0")}:00`,
+          })),
+        },
+      }),
+    ],
+    [
+      "invalid weekday",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [{ dayOfWeek: "Monday", start: "08:00", end: "22:00" }],
+        },
+      }),
+    ],
+    [
+      "invalid local time",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [{ dayOfWeek: "monday", start: "8:00", end: "22:00" }],
+        },
+      }),
+    ],
+    [
+      "zero-length window",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [{ dayOfWeek: "monday", start: "08:00", end: "08:00" }],
+        },
+      }),
+    ],
+    [
+      "reversed window",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [{ dayOfWeek: "monday", start: "22:00", end: "08:00" }],
+        },
+      }),
+    ],
+    [
+      "duplicate window",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [
+            { dayOfWeek: "monday", start: "08:00", end: "22:00" },
+            { dayOfWeek: "monday", start: "08:00", end: "22:00" },
+          ],
+        },
+      }),
+    ],
+    [
+      "overlapping window",
+      JSON.stringify({
+        ...scheduledPolicy,
+        weeklySchedule: {
+          windows: [
+            { dayOfWeek: "monday", start: "08:00", end: "12:00" },
+            { dayOfWeek: "monday", start: "11:00", end: "22:00" },
+          ],
+        },
+      }),
+    ],
+  ] as const)("rejects invalid machine policy: %s", (_label, value) => {
+    expect(() =>
+      parseEnvironment({ MACHINE_OPERATING_POLICY: value }),
+    ).toThrow();
+  });
+
+  it("rejects a policy larger than 16384 UTF-8 bytes", () => {
+    const compact = '{"mode":"always_on"}';
+    const policy = "{" + " ".repeat(16_385 - compact.length) + compact.slice(1);
+    expect(Buffer.byteLength(policy, "utf8")).toBe(16_385);
+    expect(() =>
+      parseEnvironment({ MACHINE_OPERATING_POLICY: policy }),
+    ).toThrow();
+  });
+
+  it("canonicalizes windows independently of input order and isolates input", () => {
+    const input = {
+      ...scheduledPolicy,
+      weeklySchedule: {
+        windows: [
+          { dayOfWeek: "tuesday", start: "08:00", end: "22:00" },
+          { dayOfWeek: "monday", start: "08:00", end: "22:00" },
+        ],
+      },
+    };
+    const config = parseEnvironment({
+      MACHINE_OPERATING_POLICY: JSON.stringify(input),
+    });
+    input.weeklySchedule.windows[0]!.start = "09:00";
+
+    expect(config.machineOperatingPolicy).toEqual({
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      weeklySchedule: {
+        windows: [
+          { dayOfWeek: "monday", start: "08:00", end: "22:00" },
+          { dayOfWeek: "tuesday", start: "08:00", end: "22:00" },
+        ],
+      },
+    });
+    if (config.machineOperatingPolicy.mode !== "scheduled") {
+      throw new Error("Expected a scheduled policy");
+    }
+    expect(Object.isFrozen(config.machineOperatingPolicy.weeklySchedule)).toBe(
+      true,
+    );
+    expect(
+      Object.isFrozen(config.machineOperatingPolicy.weeklySchedule.windows),
+    ).toBe(true);
+  });
+
+  it("does not echo raw policy JSON in a safe validation error", () => {
+    const raw = '{"mode":"scheduled","secret":"do-not-echo"}';
+    try {
+      parseEnvironment({ MACHINE_OPERATING_POLICY: raw });
+      throw new Error("expected configuration validation to fail");
+    } catch (error) {
+      const message = formatEnvironmentValidationError(error);
+      expect(message).toContain("MACHINE_OPERATING_POLICY");
+      expect(message).not.toContain(raw);
+      expect(message).not.toContain("do-not-echo");
+    }
+  });
+
   it("defaults power management to the mock backend", () => {
     const config = parseEnvironment({});
     expect(config.powerManagementBackend).toBe("mock");
@@ -291,6 +511,7 @@ describe("parseEnvironment", () => {
       port: 3000,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
       administrativeShutdownHttpEnabled: false,
@@ -315,6 +536,7 @@ describe("parseEnvironment", () => {
       port: 8080,
       logLevel: "info",
       powerManagementBackend: "mock",
+      machineOperatingPolicy: { mode: "always_on" },
       administrativeEventHistoryHttpEnabled: false,
       administrativeWakeAlarmHttpEnabled: false,
       administrativeShutdownHttpEnabled: false,

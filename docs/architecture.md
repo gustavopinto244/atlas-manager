@@ -959,3 +959,17 @@ successful systemd-logind `PowerOff(false)` reply. It never claims that the
 machine completed power-off. Installation, empty-group qualification,
 application-user enrollment, HTTP activation, scheduler activation, and
 real-effect certification remain separate deployment gates.
+
+### Configured machine operating policy
+
+ADR-012 adds one immutable startup input, `MACHINE_OPERATING_POLICY`, with a
+safe `always_on` default. A project-owned strict JSON decoder rejects duplicate
+keys and malformed or oversized values before the existing machine operating
+policy domain validator canonicalizes the result. The administrative runtime
+passes that policy to `createPowerManagement` once; plan evaluation and
+explicit scheduler ticks share the same canonical policy.
+
+Policy configuration does not select the Linux helper, enable HTTP routes, or
+start a scheduler. Parsing and composition perform no plan execution, helper
+request, RTC access, D-Bus request, wake mutation, shutdown, lock creation, or
+background work.

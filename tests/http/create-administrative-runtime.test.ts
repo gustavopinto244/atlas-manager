@@ -4,6 +4,8 @@ import { createAdministrativeRuntime } from "../../src/http/create-administrativ
 import type { EnvironmentConfig } from "../../src/config/environment.js";
 import { createLinuxPowerHelperAdapters } from "../../src/power-management/composition/create-linux-power-helper-adapters.js";
 import { InMemoryLinuxPowerHelperTransport } from "../../src/power-management/infrastructure/in-memory-linux-power-helper-transport.js";
+import { createMachineOperatingPolicy } from "../../src/power-management/domain/machine-operating-policy.js";
+import { createPowerManagement } from "../../src/power-management/composition/create-power-management.js";
 
 const PRINCIPAL_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -13,6 +15,7 @@ function shutdownConfig(): EnvironmentConfig {
     port: 3000,
     logLevel: "info",
     powerManagementBackend: "mock",
+    machineOperatingPolicy: createMachineOperatingPolicy({ mode: "always_on" }),
     administrativeEventHistoryHttpEnabled: false,
     administrativeWakeAlarmHttpEnabled: false,
     administrativeShutdownHttpEnabled: true,
@@ -68,5 +71,26 @@ describe("administrative shutdown runtime composition", () => {
 
     expect(runtime.shutdown).toBeDefined();
     expect(createAdapters).toHaveBeenCalledOnce();
+  });
+
+  it("passes the canonical startup policy to power composition exactly once", () => {
+    const config = {
+      ...shutdownConfig(),
+      machineOperatingPolicy: createMachineOperatingPolicy({
+        mode: "manual",
+      }),
+    };
+    const createCapabilities = vi.fn(createPowerManagement);
+
+    createAdministrativeRuntime(config, undefined, {
+      createPowerManagement: createCapabilities,
+    });
+
+    expect(createCapabilities).toHaveBeenCalledOnce();
+    const call = createCapabilities.mock.calls[0];
+    if (call === undefined || call[0] === undefined) {
+      throw new Error("Expected power-management composition arguments");
+    }
+    expect(call[0].machineOperatingPolicy).toBe(config.machineOperatingPolicy);
   });
 });

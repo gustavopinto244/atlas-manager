@@ -11,6 +11,11 @@ import {
   type AdministrativeRole,
 } from "../access-control/domain/administrative-role.js";
 import { roleHasAdministrativePermission } from "../access-control/domain/administrative-operation.js";
+import {
+  createMachineOperatingPolicy,
+  type MachineOperatingPolicy,
+} from "../power-management/domain/machine-operating-policy.js";
+import { parseStrictJson } from "./strict-json.js";
 
 export const LOG_LEVELS = [
   "trace",
@@ -134,6 +139,57 @@ const administrativeRoleAssignmentsSchema = z
     }
   });
 
+const machineOperatingPolicySchema = z
+  .string()
+  .default('{"mode":"always_on"}')
+  .transform((value, context): MachineOperatingPolicy => {
+    if (value.length === 0) {
+      context.addIssue({ code: "custom", message: "must not be empty" });
+      return z.NEVER;
+    }
+    if (value.trim() !== value) {
+      context.addIssue({
+        code: "custom",
+        message: "must not contain surrounding whitespace",
+      });
+      return z.NEVER;
+    }
+    if (Buffer.byteLength(value, "utf8") > 16_384) {
+      context.addIssue({
+        code: "custom",
+        message: "must not exceed 16384 UTF-8 bytes",
+      });
+      return z.NEVER;
+    }
+    if (value.charCodeAt(0) === 0xfeff || value.includes("\u0000")) {
+      context.addIssue({
+        code: "custom",
+        message: "must not contain a BOM or NUL",
+      });
+      return z.NEVER;
+    }
+
+    let decoded: unknown;
+    try {
+      decoded = parseStrictJson(value);
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "must be valid strict JSON",
+      });
+      return z.NEVER;
+    }
+    try {
+      return createMachineOperatingPolicy(decoded);
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "must be a valid machine operating policy",
+      });
+      return z.NEVER;
+    }
+  });
+
 const environmentSchema = z
   .object({
     HOST: z
@@ -156,6 +212,7 @@ const environmentSchema = z
         error: "must be exactly mock or linux_helper",
       })
       .default("mock"),
+    MACHINE_OPERATING_POLICY: machineOperatingPolicySchema,
     SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
       persistenceFilePathSchema.optional(),
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
@@ -417,6 +474,7 @@ export interface EnvironmentConfig {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly powerManagementBackend: PowerManagementBackend;
+  readonly machineOperatingPolicy: MachineOperatingPolicy;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   readonly serviceAvailabilityOverrideFilePath?: string;
@@ -471,6 +529,7 @@ export function parseEnvironment(
     port: parsedEnvironment.PORT,
     logLevel: parsedEnvironment.LOG_LEVEL,
     powerManagementBackend: parsedEnvironment.POWER_MANAGEMENT_BACKEND,
+    machineOperatingPolicy: parsedEnvironment.MACHINE_OPERATING_POLICY,
     administrativeEventHistoryHttpEnabled:
       parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED === "true",
     administrativeWakeAlarmHttpEnabled:
