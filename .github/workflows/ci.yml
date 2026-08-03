@@ -376,6 +376,22 @@ jobs:
           set -e
           if [ "$matches" -eq 0 ]; then exit 1; fi
           if [ "$matches" -gt 1 ]; then exit "$matches"; fi
+          bundle_artifact_dir="$RUNNER_TEMP/atlas-manager-deployment-bundle"
+          bundle_artifact_root="$bundle_artifact_dir/atlas-manager_${bundle_version}_linux_amd64"
+          test ! -e "$bundle_artifact_dir"
+          mkdir -p "$bundle_artifact_root"
+          cp "$bundle_path" "$bundle_artifact_dir/"
+          cp "$bundle_root/MANIFEST.json" "$bundle_artifact_root/"
+          cp "$bundle_root/SHA256SUMS" "$bundle_artifact_root/"
+          SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_VERSION="$bundle_version" node scripts/generate-deployment-bundle-metadata.mjs \
+            --bundle-root "$bundle_root" \
+            --bundle-archive "$bundle_path" \
+            --output "$bundle_artifact_dir/deployment-bundle-metadata.json" \
+            --metadata "$bundle_artifact_dir/deployment-bundle-metadata.json" \
+            --evidence "$release_artifacts/atlas-manager-v1-software-release-candidate-evidence.json" \
+            --contract "$release_artifacts/atlas-manager-release-contract.json" \
+            --digests "$release_artifacts/atlas-manager-release-digests.json"
+          node -e 'const fs=require("node:fs"); const dir=process.argv[1]; const metadata=JSON.parse(fs.readFileSync(`${dir}/deployment-bundle-metadata.json`,"utf8")); const evidence=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); const contract=JSON.parse(fs.readFileSync(process.argv[3],"utf8")); const digests=JSON.parse(fs.readFileSync(process.argv[4],"utf8")); const sha=metadata.bundleSha256; if (!/^[0-9a-f]{64}$/.test(sha) || metadata.sourceCommit!==process.env.SOURCE_COMMIT || evidence.sourceCommit!==process.env.SOURCE_COMMIT || evidence.bundle.sha256!==sha || contract.sourceCommit!==process.env.SOURCE_COMMIT || contract.bundleSha256!==sha || digests.sourceCommit!==process.env.SOURCE_COMMIT || digests.bundleSha256!==sha) process.exit(1);' "$bundle_artifact_dir" "$release_artifacts/atlas-manager-v1-software-release-candidate-evidence.json" "$release_artifacts/atlas-manager-release-contract.json" "$release_artifacts/atlas-manager-release-digests.json"
           test "$(node -p "require('$release_artifacts/atlas-manager-v1-software-release-candidate-evidence.json').result")" = "qualified"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
@@ -385,5 +401,14 @@ jobs:
         with:
           name: atlas-manager-1.0.0-rc.2-release-qualification-${{ github.run_id }}
           path: ${{ runner.temp }}/atlas-manager-release-artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload qualified deployment bundle
+        if: steps.release-gate.outcome == 'success'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: atlas-manager-1.0.0-rc.2-deployment-bundle-${{ github.run_id }}
+          path: ${{ runner.temp }}/atlas-manager-deployment-bundle
           if-no-files-found: error
           retention-days: 14
