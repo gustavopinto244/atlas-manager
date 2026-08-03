@@ -4,6 +4,7 @@ import {
   type AdministrativeOperation,
 } from "../access-control/domain/administrative-operation.js";
 import type { AdministrativePermission } from "../access-control/domain/administrative-permission.js";
+import type { Express, RequestHandler } from "express";
 
 export type AdministrativeRouteSecurityDescriptor = Readonly<{
   routeId: string;
@@ -523,6 +524,11 @@ export function validateAdministrativeRouteSecurityCatalog(): void {
       )
     )
       throw new Error("administrative_route_policy_invalid");
+    if (
+      descriptor.permission !==
+      permissionForAdministrativeOperation(descriptor.operation)
+    )
+      throw new Error("administrative_route_policy_invalid");
     if (descriptor.method === "GET" && descriptor.confirmationPolicy !== "none")
       throw new Error("administrative_route_policy_invalid");
     if (
@@ -531,6 +537,99 @@ export function validateAdministrativeRouteSecurityCatalog(): void {
     )
       throw new Error("administrative_route_policy_invalid");
   }
+}
+
+export function findAdministrativeRouteSecurityDescriptor(
+  routeId: string,
+): AdministrativeRouteSecurityDescriptor {
+  const descriptor = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
+    (value) => value.routeId === routeId,
+  );
+  if (descriptor === undefined)
+    throw new Error("administrative_route_policy_invalid");
+  return descriptor;
+}
+
+const routeRegistries = new WeakMap<Express, Set<string>>();
+const routeDescriptors = new WeakMap<object, readonly string[]>();
+
+/**
+ * The only production boundary allowed to register an /admin route.
+ * Multiple catalog descriptors may share one Express path when the handler
+ * deliberately dispatches by method (for example GET/PUT/DELETE).
+ */
+export function registerAdministrativeRoute(
+  app: Express,
+  routeIds: readonly string[],
+  handler: RequestHandler,
+): void {
+  if (routeIds.length === 0)
+    throw new Error("administrative_route_policy_invalid");
+  const descriptors = routeIds.map(findAdministrativeRouteSecurityDescriptor);
+  const path = descriptors[0]!.pathTemplate;
+  if (descriptors.some((descriptor) => descriptor.pathTemplate !== path))
+    throw new Error("administrative_route_policy_invalid");
+  const registered = routeRegistries.get(app) ?? new Set<string>();
+  for (const descriptor of descriptors) {
+    if (registered.has(descriptor.routeId))
+      throw new Error("administrative_route_policy_invalid");
+    registered.add(descriptor.routeId);
+  }
+  routeRegistries.set(app, registered);
+  app.all(path, handler);
+  const runtime = app as Express & {
+    router?: { stack?: readonly unknown[] };
+  };
+  const layer = runtime.router?.stack?.at(-1);
+  const route =
+    typeof layer === "object" && layer !== null
+      ? (layer as { route?: unknown }).route
+      : undefined;
+  if (typeof route !== "object" || route === null)
+    throw new Error("administrative_route_policy_invalid");
+  routeDescriptors.set(
+    route,
+    Object.freeze(descriptors.map((descriptor) => descriptor.routeId)),
+  );
+}
+
+export function expectedAdministrativeRouteIds(
+  activationFlags: readonly string[],
+): readonly string[] {
+  const enabled = new Set(activationFlags);
+  return Object.freeze(
+    ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.filter((descriptor) =>
+      enabled.has(descriptor.activationFlag),
+    ).map((descriptor) => descriptor.routeId),
+  );
+}
+
+export function reconcileAdministrativeRouteRegistrations(
+  app: Express,
+  expectedRouteIds: readonly string[],
+): void {
+  const registered = routeRegistries.get(app) ?? new Set<string>();
+  const expected = new Set(expectedRouteIds);
+  const runtime = app as Express & {
+    router?: { stack?: readonly unknown[] };
+  };
+  const stack = runtime.router?.stack;
+  if (!Array.isArray(stack))
+    throw new Error("administrative_route_policy_invalid");
+  for (const layer of stack) {
+    if (typeof layer !== "object" || layer === null) continue;
+    const route = (layer as { route?: unknown }).route;
+    if (typeof route !== "object" || route === null) continue;
+    const path = (route as { path?: unknown }).path;
+    if (typeof path !== "string" || !path.startsWith("/admin")) continue;
+    if (routeDescriptors.get(route) === undefined)
+      throw new Error("administrative_route_policy_invalid");
+  }
+  if (
+    registered.size !== expected.size ||
+    [...registered].some((routeId) => !expected.has(routeId))
+  )
+    throw new Error("administrative_route_policy_invalid");
 }
 
 validateAdministrativeRouteSecurityCatalog();

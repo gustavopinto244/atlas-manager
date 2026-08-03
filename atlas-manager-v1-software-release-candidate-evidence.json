@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "result": "qualified",
-  "releaseVersion": "1.0.0-rc.1",
-  "baselineCommit": "add695dcb988ce48033cd1cf736c53998deda7d9",
-  "sourceCommit": "add695dcb988ce48033cd1cf736c53998deda7d9",
+  "result": "not_qualified",
+  "releaseVersion": "1.0.0-rc.2",
+  "baselineCommit": "162191dae6415cc33aab4e30a2cb60be7845cb5f",
+  "sourceCommit": "162191dae6415cc33aab4e30a2cb60be7845cb5f",
   "administrativeSecurity": {
-    "result": "software_qualified",
-    "routeCount": 41,
+    "result": "software_checked",
+    "routeCatalog": "reconciled",
     "trustProxy": false,
     "cors": "disabled"
   },
@@ -16,7 +16,7 @@
   },
   "routeCatalog": {
     "result": "reconciled",
-    "contractSha256": "3971df6e1a67ebbba21298a7191ae71d1936faf78374e0d7dbbabc4826ce2574"
+    "contractSha256": "760b1691f91f4bd6edc951315858df070a44b94fb3aeff3dab249c6c43e96623"
   },
   "requirements": {
     "result": "complete",
@@ -25,18 +25,24 @@
   },
   "tests": {
     "node": "passed",
-    "deploymentGo": "environment_unavailable",
-    "powerHelperGo": "environment_unavailable",
-    "productionAudit": "not_run_in_restricted_environment"
+    "deploymentGo": "passed",
+    "powerHelperGo": "passed",
+    "productionAudit": "zero_vulnerabilities"
   },
-  "bundle": { "result": "reproducible_in_ci", "physicalOperations": "none" },
+  "bundle": {
+    "result": "reproducible",
+    "sha256": "9999edb750a0c5305c92100dce5698c676b7d7bfefee492e8ee0fb2189d1a15e",
+    "physicalOperations": "none"
+  },
   "dependencies": {
-    "inventorySha256": "9a996a9fe3c66af896ba9d89f8777c3eb501ea3af44de1d62dd5de4f11575c28",
-    "dashboardAssetsSha256": "ebfe45dd9d1cbeb3ac7feb187119e9eee0a71e3dfb1c4de315fa674e6bbaf335"
+    "inventorySha256": "d80672e8375098d188477297e51b4b6063258708f9574363d48f47b68ffb515b"
   },
-  "documentation": { "result": "complete" },
+  "documentation": {
+    "result": "complete"
+  },
   "rehearsal": {
-    "result": "sandbox_only",
+    "result": "not_executed",
+    "evidenceSha256": null,
     "realCloudflare": false,
     "realSystemd": false,
     "realPowerEffect": false

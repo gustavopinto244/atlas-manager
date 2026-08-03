@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -13,6 +14,7 @@ import {
   sha256,
 } from "../event-history/domain/event-history-record.js";
 import { FileEventHistoryWriterLock } from "../event-history/infrastructure/file-event-history-writer-lock.js";
+import { parseStrictJson } from "../config/strict-json.js";
 
 export const EVENT_HISTORY_PRODUCTION_ROOT =
   "/var/lib/atlas-manager-event-history";
@@ -103,7 +105,7 @@ export async function migrateVersionOneEventHistory(
         });
       throw new Error("event_history_migration_failed");
     }
-    if (existsSync(paths.root))
+    if (existsSync(paths.root) || existsSync(`${paths.root}.candidate`))
       throw new Error("event_history_migration_failed");
     const sourceStore = new FileAdministrativeEventHistory(
       paths.versionOneFile,
@@ -118,7 +120,9 @@ export async function migrateVersionOneEventHistory(
     }
     if (sha256(readFileSync(paths.versionOneFile)) !== sourceSha256)
       throw new Error("event_history_migration_failed");
-    const target = new FileSegmentedAdministrativeEventHistory(paths.root, {
+    const candidateRoot = `${paths.root}.candidate`;
+    mkdirSync(dirname(paths.root), { recursive: true, mode: 0o700 });
+    const target = new FileSegmentedAdministrativeEventHistory(candidateRoot, {
       lockPath: join(
         dirname(paths.root),
         `.${basename(paths.root)}-migration-writer.lock`,
@@ -133,19 +137,45 @@ export async function migrateVersionOneEventHistory(
     const integrity = await target.verifyIntegrity();
     if (integrity.outcome !== "verified")
       throw new Error("event_history_migration_failed");
-    const migration = join(paths.root, "migration");
+    const migration = join(candidateRoot, "migration");
     mkdirSync(migration, { recursive: true, mode: 0o700 });
+    const receipt = Buffer.from(
+      `${canonicalJson({ schemaVersion: 1, sourceSha256, sourceEventCount: events.length, firstSequence: events[0]?.sequence ?? 0, lastSequence: events.at(-1)?.sequence ?? 0, versionTwoChainHead: integrity.lastRecordSha256 ?? "0".repeat(64), migratedAt: paths.clock?.() ?? new Date().toISOString(), result: "migrated" })}\n`,
+      "utf8",
+    );
     writeFileSync(
       join(migration, "version-one-migration-receipt.json"),
-      `${canonicalJson({ schemaVersion: 1, sourceSha256, sourceEventCount: events.length, firstSequence: events[0]?.sequence ?? 0, lastSequence: events.at(-1)?.sequence ?? 0, versionTwoChainHead: integrity.lastRecordSha256 ?? "0".repeat(64), migratedAt: paths.clock?.() ?? new Date().toISOString(), result: "migrated" })}\n`,
+      receipt,
       { mode: 0o600, flag: "wx" },
     );
+    const receiptCheck = parseStrictJson(
+      readFileSync(
+        join(migration, "version-one-migration-receipt.json"),
+        "utf8",
+      ),
+    );
+    if (typeof receiptCheck !== "object" || receiptCheck === null)
+      throw new Error("event_history_migration_failed");
+    if (sha256(readFileSync(paths.versionOneFile)) !== sourceSha256)
+      throw new Error("event_history_migration_failed");
+    renameSync(candidateRoot, paths.root);
+    const finalStore = new FileSegmentedAdministrativeEventHistory(paths.root, {
+      lockPath: join(
+        dirname(paths.root),
+        `.${basename(paths.root)}-migration-final.lock`,
+      ),
+      ...(paths.clock === undefined ? {} : { clock: paths.clock }),
+    });
+    if ((await finalStore.verifyIntegrity()).outcome !== "verified")
+      throw new Error("event_history_migration_failed");
     return Object.freeze({
       outcome: "migrated" as const,
       eventCount: events.length,
       sourceSha256,
     });
   } finally {
+    if (existsSync(`${paths.root}.candidate`) && !existsSync(paths.root))
+      rmSync(`${paths.root}.candidate`, { recursive: true, force: true });
     lock.release(handle.token);
   }
 }

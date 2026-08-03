@@ -10,6 +10,7 @@ import {
   validateAdministrativeRequestTarget,
 } from "./administrative-http.js";
 import { HttpError } from "./errors/http-error.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_DASHBOARD_ROUTE = "/admin";
 export const ADMINISTRATIVE_DASHBOARD_ASSET_PREFIX = "/admin/assets/";
@@ -69,16 +70,19 @@ export function registerAdministrativeDashboardRoutes(
   app: Express,
   dependencies: AdministrativeDashboardRouteDependencies,
 ): void {
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ROUTE}`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.read"],
     createShellHandler(dependencies),
   );
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ROUTE}/`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.read.root"],
     createShellHandler(dependencies),
   );
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ASSET_PREFIX}:asset`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.asset.read"],
     createAssetHandler(dependencies),
   );
 }

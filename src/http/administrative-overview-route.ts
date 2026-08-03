@@ -10,6 +10,7 @@ import {
   validateAdministrativeRequestTarget,
 } from "./administrative-http.js";
 import { HttpError } from "./errors/http-error.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_OVERVIEW_ROUTE = "/admin/overview";
 
@@ -30,7 +31,11 @@ export function registerAdministrativeOverviewRoute(
   app: Express,
   dependencies: AdministrativeOverviewRouteDependencies,
 ): void {
-  app.all(ADMINISTRATIVE_OVERVIEW_ROUTE, createHandler(dependencies));
+  registerAdministrativeRoute(
+    app,
+    ["operations.read"],
+    createHandler(dependencies),
+  );
 }
 
 function createHandler(

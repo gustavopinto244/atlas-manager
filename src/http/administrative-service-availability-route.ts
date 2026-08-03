@@ -14,6 +14,7 @@ import type { AdministrativePowerOperationGate } from "./administrative-power-op
 import { createCloudflareAccessAssertionReader } from "./cloudflare-access-assertion-reader.js";
 import { HttpError } from "./errors/http-error.js";
 import { mapAdministrativeAvailability } from "./administrative-service-response.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_SERVICE_AVAILABILITY_ROUTE =
   "/admin/services/:serviceId/availability";
@@ -43,8 +44,13 @@ export function registerAdministrativeServiceAvailabilityRoutes(
   app: Express,
   dependencies: AdministrativeServiceAvailabilityRouteDependencies,
 ): void {
-  app.all(
-    ADMINISTRATIVE_SERVICE_AVAILABILITY_ROUTE,
+  registerAdministrativeRoute(
+    app,
+    [
+      "services.availability.read",
+      "services.availability.update",
+      "services.availability.delete",
+    ],
     createAvailabilityHandler(dependencies),
   );
 }

@@ -255,7 +255,7 @@ func runLifecycle(t *testing.T) []byte {
 func buildRelease(t *testing.T, root, version, commit string) (string, string, string) {
 	t.Helper()
 	source := filepath.Join(root, "source-"+version)
-	for _, path := range []string{"src", "tools"} {
+	for _, path := range []string{"src", "tools", "docs/contracts"} {
 		if err := os.MkdirAll(filepath.Join(source, path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -273,6 +273,11 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 	}
 	if err := writeFile(filepath.Join(source, "package-lock.json"), `{"name":"atlas-manager","version":"`+version+`","lockfileVersion":3,"requires":true,"packages":{}}`, 0o644); err != nil {
 		t.Fatal(err)
+	}
+	for _, name := range []string{"atlas-manager-administrative-api.json", "atlas-manager-release-contract.json"} {
+		if err := writeFile(filepath.Join(source, "docs/contracts", name), "{}\n", 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	tools := map[string]string{"atlas-manager-installer": "installer", "atlas-manager-host-qualification": "qualification", "atlas-manager-runtime-identity-installer": "identity", "atlas-manager-runtime-configuration": "configuration", "atlas-manager-service-lifecycle": "lifecycle"}
 	toolPaths := map[string]string{}

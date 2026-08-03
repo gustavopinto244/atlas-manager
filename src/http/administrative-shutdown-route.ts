@@ -31,6 +31,7 @@ import {
   mapMachineShutdownExecutionResponse,
   mapMachineShutdownPreparationResponse,
 } from "./administrative-shutdown-response.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_SHUTDOWN_PREPARATION_ROUTE =
   "/admin/power/shutdown/preparations";
@@ -62,12 +63,14 @@ export function registerAdministrativeShutdownRoutes(
   app: Express,
   dependencies: AdministrativeShutdownRouteDependencies,
 ): void {
-  app.all(
-    ADMINISTRATIVE_SHUTDOWN_PREPARATION_ROUTE,
+  registerAdministrativeRoute(
+    app,
+    ["power.shutdown.prepare"],
     createAdministrativeShutdownHandler("preparation", dependencies),
   );
-  app.all(
-    ADMINISTRATIVE_SHUTDOWN_EXECUTION_ROUTE,
+  registerAdministrativeRoute(
+    app,
+    ["power.shutdown.execute"],
     createAdministrativeShutdownHandler("execution", dependencies),
   );
 }

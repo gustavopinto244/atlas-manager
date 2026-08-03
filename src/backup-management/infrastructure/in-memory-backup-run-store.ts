@@ -9,6 +9,13 @@ export class InMemoryBackupRunStore implements BackupRunStore {
   readonly #runs = new Map<string, BackupRun>();
   readonly #started = new Map<string, BackupRun>();
 
+  public allocateNextSequence(): Promise<number> {
+    const all = [...this.#runs.values(), ...this.#started.values()];
+    return Promise.resolve(
+      all.length === 0 ? 1 : Math.max(...all.map((run) => run.sequence)) + 1,
+    );
+  }
+
   public appendStarted(run: BackupRun): Promise<void> {
     if (
       run.status !== "started" ||
@@ -78,20 +85,26 @@ export class InMemoryBackupRunStore implements BackupRunStore {
     return Promise.resolve(Object.freeze(runs.slice(0, limit)));
   }
 
-  public async reconstruct(): Promise<BackupRunStoreSnapshot> {
-    return Object.freeze({
-      runs: await this.query({ limit: 100 }),
-      active: this.#started.size > 0,
-      interrupted: Object.freeze(
-        [...this.#started.values()].map((run) =>
-          Object.freeze({
-            ...run,
-            status: "interrupted" as const,
-            failureCode: "interrupted_run",
-          }),
+  public reconstruct(): Promise<BackupRunStoreSnapshot> {
+    return Promise.resolve(
+      Object.freeze({
+        runs: Object.freeze(
+          [...this.#runs.values()].sort(
+            (left, right) => left.sequence - right.sequence,
+          ),
         ),
-      ),
-    });
+        active: this.#started.size > 0,
+        interrupted: Object.freeze(
+          [...this.#started.values()].map((run) =>
+            Object.freeze({
+              ...run,
+              status: "interrupted" as const,
+              failureCode: "interrupted_run",
+            }),
+          ),
+        ),
+      }),
+    );
   }
 
   private assertSequence(sequence: number): void {

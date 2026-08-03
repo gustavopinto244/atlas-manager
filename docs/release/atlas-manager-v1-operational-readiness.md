@@ -1,10 +1,20 @@
-# v1 operational readiness
+# Atlas Manager v1 operational readiness
 
-The documented lifecycle covers install, verify, mock-administrative
-configuration, disabled replacement, disabled rollback, activation, active
-verification, deactivation, upgrade, release rollback, backup recovery,
-event-history recovery, identity-readiness recovery, and bounded uninstall.
+The `1.0.0-rc.2` software candidate documents the lifecycle for install,
+verify, managed mock-administrative configuration, disabled replacement,
+disabled rollback, activation, active verification, deactivation, upgrade,
+release rollback, backup recovery, event-history recovery, identity-readiness
+recovery, and bounded uninstall.
 
-Replacement and rollback never start the service. Broken history, interrupted
-transactions, stale locks, invalid identity configuration, and unsafe managed
-state fail closed and require operator review.
+Replacement and rollback require an inactive and disabled service, fixed input,
+exact confirmation, an administrator assignment, real Go and TypeScript
+validation, atomic candidates, generation evidence, and a clean transaction.
+They never start or restart the service.
+
+Broken history, interrupted transactions, stale locks, invalid identity
+configuration, modified generations, and unsafe managed state fail closed and
+require operator review.
+
+The final stable-release decision remains separate from physical Atlas
+deployment, real Cloudflare ingress, helper ownership, RTC wake behavior, and
+systemd-logind shutdown acceptance.

@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile, lstat, open } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, lstat, open, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BackupRun } from "../domain/backup-run.js";
 import type {
@@ -14,59 +15,134 @@ const MAX_FILE_BYTES = 32 * 1024 * 1024;
 
 export class FileBackupRunStore implements BackupRunStore {
   readonly #path: string;
-  readonly #memory = new InMemoryBackupRunStore();
-  #loaded = false;
+  #memory = new InMemoryBackupRunStore();
+  #state: "unloaded" | "loading" | "ready" | "failed" = "unloaded";
+  #loading: Promise<void> | undefined;
+  #failure: Error | undefined;
+  #snapshot: Buffer | null | undefined;
 
   public constructor(path: string) {
     this.#path = path;
   }
 
   public async appendStarted(run: BackupRun): Promise<void> {
-    await this.load();
-    validateRun(run, "started");
-    await this.append({ kind: "started", run });
-    await this.#memory.appendStarted(run);
+    await this.withWriterLock(async () => {
+      await this.ensureUsable();
+      validateRun(run, "started");
+      if (run.sequence !== (await this.allocateNextSequence()))
+        throw new Error("backup_sequence_conflict");
+      try {
+        await this.#memory.appendStarted(run);
+      } catch (error) {
+        this.fail(error);
+        throw this.failureError();
+      }
+      try {
+        await this.append({ kind: "started", run });
+      } catch (error) {
+        this.fail(error);
+        throw this.failureError();
+      }
+      await this.refreshSnapshot();
+    });
   }
 
   public async appendTerminal(run: BackupRun): Promise<void> {
-    await this.load();
-    validateRun(run, "terminal");
-    await this.append({ kind: "terminal", run });
-    await this.#memory.appendTerminal(run);
+    await this.withWriterLock(async () => {
+      await this.ensureUsable();
+      validateRun(run, "terminal");
+      try {
+        await this.#memory.appendTerminal(run);
+      } catch (error) {
+        this.fail(error);
+        throw this.failureError();
+      }
+      try {
+        await this.append({ kind: "terminal", run });
+      } catch (error) {
+        this.fail(error);
+        throw this.failureError();
+      }
+      await this.refreshSnapshot();
+    });
+  }
+
+  public async allocateNextSequence(): Promise<number> {
+    await this.ensureUsable();
+    const snapshot = await this.#memory.reconstruct();
+    const sequences = snapshot.runs.map((run) => run.sequence);
+    const active = snapshot.interrupted.map((run) => run.sequence);
+    const all = [...sequences, ...active];
+    return all.length === 0 ? 1 : Math.max(...all) + 1;
   }
 
   public async getByRunId(runId: string): Promise<BackupRun | null> {
-    await this.load();
+    await this.ensureUsable();
     return this.#memory.getByRunId(runId);
   }
   public async query(input?: BackupRunQuery): Promise<readonly BackupRun[]> {
-    await this.load();
+    await this.ensureUsable();
     return this.#memory.query(input);
   }
   public async reconstruct(): Promise<BackupRunStoreSnapshot> {
-    await this.load();
+    await this.ensureUsable();
     return this.#memory.reconstruct();
   }
 
   async load(): Promise<void> {
-    if (this.#loaded) return;
-    this.#loaded = true;
-    let data: Buffer;
-    try {
-      const info = await lstat(this.#path);
-      if (!info.isFile() || info.nlink !== 1 || info.mode & 0o022)
-        throw new Error("backup_run_history_unsafe");
-      if (info.size > MAX_FILE_BYTES)
-        throw new Error("backup_run_history_too_large");
-      data = await readFile(this.#path);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error as NodeJS.ErrnoException).code === "ENOENT"
-      )
-        return;
+    await this.ensureUsable();
+  }
+
+  private async ensureUsable(): Promise<void> {
+    if (this.#state === "failed") throw this.failureError();
+    if (this.#state === "loading") {
+      await this.#loading;
+      return this.ensureUsable();
+    }
+    if (this.#state === "unloaded") {
+      this.#state = "loading";
+      this.#loading = this.reconstructFromDisk();
+      try {
+        await this.#loading;
+        this.#state = "ready";
+      } catch (error) {
+        this.fail(error);
+        throw this.failureError();
+      } finally {
+        this.#loading = undefined;
+      }
+      return;
+    }
+    const current = await readHistory(this.#path);
+    if (sameBytes(current, this.#snapshot ?? null)) return;
+    if (
+      this.#snapshot !== undefined &&
+      !isAppendOnlyChange(this.#snapshot, current)
+    ) {
+      const error = new Error("backup_run_history_corrupt");
+      this.fail(error);
       throw error;
     }
+    try {
+      await this.reconstructFromData(current);
+    } catch (error) {
+      this.fail(error);
+      throw this.failureError();
+    }
+  }
+
+  private async reconstructFromDisk(): Promise<void> {
+    const data = await readHistory(this.#path);
+    await this.reconstructFromData(data);
+  }
+
+  private async reconstructFromData(data: Buffer | null): Promise<void> {
+    if (data === null) {
+      this.#snapshot = null;
+      this.#memory = new InMemoryBackupRunStore();
+      return;
+    }
+    const memory = new InMemoryBackupRunStore();
     const lines = data
       .toString("utf8")
       .split("\n")
@@ -77,8 +153,43 @@ export class FileBackupRunStore implements BackupRunStore {
       const entry = parseStrictJson(line);
       if (!isEntry(entry)) throw new Error("backup_run_history_corrupt");
       validateRun(entry.run, entry.kind);
-      if (entry.kind === "started") await this.#memory.appendStarted(entry.run);
-      else await this.#memory.appendTerminal(entry.run);
+      if (entry.kind === "started") await memory.appendStarted(entry.run);
+      else await memory.appendTerminal(entry.run);
+    }
+    this.#memory = memory;
+    this.#snapshot = Buffer.from(data);
+  }
+
+  private async refreshSnapshot(): Promise<void> {
+    const data = await readHistory(this.#path);
+    this.#snapshot = data === null ? null : Buffer.from(data);
+  }
+
+  private async withWriterLock<T>(operation: () => Promise<T>): Promise<T> {
+    const lockPath = `${this.#path}.lock`;
+    let acquired = false;
+    try {
+      await mkdir(dirname(this.#path), { recursive: true, mode: 0o700 });
+      await mkdir(lockPath, { mode: 0o700 });
+      acquired = true;
+      await writeFile(
+        `${lockPath}/owner.json`,
+        JSON.stringify({ schemaVersion: 1, ownerToken: randomToken() }) + "\n",
+        { mode: 0o600, flag: "wx" },
+      );
+    } catch (error) {
+      if (acquired) await rm(lockPath, { recursive: true, force: true });
+      if (
+        error instanceof Error &&
+        (error as NodeJS.ErrnoException).code === "EEXIST"
+      )
+        throw new Error("backup_run_history_busy", { cause: error });
+      throw new Error("backup_run_history_unavailable", { cause: error });
+    }
+    try {
+      return await operation();
+    } finally {
+      await rm(lockPath, { recursive: true, force: false });
     }
   }
 
@@ -106,8 +217,69 @@ export class FileBackupRunStore implements BackupRunStore {
     const data = Buffer.from(`${JSON.stringify(entry)}\n`, "utf8");
     if (data.length > MAX_LINE_BYTES)
       throw new Error("backup_run_history_line_too_large");
-    await appendFile(this.#path, data, { mode: 0o600 });
+    const handle = await open(this.#path, "a");
+    try {
+      await handle.write(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
   }
+
+  private failureError(): Error {
+    return this.#failure ?? new Error("backup_run_history_unavailable");
+  }
+
+  private fail(error: unknown): void {
+    this.#failure =
+      error instanceof Error
+        ? error
+        : new Error("backup_run_history_unavailable");
+    this.#state = "failed";
+  }
+}
+
+async function readHistory(path: string): Promise<Buffer | null> {
+  try {
+    const info = await lstat(path);
+    if (!info.isFile() || info.nlink !== 1 || info.mode & 0o022)
+      throw new Error("backup_run_history_unsafe");
+    if (info.size > MAX_FILE_BYTES)
+      throw new Error("backup_run_history_too_large");
+    return await readFile(path);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    )
+      return null;
+    throw error;
+  }
+}
+
+function sameBytes(
+  left: Buffer | null | undefined,
+  right: Buffer | null,
+): boolean {
+  if (left === undefined || left === null || right === null)
+    return left === right;
+  return left.equals(right);
+}
+
+function isAppendOnlyChange(
+  previous: Buffer | null,
+  current: Buffer | null,
+): boolean {
+  if (previous === null) return current !== null;
+  return (
+    current !== null &&
+    current.length >= previous.length &&
+    current.subarray(0, previous.length).equals(previous)
+  );
+}
+
+function randomToken(): string {
+  return randomUUID().replaceAll("-", "");
 }
 
 function isEntry(

@@ -31,6 +31,7 @@ export interface BackupAdapter {
 }
 
 export interface BackupRunStore {
+  allocateNextSequence(): Promise<number>;
   appendStarted(run: BackupRun): Promise<void>;
   appendTerminal(run: BackupRun): Promise<void>;
   getByRunId(runId: string): Promise<BackupRun | null>;

@@ -14,6 +14,20 @@ describe("administrative public origin", () => {
   });
 
   it.each([
+    "evil.example@atlas.example.com",
+    "atlas.example.com/extra",
+    "atlas.example.com?x=1",
+    "atlas.example.com#fragment",
+    "atlas.example.com:443",
+    " atlas.example.com",
+    "atlas.example.com,evil.example",
+    "atlas.example.com\nX-Injected: value",
+  ])("rejects non-authority host syntax: %s", (host) => {
+    const origin = parseAdministrativePublicOrigin("https://atlas.example.com");
+    expect(administrativeAuthorityMatches(host, origin)).toBe(false);
+  });
+
+  it.each([
     "http://atlas.example.com",
     "https://user:pass@atlas.example.com",
     "https://atlas.example.com/admin",

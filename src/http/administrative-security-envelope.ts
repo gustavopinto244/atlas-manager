@@ -79,4 +79,47 @@ function validateFetchMetadata(request: Request): void {
       "administrative_browser_context_rejected",
       "Administrative request rejected",
     );
+  if (
+    destination !== undefined &&
+    ![
+      "",
+      "document",
+      "empty",
+      "embed",
+      "font",
+      "image",
+      "manifest",
+      "media",
+      "object",
+      "report",
+      "script",
+      "serviceworker",
+      "sharedworker",
+      "style",
+      "worker",
+      "xslt",
+    ].includes(destination)
+  )
+    throw new HttpError(
+      403,
+      "administrative_browser_context_rejected",
+      "Administrative request rejected",
+    );
+  if (mode === "navigate" && destination !== "document")
+    throw new HttpError(
+      403,
+      "administrative_browser_context_rejected",
+      "Administrative request rejected",
+    );
+  if (
+    (mode === "cors" || mode === "same-origin") &&
+    destination !== undefined &&
+    destination !== "" &&
+    destination !== "empty"
+  )
+    throw new HttpError(
+      403,
+      "administrative_browser_context_rejected",
+      "Administrative request rejected",
+    );
 }

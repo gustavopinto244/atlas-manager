@@ -1,6 +1,6 @@
 {
   "name": "atlas-manager",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Self-hosted management and automation platform for the Atlas homelab server.",
   "private": true,
   "type": "module",
@@ -17,7 +17,12 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "release:generate-contract": "node scripts/generate-release-contract.mjs",
+    "release:generate-dependencies": "node scripts/generate-production-dependencies.mjs",
+    "release:generate-evidence": "node scripts/generate-release-evidence.mjs",
+    "release:generate-traceability": "node scripts/generate-requirements-traceability.mjs",
+    "release:validate": "node scripts/validate-release-artifacts.mjs"
   },
   "keywords": [
     "homelab",

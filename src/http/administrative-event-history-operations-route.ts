@@ -24,6 +24,7 @@ import type {
   EventHistoryRetentionSummary,
 } from "../event-history/application/ports/administrative-event-history-operations.js";
 import { SegmentedEventHistoryError } from "../event-history/infrastructure/file-segmented-administrative-event-history.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_PREFIX =
   "/admin/event-history";
@@ -64,17 +65,62 @@ export function registerAdministrativeEventHistoryOperationsRoutes(
   app: Express,
   dependencies: AdministrativeEventHistoryOperationsRouteDependencies,
 ): void {
-  const routes: readonly [string, RouteKind][] = [
-    ["/admin/event-history/integrity", "integrity"],
-    ["/admin/event-history/rotations", "rotation"],
-    ["/admin/event-history/retention", "retention"],
-    ["/admin/event-history/retention/prunes", "segmentPrune"],
-    ["/admin/event-history/exports/retention/prunes", "exportPrune"],
-    ["/admin/event-history/exports", "exports"],
-    ["/admin/event-history/exports/:exportId/content", "download"],
-    ["/admin/event-history/exports/:exportId", "export"],
+  const routes: readonly [string, RouteKind, string][] = [
+    [
+      "event_history.integrity.read",
+      "integrity",
+      "/admin/event-history/integrity",
+    ],
+    [
+      "event_history.rotation.run",
+      "rotation",
+      "/admin/event-history/rotations",
+    ],
+    [
+      "event_history.retention.read",
+      "retention",
+      "/admin/event-history/retention",
+    ],
+    [
+      "event_history.retention.update",
+      "retention",
+      "/admin/event-history/retention",
+    ],
+    [
+      "event_history.retention.prune",
+      "segmentPrune",
+      "/admin/event-history/retention/prunes",
+    ],
+    [
+      "event_history.exports.prune",
+      "exportPrune",
+      "/admin/event-history/exports/retention/prunes",
+    ],
+    ["event_history.exports.read", "exports", "/admin/event-history/exports"],
+    ["event_history.exports.create", "exports", "/admin/event-history/exports"],
+    [
+      "event_history.export.download",
+      "download",
+      "/admin/event-history/exports/:exportId/content",
+    ],
+    [
+      "event_history.export.read",
+      "export",
+      "/admin/event-history/exports/:exportId",
+    ],
   ];
-  for (const [path, kind] of routes) app.all(path, handler(dependencies, kind));
+  const grouped = new Map<string, { ids: string[]; kind: RouteKind }>();
+  for (const [routeId, kind, path] of routes) {
+    const existing = grouped.get(path);
+    if (existing === undefined) grouped.set(path, { ids: [routeId], kind });
+    else existing.ids.push(routeId);
+  }
+  for (const value of grouped.values())
+    registerAdministrativeRoute(
+      app,
+      value.ids,
+      handler(dependencies, value.kind),
+    );
 }
 
 type RouteKind =

@@ -34,7 +34,10 @@ import type { AdministrativeBackupsRouteDependencies } from "./administrative-ba
 import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
 import type { AdministrativeSecurityStatusRouteDependencies } from "./administrative-security-status-route.js";
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
-import { ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "./administrative-route-security-catalog.js";
+import {
+  ADMINISTRATIVE_ROUTE_SECURITY_CATALOG,
+  expectedAdministrativeRouteIds,
+} from "./administrative-route-security-catalog.js";
 
 export interface AdministrativeRuntime {
   readonly eventHistory?: AdministrativeEventHistoryRouteDependencies;
@@ -47,6 +50,7 @@ export interface AdministrativeRuntime {
   readonly backups?: AdministrativeBackupsRouteDependencies;
   readonly eventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
   readonly securityStatus?: AdministrativeSecurityStatusRouteDependencies;
+  readonly routeCatalogStatus: Readonly<{ markReconciled(): void }>;
 }
 
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
@@ -93,6 +97,52 @@ export function createAdministrativeRuntime(
       configuration: cloudflareAccess,
       clock,
     });
+  let routeCatalogReconciled = false;
+  const routeCatalogStatus = Object.freeze({
+    markReconciled: () => {
+      routeCatalogReconciled = true;
+    },
+  });
+  const enabledActivationFlags = [
+    ...(config.administrativeDashboardEnabled
+      ? ["ADMINISTRATIVE_DASHBOARD_ENABLED"]
+      : []),
+    ...(config.administrativeEventHistoryHttpEnabled
+      ? ["ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeEventHistoryOperationsHttpEnabled
+      ? ["ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeWakeAlarmHttpEnabled
+      ? ["ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeShutdownHttpEnabled
+      ? ["ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeServiceManagementHttpEnabled
+      ? ["ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeServiceAvailabilityHttpEnabled
+      ? ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeOverviewHttpEnabled
+      ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeBackupHttpEnabled
+      ? ["ADMINISTRATIVE_BACKUP_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeSecurityStatusHttpEnabled
+      ? ["ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED"]
+      : []),
+  ];
+  const enabledRouteCount = expectedAdministrativeRouteIds(
+    enabledActivationFlags,
+  ).length;
+  const activationFlagCount = new Set(
+    ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.map(
+      (descriptor) => descriptor.activationFlag,
+    ),
+  ).size;
   const securityPostureReader = Object.freeze({
     execute: async (): Promise<unknown> => {
       const identityReadiness: AdministrativeIdentityReadiness =
@@ -100,14 +150,18 @@ export function createAdministrativeRuntime(
       return Object.freeze({
         identityReadiness,
         routeCatalog: Object.freeze({
-          reconciled: true,
-          routeCount: ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.length,
+          reconciled: routeCatalogReconciled,
+          routeCount: enabledRouteCount,
         }),
-        featureCounts: Object.freeze({ enabled: 1, disabled: 2 }),
-        loopbackBinding: true,
+        featureCounts: Object.freeze({
+          enabled: enabledActivationFlags.length,
+          disabled: activationFlagCount - enabledActivationFlags.length,
+        }),
+        loopbackBinding: config.host === "127.0.0.1",
         noApplicationSession: true,
         corsDisabled: true,
-        auditAvailable: true,
+        trustProxyDisabled: true,
+        auditAvailable: eventHistory !== undefined,
       });
     },
   });
@@ -233,7 +287,7 @@ export function createAdministrativeRuntime(
               execute: () => Promise.resolve({ status: "ok" }),
             },
             applicationVersion:
-              compositionDependencies.applicationVersion ?? "1.0.0-rc.1",
+              compositionDependencies.applicationVersion ?? "1.0.0-rc.2",
           }),
         }
       : {}),
@@ -279,5 +333,6 @@ export function createAdministrativeRuntime(
           }),
         }
       : {}),
+    routeCatalogStatus,
   });
 }

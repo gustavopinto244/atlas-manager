@@ -28,6 +28,7 @@ import {
   type WakeAlarmObservationHttpResponse,
 } from "./administrative-wake-alarm-response.js";
 import { HttpError } from "./errors/http-error.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_WAKE_ALARM_ROUTE = "/admin/power/wake-alarm";
 export const ADMINISTRATIVE_WAKE_ALARM_MAX_BODY_BYTES = 512;
@@ -53,8 +54,9 @@ export function registerAdministrativeWakeAlarmRoute(
   app: Express,
   dependencies: AdministrativeWakeAlarmRouteDependencies,
 ): void {
-  app.all(
-    ADMINISTRATIVE_WAKE_ALARM_ROUTE,
+  registerAdministrativeRoute(
+    app,
+    ["power.wake.read", "power.wake.update", "power.wake.delete"],
     createAdministrativeWakeAlarmHandler(dependencies),
   );
 }

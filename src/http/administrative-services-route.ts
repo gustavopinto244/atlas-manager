@@ -22,6 +22,7 @@ import {
   mapAdministrativeServiceList,
 } from "./administrative-service-response.js";
 import type { mapAdministrativeService } from "./administrative-service-response.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_SERVICES_ROUTE = "/admin/services";
 export const ADMINISTRATIVE_SERVICE_MAX_BODY_BYTES = 512;
@@ -55,16 +56,23 @@ export function registerAdministrativeServicesRoutes(
   app: Express,
   dependencies: AdministrativeServicesRouteDependencies,
 ): void {
-  app.all(ADMINISTRATIVE_SERVICES_ROUTE, createServicesHandler(dependencies));
-  app.all(
-    `${ADMINISTRATIVE_SERVICES_ROUTE}/:serviceId`,
+  registerAdministrativeRoute(
+    app,
+    ["services.list"],
+    createServicesHandler(dependencies),
+  );
+  registerAdministrativeRoute(
+    app,
+    ["services.read"],
     createServiceHandler(dependencies),
   );
-  for (const operation of ["start", "stop", "restart"] as const)
-    app.all(
-      `${ADMINISTRATIVE_SERVICES_ROUTE}/:serviceId/actions/${operation}`,
+  for (const operation of ["start", "stop", "restart"] as const) {
+    registerAdministrativeRoute(
+      app,
+      [`services.${operation}`],
       createAdministrativeServiceActionHandler(operation, dependencies),
     );
+  }
 }
 
 function createServicesHandler(

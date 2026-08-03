@@ -63,11 +63,7 @@ export class RunRegisteredBackup {
     try {
       const requestedAt = this.#clock.now().toISOString();
       const startedAt = this.#clock.now().toISOString();
-      const existing = await this.#runStore.query({ limit: 100 });
-      const sequence =
-        existing.length === 0
-          ? 1
-          : Math.max(...existing.map((run) => run.sequence)) + 1;
+      const sequence = await this.#runStore.allocateNextSequence();
       const started = createStartedBackupRun({
         sequence,
         runId: randomUUID(),

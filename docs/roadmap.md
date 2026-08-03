@@ -25,8 +25,8 @@ dates.
 
 ## Current phase
 
-Atlas Manager is beginning v0.6 — Power management after completing the v0.5
-Docker-management milestone.
+Atlas Manager is qualifying the `1.0.0-rc.2` software candidate. Physical
+Atlas deployment and real power effects remain separately approved gates.
 
 Completed milestones include:
 
@@ -52,8 +52,9 @@ Docker-specific health and resource details, start/stop/restart control,
 dispatching integration, service-management composition integration,
 availability scheduling integration, and file-backed scheduler coverage.
 
-The administrative API and server-management capabilities have not yet been
-implemented.
+The administrative API, dashboard, backup orchestration, event history, and
+managed deployment lifecycle are implemented in the current software
+candidate. The historical milestone text below is retained as project history.
 
 ## Roadmap principles
 
@@ -464,12 +465,13 @@ Protect administrative capabilities before broader remote use.
 The authentication strategy should be recorded through an ADR before
 implementation.
 
-ADR-003 and Issue #236 establish the mock-first foundation under this
-milestone, but v0.9 remains active. Issue #238 selects the production-shaped
+ADR-003 and Issue #236 established the mock-first foundation under this
+milestone. Issue #238 selects the production-shaped
 identity mechanism and Issue #240 delivers the first protected read-only HTTP
-route. Remaining work includes broader protected delivery, verified
+route. The later Issues delivered broader protected delivery, verified
 transport/proxy configuration, deployment ownership, and operator recovery
-procedures.
+procedures. The v0.9 milestone is complete in software; the current candidate
+is `1.0.0-rc.2`.
 
 Issue #238 delivers the production-shaped identity-verification foundation.
 Cloudflare Access application JWTs are checked at the application boundary
@@ -479,9 +481,8 @@ subjects. Issue #240 adds the first protected HTTP endpoint, explicit route
 activation, loopback-only binding, request URL/body/query bounds, a global
 60-per-60-second admission limit, four-request concurrency control, and
 restrictive response headers. The route remains read-only and does not add
-CORS, trusted-proxy behavior, power routes, or real effects. v0.9 remains
-active because broader protected delivery and deployment validation are
-deferred. v0.6 also remains active: no real helper or real power effect is
+CORS, trusted-proxy behavior, power routes, or real effects. The historical
+v0.6 power boundary remains intact: no real helper or real power effect is
 enabled.
 
 ## v1.0 — Initial stable release
@@ -808,9 +809,11 @@ The administrative route catalog, transport envelope, identity readiness,
 configuration replacement/rollback, and software release qualification are
 implemented.
 
-## v1.0 software release candidate — qualified
+## v1.0 software release candidate — qualification pending mandatory gates
 
-`1.0.0-rc.1` is qualified as a software-only candidate.
+`1.0.0-rc.2` is the current software-only candidate. Qualification requires
+the mandatory Node, Go, bundle, and rehearsal gates; the local environment
+must not claim qualification when one of those gates is unavailable.
 
 ## v1.0 stable physical release — pending physical Atlas qualification
 

@@ -1,6 +1,9 @@
 package administrativeconfiguration
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateInputRejectsDuplicateAndUnknownFields(t *testing.T) {
 	valid := ExampleInputBytes()
@@ -36,6 +39,31 @@ func TestEnvironmentKeepsPowerSurfacesDisabled(t *testing.T) {
 		if !contains(environment, required) {
 			t.Fatalf("profile missing %q", required)
 		}
+	}
+}
+
+func TestStateRejectsIncompleteGenerationEvidence(t *testing.T) {
+	base := State{
+		SchemaVersion:       1,
+		Profile:             ProfileName,
+		ConfigurationSHA256: strings.Repeat("a", 64),
+		SourceInputSHA256:   strings.Repeat("b", 64),
+		ApplicationVersion:  "1.0.0-rc.2",
+		SourceCommit:        strings.Repeat("c", 40),
+		Status:              "installed",
+		CurrentGeneration:   1,
+	}
+	if !validState(base) {
+		t.Fatal("first generation state rejected")
+	}
+	base.PreviousGeneration = 1
+	if validState(base) {
+		t.Fatal("equal current and previous generations accepted")
+	}
+	base.PreviousGeneration = 0
+	base.PreviousConfigurationSHA256 = strings.Repeat("d", 64)
+	if validState(base) {
+		t.Fatal("previous hash without previous generation accepted")
 	}
 }
 
