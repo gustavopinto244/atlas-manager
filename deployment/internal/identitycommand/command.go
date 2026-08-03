@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -20,6 +21,18 @@ const (
 
 type Result struct {
 	ExitCode int
+	Stdout   []byte
+	Stderr   []byte
+}
+
+type UserAddCapabilities struct {
+	System       bool
+	NoCreateHome bool
+	NoUserGroup  bool
+	GID          bool
+	HomeDir      bool
+	Shell        bool
+	NoLogInit    bool
 }
 
 type Executor interface {
@@ -39,20 +52,85 @@ func (OSExecutor) Run(ctx context.Context, path string, args []string) Result {
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
-		return Result{ExitCode: exitCode(err)}
+		return Result{ExitCode: exitCode(err), Stdout: stdout.data, Stderr: stderr.data}
 	}
 	if stdout.overflow || stderr.overflow {
-		return Result{ExitCode: -2}
+		return Result{ExitCode: -2, Stdout: stdout.data, Stderr: stderr.data}
 	}
-	return Result{ExitCode: 0}
+	return Result{ExitCode: 0, Stdout: stdout.data, Stderr: stderr.data}
 }
 
 func PrimaryGroupArguments() []string { return []string{"--system", "atlas-manager"} }
 
 func HelperGroupArguments() []string { return []string{"--system", "atlas-manager-power"} }
 
-func UserArguments() []string {
-	return []string{"--system", "--no-create-home", "--no-user-group", "--no-log-init", "--gid", "atlas-manager", "--home-dir", "/var/lib/atlas-manager", "--shell", "/usr/sbin/nologin", "--key", "CREATE_MAIL_SPOOL=no", "atlas-manager"}
+func UserArguments(capabilities UserAddCapabilities) []string {
+	arguments := []string{"--system", "--no-create-home", "--no-user-group"}
+	if capabilities.NoLogInit {
+		arguments = append(arguments, "--no-log-init")
+	}
+	arguments = append(arguments, "--gid", "atlas-manager", "--home-dir", "/var/lib/atlas-manager", "--shell", "/usr/sbin/nologin", "atlas-manager")
+	return arguments
+}
+
+func ProbeUserAdd(ctx context.Context, executor Executor) (UserAddCapabilities, error) {
+	result := executor.Run(ctx, UserTool, []string{"--help"})
+	if result.ExitCode != 0 || !utf8.Valid(result.Stdout) || !utf8.Valid(result.Stderr) {
+		return UserAddCapabilities{}, errors.New("account_tool_capability_unsupported")
+	}
+	output := string(result.Stdout) + "\n" + string(result.Stderr)
+	capabilities := UserAddCapabilities{
+		System:       strings.Contains(output, "--system"),
+		NoCreateHome: strings.Contains(output, "--no-create-home"),
+		NoUserGroup:  strings.Contains(output, "--no-user-group"),
+		GID:          strings.Contains(output, "--gid"),
+		HomeDir:      strings.Contains(output, "--home-dir"),
+		Shell:        strings.Contains(output, "--shell"),
+		NoLogInit:    strings.Contains(output, "--no-log-init"),
+	}
+	if !capabilities.System || !capabilities.NoCreateHome || !capabilities.NoUserGroup || !capabilities.GID || !capabilities.HomeDir || !capabilities.Shell {
+		return UserAddCapabilities{}, errors.New("account_tool_capability_unsupported")
+	}
+	return capabilities, nil
+}
+
+func ValidateMailSpoolDefault(ctx context.Context, executor Executor) error {
+	result := executor.Run(ctx, UserTool, []string{"-D"})
+	if result.ExitCode != 0 || !utf8.Valid(result.Stdout) || !utf8.Valid(result.Stderr) {
+		return errors.New("mail_spool_default_unsafe")
+	}
+	output := string(result.Stdout) + string(result.Stderr)
+	count := 0
+	seen := map[string]struct{}{}
+	allowed := map[string]struct{}{
+		"GROUP": {}, "HOME": {}, "INACTIVE": {}, "EXPIRE": {}, "SHELL": {}, "SKEL": {}, "CREATE_MAIL_SPOOL": {},
+	}
+	for _, line := range strings.Split(output, "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "=")
+		if len(parts) != 2 || parts[0] == "" || strings.TrimSpace(parts[0]) != parts[0] || strings.TrimSpace(parts[1]) != parts[1] {
+			return errors.New("mail_spool_default_unsafe")
+		}
+		if _, ok := allowed[parts[0]]; !ok {
+			return errors.New("mail_spool_default_unsafe")
+		}
+		if _, ok := seen[parts[0]]; ok {
+			return errors.New("mail_spool_default_unsafe")
+		}
+		seen[parts[0]] = struct{}{}
+		if parts[0] == "CREATE_MAIL_SPOOL" {
+			count++
+			if parts[1] != "no" {
+				return errors.New("mail_spool_default_unsafe")
+			}
+		}
+	}
+	if count != 1 {
+		return errors.New("mail_spool_default_unsafe")
+	}
+	return nil
 }
 
 func UserDeleteArguments() []string { return []string{"atlas-manager"} }

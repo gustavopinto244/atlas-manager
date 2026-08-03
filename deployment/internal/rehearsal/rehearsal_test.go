@@ -57,6 +57,12 @@ type accountExecutor struct {
 }
 
 func (executor *accountExecutor) Run(_ context.Context, path string, args []string) identitycommand.Result {
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "--help" {
+		return identitycommand.Result{Stdout: []byte("--system --no-create-home --no-user-group --gid --home-dir --shell\n")}
+	}
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "-D" {
+		return identitycommand.Result{Stdout: []byte("CREATE_MAIL_SPOOL=no\n")}
+	}
 	executor.seen = append(executor.seen, path+" "+strings.Join(args, " "))
 	if path == executor.failPath || path+" "+strings.Join(args, " ") == executor.failCommand {
 		return identitycommand.Result{ExitCode: 1}
@@ -74,7 +80,7 @@ func (executor *accountExecutor) Run(_ context.Context, path string, args []stri
 			return identitycommand.Result{ExitCode: 2}
 		}
 	} else if path == identitycommand.UserTool {
-		if strings.Join(args, " ") != strings.Join(identitycommand.UserArguments(), " ") {
+		if strings.Join(args, " ") != strings.Join(identitycommand.UserArguments(identitycommand.UserAddCapabilities{System: true, NoCreateHome: true, NoUserGroup: true, GID: true, HomeDir: true, Shell: true}), " ") {
 			return identitycommand.Result{ExitCode: 2}
 		}
 		if err := executor.appendPasswd("atlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"); err != nil {
@@ -463,6 +469,8 @@ func identityPaths(root, bundleRoot string) identitypreparation.Paths {
 	paths.StateFile = filepath.Join(paths.StateDirectory, "state.json")
 	paths.Journal = filepath.Join(paths.StateDirectory, "transaction.json")
 	paths.Lock = filepath.Join(root, "run/atlas-manager-identity-preparation.lock")
+	paths.MailSpoolPaths = []string{filepath.Join(root, "var/mail/atlas-manager"), filepath.Join(root, "var/spool/mail/atlas-manager")}
+	paths.LoginLogPaths = []string{filepath.Join(root, "var/log/lastlog"), filepath.Join(root, "var/log/faillog"), filepath.Join(root, "var/log/tallylog")}
 	return paths
 }
 

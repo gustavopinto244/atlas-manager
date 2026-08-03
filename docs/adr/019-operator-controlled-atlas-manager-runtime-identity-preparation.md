@@ -41,13 +41,24 @@ remains blocked. The installer does not repair or remove unexpected account
 database entries.
 
 Before mutation, fixed account-management binaries, account files, deployment
-absence, and the nonblocking preparation lock are validated. A private,
+absence, and the nonblocking preparation lock are validated. The fixed
+`useradd` capability set is probed without mutation and the effective
+`useradd -D` defaults are strictly parsed; exactly one
+`CREATE_MAIL_SPOOL=no` is required. Required account options must be
+available. `--no-log-init` is optional and is passed only when supported; when
+it is unavailable, fixed legacy login-log paths must be absent. The installer
+never changes `/etc/default/useradd` or `/etc/login.defs`.
+
+A private,
 synchronized transaction journal is written before the first command and
 updated after each verified transition. A successfully failed transaction may
 remove only resources created by that invocation, in reverse order. A changed
 or ambiguous resource stops rollback and preserves the journal for manual
-review. Restart recovery and public identity deletion are deliberately not
-provided.
+review. The report retains the original failing stage and never treats the
+operation's own held lock as a conflict. Complete rollback is reported only
+after all account, shadow, home, mail-spool, managed-state, candidate, journal,
+and lock postconditions are verified; otherwise recovery is required.
+Restart recovery and public identity deletion are deliberately not provided.
 
 Managed preparation state records only the fixed names, private numeric IDs,
 source commit, and bundle version. Reports and logs never expose IDs, account

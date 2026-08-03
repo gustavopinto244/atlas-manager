@@ -2,6 +2,7 @@ package identitycommand
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +26,7 @@ func TestFixedAccountCommandArguments(t *testing.T) {
 	}{
 		{"primary group", PrimaryGroupTool, PrimaryGroupArguments(), []string{"--system", "atlas-manager"}},
 		{"helper group", HelperGroupTool, HelperGroupArguments(), []string{"--system", "atlas-manager-power"}},
-		{"runtime user", UserTool, UserArguments(), []string{"--system", "--no-create-home", "--no-user-group", "--no-log-init", "--gid", "atlas-manager", "--home-dir", "/var/lib/atlas-manager", "--shell", "/usr/sbin/nologin", "--key", "CREATE_MAIL_SPOOL=no", "atlas-manager"}},
+		{"runtime user", UserTool, UserArguments(UserAddCapabilities{System: true, NoCreateHome: true, NoUserGroup: true, GID: true, HomeDir: true, Shell: true, NoLogInit: true}), []string{"--system", "--no-create-home", "--no-user-group", "--no-log-init", "--gid", "atlas-manager", "--home-dir", "/var/lib/atlas-manager", "--shell", "/usr/sbin/nologin", "atlas-manager"}},
 		{"user rollback", UserDeleteTool, UserDeleteArguments(), []string{"atlas-manager"}},
 		{"helper rollback", GroupDeleteTool, HelperGroupDeleteArguments(), []string{"atlas-manager-power"}},
 		{"primary rollback", GroupDeleteTool, PrimaryGroupDeleteArguments(), []string{"atlas-manager"}},
@@ -46,4 +47,55 @@ func TestFixedAccountCommandArguments(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProbeUserAddCapabilitiesAndMailDefaults(t *testing.T) {
+	executor := &recordingOutputExecutor{
+		help:     "--system --no-create-home --no-user-group --gid --home-dir --shell --no-log-init",
+		defaults: "CREATE_MAIL_SPOOL=no\n",
+	}
+	capabilities, err := ProbeUserAdd(context.Background(), executor)
+	if err != nil || !capabilities.NoLogInit || executor.calls != 1 {
+		t.Fatalf("capabilities=%+v err=%v calls=%d", capabilities, err, executor.calls)
+	}
+	if err := ValidateMailSpoolDefault(context.Background(), executor); err != nil || executor.calls != 2 {
+		t.Fatalf("mail default err=%v calls=%d", err, executor.calls)
+	}
+}
+
+func TestProbeUserAddRejectsMissingRequiredCapability(t *testing.T) {
+	executor := &recordingOutputExecutor{help: "--system --no-create-home --no-user-group --gid --home-dir"}
+	if _, err := ProbeUserAdd(context.Background(), executor); err == nil {
+		t.Fatal("missing required shell capability accepted")
+	}
+}
+
+func TestValidateMailSpoolDefaultRejectsUnsafeOutput(t *testing.T) {
+	for _, output := range []string{"", "CREATE_MAIL_SPOOL=yes\n", "CREATE_MAIL_SPOOL=no\nCREATE_MAIL_SPOOL=no\n", "CREATE_MAIL_SPOOL =no\n", "UNKNOWN=value\nCREATE_MAIL_SPOOL=no\n", string([]byte{0xff, 0xfe})} {
+		executor := &recordingOutputExecutor{defaults: output}
+		if err := ValidateMailSpoolDefault(context.Background(), executor); err == nil {
+			t.Fatalf("unsafe defaults accepted: %q", output)
+		}
+	}
+}
+
+func TestValidateMailSpoolDefaultRejectsOversizedOutput(t *testing.T) {
+	executor := &recordingOutputExecutor{defaults: strings.Repeat("A", OutputLimit+1)}
+	if err := ValidateMailSpoolDefault(context.Background(), executor); err == nil {
+		t.Fatal("oversized defaults accepted")
+	}
+}
+
+type recordingOutputExecutor struct {
+	help     string
+	defaults string
+	calls    int
+}
+
+func (executor *recordingOutputExecutor) Run(_ context.Context, _ string, args []string) Result {
+	executor.calls++
+	if len(args) == 1 && args[0] == "--help" {
+		return Result{Stdout: []byte(executor.help)}
+	}
+	return Result{Stdout: []byte(executor.defaults)}
 }

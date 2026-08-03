@@ -20,11 +20,26 @@ type fakeAccountExecutor struct {
 	failPath string
 	paths    Paths
 	seen     []string
+	help     string
+	defaults string
+	mail     bool
 }
 
 func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []string) identitycommand.Result {
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "--help" {
+		return identitycommand.Result{Stdout: []byte(executor.help)}
+	}
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "-D" {
+		return identitycommand.Result{Stdout: []byte(executor.defaults)}
+	}
 	name := args[len(args)-1]
 	executor.seen = append(executor.seen, path+" "+strings.Join(args, " "))
+	if path == identitycommand.UserTool && executor.mail {
+		_ = os.MkdirAll(filepath.Dir(executor.paths.MailSpoolPaths[0]), 0o755)
+		if err := os.WriteFile(executor.paths.MailSpoolPaths[0], []byte("residue"), 0o600); err != nil {
+			return identitycommand.Result{ExitCode: 2}
+		}
+	}
 	if name == executor.fail || path == executor.failPath {
 		return identitycommand.Result{ExitCode: 1}
 	}
@@ -95,6 +110,8 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 	paths.StateFile = filepath.Join(paths.StateDirectory, "state.json")
 	paths.Journal = filepath.Join(paths.StateDirectory, "transaction.json")
 	paths.Lock = filepath.Join(root, "run/atlas-manager-identity-preparation.lock")
+	paths.MailSpoolPaths = []string{filepath.Join(root, "var/mail/atlas-manager"), filepath.Join(root, "var/spool/mail/atlas-manager")}
+	paths.LoginLogPaths = []string{filepath.Join(root, "var/log/lastlog"), filepath.Join(root, "var/log/faillog"), filepath.Join(root, "var/log/tallylog")}
 	_ = os.MkdirAll(filepath.Dir(paths.Passwd), 0o755)
 	_ = os.MkdirAll(filepath.Dir(paths.RuntimeHome), 0o755)
 	_ = os.MkdirAll(filepath.Dir(paths.Lock), 0o755)
@@ -102,6 +119,12 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 	executor.passwd = "root:x:0:0:root:/root:/bin/sh\n"
 	executor.group = "root:x:0:\n"
 	executor.shadow = ""
+	if executor.help == "" {
+		executor.help = "  -r, --system\n  -M, --no-create-home\n  -N, --no-user-group\n  -g, --gid GROUP\n  -d, --home-dir HOME_DIR\n  -s, --shell SHELL\n"
+	}
+	if executor.defaults == "" {
+		executor.defaults = "GROUP=100\nHOME=/home\nINACTIVE=-1\nEXPIRE=\nSHELL=/bin/sh\nSKEL=/etc/skel\nCREATE_MAIL_SPOOL=no\n"
+	}
 	_ = os.WriteFile(paths.Passwd, []byte(executor.passwd), 0o600)
 	_ = os.WriteFile(paths.Group, []byte(executor.group), 0o600)
 	_ = os.WriteFile(paths.Shadow, []byte(executor.shadow), 0o600)
@@ -273,8 +296,13 @@ func TestPrepareDisabledRollsBackCurrentAttemptOnUserFailure(t *testing.T) {
 	executor := &fakeAccountExecutor{failPath: identitycommand.UserTool}
 	preparation := testPreparation(t, "preparation_required", executor)
 	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
-	if err != nil || report.Result != "preparation_failed_rolled_back" {
+	if err != nil || report.Result != "preparation_failed_rolled_back" || report.Transaction.Code != "runtime_user_creation_failed_rolled_back" {
 		t.Fatalf("report=%+v err=%v commands=%v group=%q passwd=%q", report, err, executor.seen, executor.group, executor.passwd)
+	}
+	for _, check := range report.Checks {
+		if check.Name == "preparation_lock" && check.Code == "preparation_lock_conflict" {
+			t.Fatal("operation reported its own preparation lock as an external conflict")
+		}
 	}
 	if strings.Contains(executor.group, "atlas-manager:x:") || strings.Contains(executor.group, "atlas-manager-power:x:") {
 		t.Fatalf("created groups remained: %s", executor.group)
@@ -284,6 +312,86 @@ func TestPrepareDisabledRollsBackCurrentAttemptOnUserFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(preparation.paths.Journal); !os.IsNotExist(err) {
 		t.Fatal("journal should be removed after complete rollback")
+	}
+	for _, path := range []string{preparation.paths.StateFile, preparation.paths.StateFile + ".candidate", preparation.paths.Journal + ".candidate", preparation.paths.Lock, preparation.paths.RuntimeHome, preparation.paths.MailSpoolPaths[0], preparation.paths.MailSpoolPaths[1]} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("rollback residue at %s: %v", path, err)
+		}
+	}
+}
+
+func TestPrepareDisabledUsesUbuntuCapabilitySetWithoutNoLogInit(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "prepared" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	for _, command := range executor.seen {
+		if strings.Contains(command, "--no-log-init") || strings.Contains(command, "--key") {
+			t.Fatalf("unsafe legacy argument used: %s", command)
+		}
+	}
+}
+
+func TestPrepareDisabledIncludesNoLogInitOnlyWhenProbed(t *testing.T) {
+	executor := &fakeAccountExecutor{help: "--system --no-create-home --no-user-group --gid --home-dir --shell --no-log-init"}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "prepared" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	for _, command := range executor.seen {
+		if strings.HasPrefix(command, identitycommand.UserTool) && !strings.Contains(command, "--no-log-init") {
+			t.Fatalf("probed optional flag was not used: %s", command)
+		}
+	}
+}
+
+func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], []byte("existing"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "account_log_suppression_unsafe" || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestPrepareDisabledBlocksBeforeGroupsWhenCapabilityIsMissing(t *testing.T) {
+	executor := &fakeAccountExecutor{help: "--system --no-create-home --no-user-group --gid --home-dir"}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "account_tool_capability_unsupported" || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestPrepareDisabledBlocksUnsafeMailSpoolDefaultBeforeGroups(t *testing.T) {
+	for _, defaults := range []string{"GROUP=100\n", "CREATE_MAIL_SPOOL=yes\n", "CREATE_MAIL_SPOOL=no\nCREATE_MAIL_SPOOL=no\n", "CREATE_MAIL_SPOOL =no\n"} {
+		executor := &fakeAccountExecutor{defaults: defaults}
+		preparation := testPreparation(t, "preparation_required", executor)
+		report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+		if err != nil || report.Result != "blocked" || report.Transaction.Code != "mail_spool_default_unsafe" || len(executor.seen) != 0 {
+			t.Fatalf("defaults=%q report=%+v err=%v commands=%v", defaults, report, err, executor.seen)
+		}
+	}
+}
+
+func TestPrepareDisabledReportsRecoveryWhenRollbackLeavesMailResidue(t *testing.T) {
+	executor := &fakeAccountExecutor{failPath: identitycommand.UserTool, mail: true}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "preparation_failed_recovery_required" || report.Transaction.Code != "runtime_user_creation_failed_recovery_required" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	if _, err := os.Stat(preparation.paths.Journal); err != nil {
+		t.Fatalf("recovery journal missing: %v", err)
 	}
 }
 

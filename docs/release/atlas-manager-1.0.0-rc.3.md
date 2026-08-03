@@ -19,3 +19,12 @@ candidate, not a physically qualified release.
 The candidate preserves the mock-only power backend and disabled machine-power
 effects. No physical host, real identity database, systemd service, helper,
 RTC, D-Bus, or Cloudflare environment is changed by the software validation.
+
+The historical `rc.3` physical deployment was blocked because its runtime
+identity installer unconditionally passed `--no-log-init`, an option not
+supported by the qualified Atlas host's `useradd`. The failed preparation
+rolled back safely and did not indicate an unsafe host identity. This fix
+probes account-tool capabilities and effective mail-spool defaults before
+mutation, preserves fail-closed behavior, and reports the original failure
+stage. A new release candidate and new commit-bound bundle are required; the
+historical physical evidence must not be relabeled.
