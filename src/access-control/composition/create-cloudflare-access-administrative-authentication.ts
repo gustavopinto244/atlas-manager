@@ -93,13 +93,17 @@ export function createCloudflareAccessAdministrativeAuthentication(input: {
   };
   const readIdentityProviderReadiness = async () => {
     const checkedAt = input.clock.now();
-    const outcome = await checkIdentityProviderReadiness();
+    const outcome = await jwksProvider.readReadiness(checkedAt);
+    const snapshot = jwksProvider.readReadinessSnapshot();
     return createAdministrativeIdentityReadiness({
       outcome,
       checkedAt,
       issuerConfigured: true,
       audienceConfigured: true,
       jwksReachable: outcome === "ready",
+      cachedKeyCount: snapshot.cachedKeyCount,
+      cacheExpiresAt: snapshot.cacheExpiresAt,
+      lastSuccessfulRefreshAt: snapshot.lastSuccessfulRefreshAt,
     });
   };
   return Object.freeze({

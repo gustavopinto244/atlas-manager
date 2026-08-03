@@ -1,6 +1,6 @@
 {
   "name": "atlas-manager",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Self-hosted management and automation platform for the Atlas homelab server.",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node --import tsx/esm scripts/generate-dashboard-assets.mjs",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -17,7 +17,17 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "release:generate-contract": "node scripts/generate-release-contract.mjs",
+    "release:generate-dependencies": "node scripts/generate-production-dependencies.mjs",
+    "release:generate-evidence": "node scripts/generate-release-evidence.mjs",
+    "release:generate-traceability": "node scripts/generate-requirements-traceability.mjs",
+    "release:generate-digests": "node scripts/generate-release-digests.mjs",
+    "release:validate": "node scripts/validate-release-artifacts.mjs",
+    "release:validate-snapshots": "node scripts/validate-versioned-release-snapshots.mjs",
+    "dashboard:generate-assets": "node --import tsx/esm scripts/generate-dashboard-assets.mjs",
+    "dashboard:verify-assets": "node scripts/verify-dashboard-assets.mjs",
+    "release:rehearse": "node scripts/run-release-rehearsal.mjs"
   },
   "keywords": [
     "homelab",

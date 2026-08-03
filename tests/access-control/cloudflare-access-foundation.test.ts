@@ -332,6 +332,31 @@ describe("Cloudflare Access authentication composition", () => {
     });
     expect(clock.now).toHaveBeenCalledTimes(1);
   });
+
+  it("reports a usable cached-key readiness state without another refresh", async () => {
+    const fixture = await createFixture();
+    const fetch = createJwksFetch(fixture.publicJwk);
+    const capabilities = createCloudflareAccessAdministrativeAuthentication({
+      configuration: fixture.configuration,
+      clock: { now: vi.fn(() => NOW) },
+      overrides: { fetch },
+    });
+    await expect(
+      capabilities.readIdentityProviderReadiness(),
+    ).resolves.toMatchObject({
+      outcome: "ready",
+      cachedKeyCount: 1,
+      jwksReachable: true,
+    });
+    await expect(
+      capabilities.readIdentityProviderReadiness(),
+    ).resolves.toMatchObject({
+      outcome: "ready_with_cached_keys",
+      cachedKeyCount: 1,
+      jwksReachable: false,
+    });
+    expect(fetch.calls).toHaveLength(1);
+  });
 });
 
 type Fixture = {

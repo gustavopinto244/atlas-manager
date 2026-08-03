@@ -140,12 +140,41 @@ describe("FileSegmentedAdministrativeEventHistory", () => {
       expect((await store.verifyIntegrity()).outcome).toBe(
         "verified_with_retention",
       );
+      for (let index = 302; index <= 401; index += 1)
+        await store.record(event(index));
+      expect((await store.pruneSegments()).outcome).toBe("pruned");
+      expect((await store.verifyIntegrity()).outcome).toBe(
+        "verified_with_retention",
+      );
+      const reconstructed = new FileSegmentedAdministrativeEventHistory(root, {
+        clock,
+        maxSegmentEvents: 100,
+        maxSegmentBytes: 1_048_576,
+        retentionPolicy: {
+          schemaVersion: 1,
+          automaticPruneEnabled: false,
+          segments: {
+            minSealedSegments: 1,
+            maxSealedSegments: 1,
+            maxSealedSegmentAgeDays: 365,
+          },
+          exports: { minExports: 0, maxExports: 10, maxExportAgeDays: 365 },
+        },
+      });
+      expect((await reconstructed.verifyIntegrity()).outcome).toBe(
+        "verified_with_retention",
+      );
+      const laterExport = await reconstructed.createExport({
+        fromSequence: 301,
+        throughSequence: 305,
+      });
+      expect(laterExport.outcome).toBe("created");
       await expect(store.query({ afterSequence: 1 })).rejects.toMatchObject({
         code: "event_history_history_pruned",
       });
-      const page = await store.query({ afterSequence: 200, limit: 5 });
+      const page = await store.query({ afterSequence: 300, limit: 5 });
       expect(page.events.map((value) => value.sequence)).toEqual([
-        201, 202, 203, 204, 205,
+        301, 302, 303, 304, 305,
       ]);
     } finally {
       cleanup(root);

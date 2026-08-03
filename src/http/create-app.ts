@@ -51,7 +51,11 @@ import {
 } from "./administrative-security-status-route.js";
 import { createAdministrativeSecurityEnvelope } from "./administrative-security-envelope.js";
 import type { AdministrativePublicOrigin } from "./administrative-public-origin.js";
-import { validateAdministrativeRouteSecurityCatalog } from "./administrative-route-security-catalog.js";
+import {
+  expectedAdministrativeRouteIds,
+  reconcileAdministrativeRouteRegistrations,
+  validateAdministrativeRouteSecurityCatalog,
+} from "./administrative-route-security-catalog.js";
 
 export interface CreateAppDependencies {
   logger: HttpErrorLogger;
@@ -67,6 +71,9 @@ export interface CreateAppDependencies {
   administrativeEventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
   administrativeSecurityStatus?: AdministrativeSecurityStatusRouteDependencies;
   administrativePublicOrigin?: AdministrativePublicOrigin;
+  administrativeRouteCatalogStatus?: Readonly<{
+    markReconciled(): void;
+  }>;
 }
 
 export function createApp({
@@ -83,6 +90,7 @@ export function createApp({
   administrativeEventHistoryOperations,
   administrativeSecurityStatus,
   administrativePublicOrigin,
+  administrativeRouteCatalogStatus,
 }: CreateAppDependencies): Express {
   const app = express();
   app.set("trust proxy", false);
@@ -140,6 +148,43 @@ export function createApp({
       app,
       administrativeSecurityStatus,
     );
+
+  reconcileAdministrativeRouteRegistrations(
+    app,
+    expectedAdministrativeRouteIds([
+      ...(administrativeDashboard === undefined
+        ? []
+        : ["ADMINISTRATIVE_DASHBOARD_ENABLED"]),
+      ...(administrativeEventHistory === undefined
+        ? []
+        : ["ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED"]),
+      ...(administrativeEventHistoryOperations === undefined
+        ? []
+        : ["ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED"]),
+      ...(administrativeWakeAlarm === undefined
+        ? []
+        : ["ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED"]),
+      ...(administrativeShutdown === undefined
+        ? []
+        : ["ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED"]),
+      ...(administrativeServices === undefined
+        ? []
+        : ["ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED"]),
+      ...(administrativeServiceAvailability === undefined
+        ? []
+        : ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]),
+      ...(administrativeOverview === undefined
+        ? []
+        : ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]),
+      ...(administrativeBackups === undefined
+        ? []
+        : ["ADMINISTRATIVE_BACKUP_HTTP_ENABLED"]),
+      ...(administrativeSecurityStatus === undefined
+        ? []
+        : ["ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED"]),
+    ]),
+  );
+  administrativeRouteCatalogStatus?.markReconciled();
 
   app.get("/health/live", (_request, response) => {
     response.status(200).json({ status: "ok" });

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -184,10 +185,11 @@ func ValidateInput(data []byte) (Input, error) {
 
 func validPublicOrigin(value string) bool {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Host == "" || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(parsed.Hostname(), "*") || net.ParseIP(parsed.Hostname()) != nil || (parsed.Port() != "" && parsed.Port() != "443") {
+	hostname := parsed.Hostname()
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Host == "" || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Contains(hostname, "*") || net.ParseIP(hostname) != nil || (parsed.Port() != "" && parsed.Port() != "443") || strings.HasSuffix(parsed.Host, ":443") || !regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$`).MatchString(hostname) {
 		return false
 	}
-	return parsed.Hostname() == strings.ToLower(parsed.Hostname()) && strings.TrimSpace(value) == value
+	return hostname == strings.ToLower(hostname) && strings.TrimSpace(value) == value
 }
 
 func validBackupTarget(data []byte) (string, string, bool) {

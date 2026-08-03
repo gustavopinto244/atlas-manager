@@ -260,7 +260,7 @@ function start(): void {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
             getServerHealth,
-            applicationVersion: "1.0.0-rc.1",
+            applicationVersion: "1.0.0-rc.2",
             ...(backupManagement === undefined ? {} : { backupManagement }),
           })
         : undefined;
@@ -320,6 +320,12 @@ function start(): void {
       ...(config.administrativePublicOrigin === undefined
         ? {}
         : { administrativePublicOrigin: config.administrativePublicOrigin }),
+      ...(administrativeRuntime?.routeCatalogStatus === undefined
+        ? {}
+        : {
+            administrativeRouteCatalogStatus:
+              administrativeRuntime.routeCatalogStatus,
+          }),
     });
     const server = app.listen(config.port, config.host);
     const setFailureExitCode = (): void => {

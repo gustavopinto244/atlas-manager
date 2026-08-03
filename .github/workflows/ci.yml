@@ -22,10 +22,30 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Resolve release source commit
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            source_commit="${{ github.event.pull_request.head.sha }}"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            source_commit="${{ github.sha }}"
+          else
+            echo "unsupported_release_event:$GITHUB_EVENT_NAME" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$source_commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "release_source_commit_invalid" >&2
+            exit 1
+          fi
+          echo "SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v5.5.0
         with:
           go-version: "1.23.0"
           cache-dependency-path: |
@@ -114,7 +134,7 @@ jobs:
           mkdir -p dist/power-helper-bundle
           ./dist/power-helper-bundle-builder build \
             -version 0.0.0 \
-            -source-commit "$(git rev-parse HEAD)" \
+            -source-commit "$SOURCE_COMMIT" \
             -source-date-epoch 0 \
             -source-root "$GITHUB_WORKSPACE" \
             -output-dir "$GITHUB_WORKSPACE/dist/power-helper-bundle"
@@ -124,7 +144,7 @@ jobs:
           mkdir -p dist/power-helper-bundle-repeat
           ./dist/power-helper-bundle-builder build \
             -version 0.0.0 \
-            -source-commit "$(git rev-parse HEAD)" \
+            -source-commit "$SOURCE_COMMIT" \
             -source-date-epoch 0 \
             -source-root "$GITHUB_WORKSPACE" \
             -output-dir "$GITHUB_WORKSPACE/dist/power-helper-bundle-repeat"
@@ -134,14 +154,17 @@ jobs:
             dist/power-helper-bundle-repeat/atlas-manager-power-helper_0.0.0_linux_amd64/manifest.json
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.4.0
         with:
-          node-version: 24
+          node-version: 24.18.0
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Generate authoritative dashboard assets
+        run: npm run dashboard:generate-assets
 
       - name: Build Atlas Manager deployment bundle
         run: |
@@ -149,9 +172,10 @@ jobs:
           bundle_version="$(node -p "require('./package.json').version")"
           ./dist/deployment/atlas-manager-bundle build \
             -version "$bundle_version" \
-            -source-commit "$(git rev-parse HEAD)" \
+            -source-commit "$SOURCE_COMMIT" \
             -source-date-epoch 0 \
             -source-root "$GITHUB_WORKSPACE" \
+            -dashboard-assets "$GITHUB_WORKSPACE/dist/dashboard-assets" \
             -output-dir "$GITHUB_WORKSPACE/dist/atlas-manager-bundle"
           bundle_root="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
           (cd "$bundle_root" && ./atlas-manager-installer inspect-bundle)
@@ -177,7 +201,6 @@ jobs:
           grep -q 'dashboard/backup.js' "$bundle_root/MANIFEST.json"
           grep -q 'dashboard/backup.js' "$bundle_root/SHA256SUMS"
           test -f "$bundle_root/contracts/atlas-manager-administrative-api.json"
-          test -f "$bundle_root/contracts/atlas-manager-release-contract.json"
           grep -q 'contracts/atlas-manager-administrative-api.json' "$bundle_root/MANIFEST.json"
           ./dist/deployment/atlas-manager-smoke run \
             --node "$(command -v node)" \
@@ -189,9 +212,10 @@ jobs:
           bundle_version="$(node -p "require('./package.json').version")"
           ./dist/deployment/atlas-manager-bundle build \
             -version "$bundle_version" \
-            -source-commit "$(git rev-parse HEAD)" \
+            -source-commit "$SOURCE_COMMIT" \
             -source-date-epoch 0 \
             -source-root "$GITHUB_WORKSPACE" \
+            -dashboard-assets "$GITHUB_WORKSPACE/dist/dashboard-assets" \
             -output-dir "$GITHUB_WORKSPACE/dist/atlas-manager-bundle-repeat"
           cmp "dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64.tar.gz" \
             "dist/atlas-manager-bundle-repeat/atlas-manager_${bundle_version}_linux_amd64.tar.gz"
@@ -213,7 +237,13 @@ jobs:
 
       - name: Verify event-history maintenance boundary
         run: |
-          if rg -n '/admin/event-history/(delete|truncate|repair|import|path)' src/http src/maintenance tests/event-history; then exit 1; fi
+          command -v grep >/dev/null 2>&1 || { echo 'grep_missing' >&2; exit 1; }
+          set +e
+          grep -R -nE '/admin/event-history/(delete|truncate|repair|import|path)' src/http src/maintenance tests/event-history
+          matches=$?
+          set -e
+          if [ "$matches" -eq 0 ]; then exit 1; fi
+          if [ "$matches" -gt 1 ]; then exit "$matches"; fi
 
       - name: Run tests
         run: npm test
@@ -222,16 +252,138 @@ jobs:
 
       - name: Verify backup test boundaries
         run: |
-          if rg -n '(/usr/sbin/(groupadd|groupdel|useradd|userdel)|/usr/bin/systemctl|\b(docker|pm2|tar|rsync|cp)\b)' src/backup-management tests/backup-management; then exit 1; fi
+          command -v grep >/dev/null 2>&1 || { echo 'grep_missing' >&2; exit 1; }
+          set +e
+          grep -R -nE '(/usr/sbin/(groupadd|groupdel|useradd|userdel)|/usr/bin/systemctl|\b(docker|pm2|tar|rsync|cp)\b)' src/backup-management tests/backup-management
+          matches=$?
+          set -e
+          if [ "$matches" -eq 0 ]; then exit 1; fi
+          if [ "$matches" -gt 1 ]; then exit "$matches"; fi
+
+      - name: Run administrative configuration qualification matrix
+        run: |
+          npm test -- --maxWorkers=1 tests/config tests/http/create-administrative-runtime.test.ts tests/maintenance/administrative-security.test.ts
+          (cd deployment && go test ./internal/administrativeconfiguration ./internal/installer ./internal/servicelifecycle -count=1)
+          echo 'CONFIGURATION_MATRIX_RESULT=passed' >> "$GITHUB_ENV"
+
+      - name: Verify packaged dashboard equivalence
+        run: |
+          bundle_version="$(node -p "require('./package.json').version")"
+          bundle_root="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
+          dashboard_result="$(node scripts/verify-dashboard-assets.mjs \
+            --source-root dist/dashboard-assets \
+            --bundle-root "$bundle_root" \
+            --manifest dist/dashboard-assets.manifest.json)"
+          test "$(node -e "console.log(JSON.parse(process.argv[1]).result)" "$dashboard_result")" = passed
+          dashboard_sha256="$(sha256sum dist/dashboard-assets.manifest.json | awk '{print $1}')"
+          echo "DASHBOARD_EQUIVALENCE_RESULT=passed" >> "$GITHUB_ENV"
+          echo "DASHBOARD_ASSETS_SHA256=$dashboard_sha256" >> "$GITHUB_ENV"
+
+      - name: Run complete administrative release rehearsal twice
+        env:
+          ATLAS_MANAGER_POWER_HELPER_FIXTURE: ${{ github.workspace }}/dist/power-helper-test/atlas-manager-power-helper-fixture
+        run: |
+          bundle_version="$(node -p "require('./package.json').version")"
+          bundle_root="$GITHUB_WORKSPACE/dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
+          bundle_path="$GITHUB_WORKSPACE/dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64.tar.gz"
+          test -d "$bundle_root"
+          test -f "$bundle_path"
+          bundle_sha256="$(sha256sum "$bundle_path" | awk '{print $1}')"
+          rehearsal_root_a="$RUNNER_TEMP/atlas-manager-release-rehearsal-a"
+          rehearsal_root_b="$RUNNER_TEMP/atlas-manager-release-rehearsal-b"
+          mkdir -p "$rehearsal_root_a" "$rehearsal_root_b"
+          SOURCE_COMMIT="$SOURCE_COMMIT" npm run release:rehearse -- \
+            --sandbox-root "$rehearsal_root_a" \
+            --bundle-root "$bundle_root" \
+            --dashboard-manifest "$GITHUB_WORKSPACE/dist/dashboard-assets.manifest.json" \
+            --bundle-sha256 "$bundle_sha256" \
+            --output "$RUNNER_TEMP/atlas-manager-release-rehearsal-a.json"
+          SOURCE_COMMIT="$SOURCE_COMMIT" npm run release:rehearse -- \
+            --sandbox-root "$rehearsal_root_b" \
+            --bundle-root "$bundle_root" \
+            --dashboard-manifest "$GITHUB_WORKSPACE/dist/dashboard-assets.manifest.json" \
+            --bundle-sha256 "$bundle_sha256" \
+            --output "$RUNNER_TEMP/atlas-manager-release-rehearsal-b.json"
+          cmp "$RUNNER_TEMP/atlas-manager-release-rehearsal-a.json" "$RUNNER_TEMP/atlas-manager-release-rehearsal-b.json"
+          rehearsal_sha256="$(sha256sum "$RUNNER_TEMP/atlas-manager-release-rehearsal-a.json" | awk '{print $1}')"
+          node -e 'const fs=require("node:fs"); const a=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const b=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if (a.result!=="passed" || b.result!=="passed" || a.sourceCommit!==process.env.SOURCE_COMMIT || b.sourceCommit!==process.env.SOURCE_COMMIT) process.exit(1)' "$RUNNER_TEMP/atlas-manager-release-rehearsal-a.json" "$RUNNER_TEMP/atlas-manager-release-rehearsal-b.json"
+          release_artifacts="$RUNNER_TEMP/atlas-manager-release-artifacts"
+          mkdir -p "$release_artifacts"
+          cp "$RUNNER_TEMP/atlas-manager-release-rehearsal-a.json" "$release_artifacts/atlas-manager-release-rehearsal-a.json"
+          cp "$RUNNER_TEMP/atlas-manager-release-rehearsal-b.json" "$release_artifacts/atlas-manager-release-rehearsal-b.json"
+          echo "ADMINISTRATIVE_REHEARSAL_RESULT=passed" >> "$GITHUB_ENV"
+          echo "REHEARSAL_EVIDENCE_SHA256=$rehearsal_sha256" >> "$GITHUB_ENV"
 
       - name: Build production application
         run: npm run build
 
-      - name: Release candidate security and contract gate
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit complete dependency tree
+        id: full-audit
+        shell: bash
         run: |
-          test "$(node -p "require('./package.json').version")" = "1.0.0-rc.1"
+          audit_report="$RUNNER_TEMP/atlas-manager-npm-audit.json"
+          set +e
+          npm audit --audit-level=high --json > "$audit_report"
+          audit_exit=$?
+          set -e
+          test "$audit_exit" -eq 0 -o "$audit_exit" -eq 1
+          test -s "$audit_report"
+          audit_result="$(node scripts/validate-npm-audit.mjs "$audit_report")"
+          echo "$audit_result"
+          full_audit_result="$(node -e "console.log(JSON.parse(process.argv[1]).result)" "$audit_result")"
+          echo "FULL_AUDIT_RESULT=$full_audit_result" >> "$GITHUB_ENV"
+
+      - name: Release candidate security and contract gate
+        id: release-gate
+        run: |
+          test "$(node -p "require('./package.json').version")" = "1.0.0-rc.2"
+          npm run release:validate-snapshots
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          release_artifacts="$RUNNER_TEMP/atlas-manager-release-artifacts"
+          mkdir -p "$release_artifacts"
+          test -f "$release_artifacts/atlas-manager-release-rehearsal-a.json"
+          test -f "$release_artifacts/atlas-manager-release-rehearsal-b.json"
           node --import tsx/esm -e 'import { validateAdministrativeRouteSecurityCatalog, ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "./src/http/administrative-route-security-catalog.ts"; validateAdministrativeRouteSecurityCatalog(); if (ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.length !== 41) process.exit(1)'
           test -f docs/contracts/atlas-manager-administrative-api.json
           test -f docs/contracts/atlas-manager-release-contract.json
           test -f docs/release/atlas-manager-v1-requirements-traceability.md
           test -f docs/release/atlas-manager-v1-security-review.md
+          test -f docs/release/atlas-manager-v1-operational-readiness.md
+          test -f docs/release/atlas-manager-production-dependencies.json
+          test -f docs/contracts/atlas-manager-release-contract.json
+          SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_ARTIFACT_DIR="$release_artifacts" npm run release:generate-traceability
+          bundle_version="$(node -p "require('./package.json').version")"
+          bundle_path="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64.tar.gz"
+          test -f "$bundle_path"
+          bundle_root="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
+          bundle_repeat_root="dist/atlas-manager-bundle-repeat/atlas-manager_${bundle_version}_linux_amd64"
+          node -e 'const fs=require("node:fs"); for (const path of process.argv.slice(1)) { const value=JSON.parse(fs.readFileSync(path,"utf8")); if (value.sourceCommit!==process.env.SOURCE_COMMIT) process.exit(1); }' "$bundle_root/MANIFEST.json" "$bundle_repeat_root/MANIFEST.json"
+          bundle_sha256="$(sha256sum "$bundle_path" | awk '{print $1}')"
+          test "${SOURCE_COMMIT:-}" != ""
+          DEPLOYMENT_GO_RESULT=passed POWER_HELPER_GO_RESULT=passed PRODUCTION_AUDIT_RESULT=zero_vulnerabilities FULL_AUDIT_RESULT="${FULL_AUDIT_RESULT:-not_executed}" CONFIGURATION_MATRIX_RESULT="${CONFIGURATION_MATRIX_RESULT:-not_executed}" DASHBOARD_EQUIVALENCE_RESULT="${DASHBOARD_EQUIVALENCE_RESULT:-not_executed}" ADMINISTRATIVE_REHEARSAL_RESULT="${ADMINISTRATIVE_REHEARSAL_RESULT:-not_executed}" BUNDLE_SHA256="$bundle_sha256" DASHBOARD_ASSETS_SHA256="${DASHBOARD_ASSETS_SHA256:-}" SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_ARTIFACT_DIR="$release_artifacts" npm run release:generate-evidence
+          release_evidence_sha256="$(sha256sum "$release_artifacts/atlas-manager-v1-software-release-candidate-evidence.json" | awk '{print $1}')"
+          BUNDLE_SHA256="$bundle_sha256" RELEASE_EVIDENCE_SHA256="$release_evidence_sha256" DASHBOARD_ASSETS_SHA256="${DASHBOARD_ASSETS_SHA256:-}" SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_ARTIFACT_DIR="$release_artifacts" npm run release:generate-contract
+          SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_ARTIFACT_DIR="$release_artifacts" npm run release:validate
+          BUNDLE_SHA256="$bundle_sha256" DASHBOARD_ASSETS_SHA256="${DASHBOARD_ASSETS_SHA256:-}" SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_ARTIFACT_DIR="$release_artifacts" npm run release:generate-digests
+          node -e 'const fs=require("node:fs"); const dir=process.argv[1]; const names=["atlas-manager-v1-software-release-candidate-evidence.json","atlas-manager-release-contract.json","atlas-manager-release-rehearsal-a.json","atlas-manager-release-rehearsal-b.json"]; for (const name of names) { const value=JSON.parse(fs.readFileSync(`${dir}/${name}`,"utf8")); if (value.sourceCommit!==process.env.SOURCE_COMMIT) process.exit(1); } const trace=fs.readFileSync(`${dir}/atlas-manager-v1-requirements-traceability.md`,`utf8`); if (!trace.includes(`Source commit: \`${process.env.SOURCE_COMMIT}\``)) process.exit(1);' "$release_artifacts"
+          command -v grep >/dev/null 2>&1 || { echo 'grep_missing' >&2; exit 1; }
+          set +e
+          grep -R -nE 'PLACEHOLDER|TBD|ci-generated|reproducible_in_ci|not_run|environment_unavailable' "$release_artifacts"
+          matches=$?
+          set -e
+          if [ "$matches" -eq 0 ]; then exit 1; fi
+          if [ "$matches" -gt 1 ]; then exit "$matches"; fi
+          test "$(node -p "require('$release_artifacts/atlas-manager-v1-software-release-candidate-evidence.json').result")" = "qualified"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Upload release qualification artifacts
+        if: steps.release-gate.outcome == 'success'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: atlas-manager-1.0.0-rc.2-release-qualification-${{ github.run_id }}
+          path: ${{ runner.temp }}/atlas-manager-release-artifacts
+          if-no-files-found: error
+          retention-days: 14

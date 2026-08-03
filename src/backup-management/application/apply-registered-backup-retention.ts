@@ -4,6 +4,7 @@ import type {
   BackupRunStore,
   BackupTargetCatalog,
 } from "./ports/backup-ports.js";
+import type { BackupRun } from "../domain/backup-run.js";
 
 export interface ManagedBackupArtifact {
   readonly targetId: string;
@@ -58,13 +59,28 @@ export class ApplyRegisteredBackupRetention {
         result: "busy",
       });
     try {
-      const runs = (
-        await this.#runs.query({ targetId, status: "succeeded", limit: 100 })
-      )
-        .filter((run) => run.artifact !== null)
-        .sort((left, right) =>
-          (right.completedAt ?? "").localeCompare(left.completedAt ?? ""),
-        );
+      const runs: BackupRun[] = [];
+      let afterSequence = 0;
+      for (;;) {
+        const page = await this.#runs.query({
+          targetId,
+          status: "succeeded",
+          afterSequence,
+          limit: 100,
+        });
+        runs.push(...page.filter((run) => run.artifact !== null));
+        if (page.length < 100) break;
+        const last = page.at(-1);
+        if (last === undefined || last.sequence <= afterSequence)
+          throw new Error("backup_run_history_corrupt");
+        afterSequence = last.sequence;
+      }
+      runs.sort(
+        (left, right) =>
+          Date.parse(right.completedAt ?? "") -
+            Date.parse(left.completedAt ?? "") ||
+          right.sequence - left.sequence,
+      );
       const artifacts = await this.#artifacts.listManaged(targetId);
       const successful = new Map(runs.map((run) => [run.runId, run]));
       if (artifacts.some((artifact) => !successful.has(artifact.runId)))
@@ -75,16 +91,25 @@ export class ApplyRegisteredBackupRetention {
           result: "blocked",
         });
       const now = this.#clock.now().getTime();
+      const protectedRunIds = new Set(
+        runs
+          .slice(0, target.retention.keepLastSuccessful)
+          .map((run) => run.runId),
+      );
       const deletion = artifacts
         .filter((artifact) => {
-          const index = runs.findIndex((run) => run.runId === artifact.runId);
+          if (protectedRunIds.has(artifact.runId)) return false;
           const tooOld =
             target.retention.maxSuccessfulAgeDays !== null &&
             now - new Date(artifact.completedAt).getTime() >
               target.retention.maxSuccessfulAgeDays * 86_400_000;
-          return index >= target.retention.keepLastSuccessful || tooOld;
+          return tooOld || runs.some((run) => run.runId === artifact.runId);
         })
-        .sort((left, right) => left.runId.localeCompare(right.runId));
+        .sort(
+          (left, right) =>
+            Date.parse(left.completedAt) - Date.parse(right.completedAt) ||
+            left.runId.localeCompare(right.runId),
+        );
       let deletedCount = 0;
       for (const artifact of deletion) {
         try {

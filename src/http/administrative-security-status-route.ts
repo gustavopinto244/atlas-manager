@@ -10,6 +10,7 @@ import {
   validateAdministrativeRequestHasNoBody,
   validateAdministrativeRequestTarget,
 } from "./administrative-http.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_SECURITY_STATUS_ROUTE = "/admin/security/status";
 export interface AdministrativeSecurityStatusRouteDependencies {
@@ -25,7 +26,11 @@ export function registerAdministrativeSecurityStatusRoute(
   app: Express,
   dependencies: AdministrativeSecurityStatusRouteDependencies,
 ): void {
-  app.all(ADMINISTRATIVE_SECURITY_STATUS_ROUTE, handler(dependencies));
+  registerAdministrativeRoute(
+    app,
+    ["security.status.read"],
+    handler(dependencies),
+  );
 }
 
 function handler(

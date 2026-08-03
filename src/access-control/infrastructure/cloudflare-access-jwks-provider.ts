@@ -75,6 +75,7 @@ export class CloudflareAccessJwksProvider implements CloudflareAccessJwksProvide
   #cacheExpiresAt = 0;
   #failedUntil = 0;
   #inFlightRefresh: Promise<void> | undefined;
+  #lastSuccessfulRefreshAt = 0;
 
   public constructor(
     configuration: CloudflareAccessConfiguration,
@@ -106,9 +107,16 @@ export class CloudflareAccessJwksProvider implements CloudflareAccessJwksProvide
   public async checkReadiness(
     verificationTime: Date,
   ): Promise<"ready" | "unavailable"> {
+    const result = await this.readReadiness(verificationTime);
+    return result === "unavailable" ? "unavailable" : "ready";
+  }
+
+  public async readReadiness(
+    verificationTime: Date,
+  ): Promise<"ready" | "ready_with_cached_keys" | "unavailable"> {
     const time = verificationTime.getTime();
     if (this.#cachedKeys !== undefined && time < this.#cacheExpiresAt)
-      return "ready";
+      return "ready_with_cached_keys";
     if (time < this.#failedUntil) return "unavailable";
     try {
       await this.#refresh(time);
@@ -116,6 +124,22 @@ export class CloudflareAccessJwksProvider implements CloudflareAccessJwksProvide
     } catch {
       return "unavailable";
     }
+  }
+
+  public readReadinessSnapshot(): Readonly<{
+    cachedKeyCount: number;
+    cacheExpiresAt: Date | null;
+    lastSuccessfulRefreshAt: Date | null;
+  }> {
+    return Object.freeze({
+      cachedKeyCount: this.#cachedKeys?.size ?? 0,
+      cacheExpiresAt:
+        this.#cachedKeys === undefined ? null : new Date(this.#cacheExpiresAt),
+      lastSuccessfulRefreshAt:
+        this.#lastSuccessfulRefreshAt === 0
+          ? null
+          : new Date(this.#lastSuccessfulRefreshAt),
+    });
   }
 
   #getCachedKey(kid: string, time: number): CryptoKey | undefined {
@@ -144,6 +168,7 @@ export class CloudflareAccessJwksProvider implements CloudflareAccessJwksProvide
       const keys = await parseJwks(body);
       this.#cachedKeys = keys;
       this.#cacheExpiresAt = time + CACHE_LIFETIME_MS;
+      this.#lastSuccessfulRefreshAt = time;
       this.#failedUntil = 0;
     } catch (error) {
       this.#failedUntil = time + FAILURE_COOLDOWN_MS;

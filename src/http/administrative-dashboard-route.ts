@@ -1,4 +1,5 @@
 import type { Express, RequestHandler, Response } from "express";
+import { readFileSync } from "node:fs";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
 import { createCloudflareAccessAssertionReader } from "./cloudflare-access-assertion-reader.js";
 import type { AdministrativeRequestAdmission } from "./administrative-request-admission.js";
@@ -10,6 +11,7 @@ import {
   validateAdministrativeRequestTarget,
 } from "./administrative-http.js";
 import { HttpError } from "./errors/http-error.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_DASHBOARD_ROUTE = "/admin";
 export const ADMINISTRATIVE_DASHBOARD_ASSET_PREFIX = "/admin/assets/";
@@ -55,6 +57,14 @@ const SERVED_ASSETS: Readonly<
   Record<string, Readonly<{ body: string; type: string }>>
 > = Object.freeze({
   ...ASSETS,
+  "app.js": Object.freeze({
+    body: readDashboardSource("main.js", "main.ts"),
+    type: "application/javascript",
+  }),
+  "styles.css": Object.freeze({
+    body: readDashboardSource("styles.css", "styles.css"),
+    type: "text/css",
+  }),
   "event-history.js": Object.freeze({
     body: EVENT_HISTORY_SAFE_ASSET,
     type: "application/javascript",
@@ -65,20 +75,55 @@ const HTML =
 
 const BACKUP_ASSET = String.raw`const root=document.querySelector('#backups'),status=document.querySelector('#status');async function read(path){const response=await fetch(path,{credentials:'same-origin',redirect:'error'});if(!response.ok)throw new Error('request_failed');return response.json()}function text(parent,value){parent.append(document.createTextNode(String(value)))}function form(parent,labelText,targetId,method,suffix,confirmation,policy){const form=document.createElement('form'),label=document.createElement('label'),input=document.createElement('input'),button=document.createElement('button');text(label,labelText+' confirmation');input.required=true;input.autocomplete='off';label.append(input);const policyInput=document.createElement('input');if(policy!==undefined){policyInput.value=JSON.stringify(policy);policyInput.required=true;policyInput.setAttribute('aria-label',labelText+' JSON');form.append(policyInput)}button.type='submit';text(button,labelText);form.append(label,button);form.addEventListener('submit',event=>{event.preventDefault();button.disabled=true;let body={confirmation:input.value};if(policy!==undefined){try{body.policy=JSON.parse(policyInput.value)}catch{body.policy=undefined}}void fetch('/admin/backups/targets/'+encodeURIComponent(String(targetId))+suffix,{method,credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(body),redirect:'error'}).then(async response=>{input.value='';if(!response.ok)throw new Error('operation_failed');await load()}).catch(()=>{input.value='';if(status)status.textContent='Backup state could not be reread.'}).finally(()=>{button.disabled=false})});parent.append(form)}async function load(){if(!root)return;const values=await Promise.all([read('/admin/backups/targets'),read('/admin/backups/runs?limit=20')]);const targets=Array.isArray(values[0].targets)?values[0].targets:[],runs=Array.isArray(values[1].runs)?values[1].runs:[];root.replaceChildren();if(!targets.length){text(root,'No registered backup targets.');return}for(const target of targets){const article=document.createElement('article'),heading=document.createElement('h3'),summary=document.createElement('p'),history=document.createElement('ul');text(heading,target.displayName||target.id);text(summary,String(target.id)+' — '+String(target.kind)+' — '+String(target.scheduleMode));for(const run of runs.filter(item=>item.targetId===target.id).slice(-5)){const item=document.createElement('li');text(item,String(run.runId)+' — '+String(run.status)+' — '+String(run.trigger));history.append(item)}article.append(heading,summary,history);form(article,'Manual backup',''+target.id,'POST','/runs','confirm_registered_backup_run');form(article,'Update schedule',''+target.id,'PUT','/schedule','confirm_registered_backup_schedule_update',{mode:'manual'});form(article,'Update retention',''+target.id,'PUT','/retention','confirm_registered_backup_retention_update',{keepLastSuccessful:1});form(article,'Prune retention',''+target.id,'POST','/retention/prunes','confirm_registered_backup_retention_prune');root.append(article)}text(root,'Local-only backups. Restoration is not supported.')}void load().catch(()=>{if(status)status.textContent='Backup administration unavailable.'});`;
 
+export function getAdministrativeDashboardAssetSnapshot(): Readonly<
+  Record<string, Readonly<{ body: string; type: string }>>
+> {
+  return Object.freeze({
+    "index.html": Object.freeze({ body: HTML, type: "text/html" }),
+    "app.js": SERVED_ASSETS["app.js"]!,
+    "styles.css": SERVED_ASSETS["styles.css"]!,
+    "backup.js": Object.freeze({
+      body: BACKUP_ASSET,
+      type: "application/javascript",
+    }),
+    "event-history.js": Object.freeze({
+      body: EVENT_HISTORY_SAFE_ASSET,
+      type: "application/javascript",
+    }),
+  });
+}
+
+function readDashboardSource(primary: string, fallback: string): string {
+  for (const name of [primary, fallback]) {
+    try {
+      return readFileSync(
+        new URL(`../dashboard/${name}`, import.meta.url),
+        "utf8",
+      );
+    } catch {
+      // The source tree uses the TypeScript fallback; the build uses JS output.
+    }
+  }
+  throw new Error("dashboard_asset_source_unavailable");
+}
+
 export function registerAdministrativeDashboardRoutes(
   app: Express,
   dependencies: AdministrativeDashboardRouteDependencies,
 ): void {
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ROUTE}`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.read"],
     createShellHandler(dependencies),
   );
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ROUTE}/`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.read.root"],
     createShellHandler(dependencies),
   );
-  app.all(
-    `${ADMINISTRATIVE_DASHBOARD_ASSET_PREFIX}:asset`,
+  registerAdministrativeRoute(
+    app,
+    ["dashboard.asset.read"],
     createAssetHandler(dependencies),
   );
 }

@@ -1,16 +1,30 @@
 # Agent handoff
 
-## Latest active work — Issue #285
+## Latest active work — audit remediation for Issue #285
 
-Branch: `feat/v0.9-administrative-hardening-v1.0-rc`
+Branch: `fix/v1-rc-audit-remediation`
 
-Baseline: `add695dcb988ce48033cd1cf736c53998deda7d9`
+Baseline: `162191dae6415cc33aab4e30a2cb60be7845cb5f`
 
-Release: `1.0.0-rc.1` software-only candidate.
+Release: `1.0.0-rc.2` software-only candidate; `rc.1` is superseded.
 
-The detailed Issue #285 implementation record is in
-`docs/release/atlas-manager-v1-implementation-report.md`. The historical
-handoff sections below are retained for continuity.
+The remediation implementation record is in
+`docs/audit/AUDIT_REMEDIATION_IMPLEMENTATION_REPORT.md`. The historical
+handoff sections below are retained for continuity. Local Node, deployment Go,
+power-helper Go, Linux amd64 executable builds, reproducible bundle,
+release-artifact validation, and packaged smoke validation with the pinned
+local Node binary are green. The
+complete release rehearsal, dashboard source/runtime/bundle equivalence, and
+end-to-end configuration replacement/rollback matrix remain required before
+qualification. No commit, push, merge, tag, release, or Pull Request was
+performed.
+
+The current reproducible bundle SHA-256 is
+`9999edb750a0c5305c92100dce5698c676b7d7bfefee492e8ee0fb2189d1a15e`; both
+explicit builds produced that digest. Release evidence is intentionally
+`not_qualified` because the full rehearsal was not executed.
+The latest serialized Node run with the deterministic helper fixture passed
+199 test files and 2,673 tests with no skips.
 
 ## Current work — Issue #283
 

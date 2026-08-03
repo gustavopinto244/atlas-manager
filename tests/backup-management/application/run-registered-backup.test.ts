@@ -59,4 +59,20 @@ describe("RunRegisteredBackup", () => {
     expect(adapter.calls).toEqual([]);
     release?.();
   });
+
+  it("allocates numeric sequences beyond the first page", async () => {
+    const store = new InMemoryBackupRunStore();
+    const adapter = new MockBackupAdapter();
+    const run = new RunRegisteredBackup({
+      catalog: InMemoryBackupTargetCatalog.create([target]),
+      runStore: store,
+      gate: new FixedBackupOperationGate(),
+      clock: { now: () => new Date("2026-08-02T12:00:00.000Z") },
+      adapters: { mock: adapter, filesystem_tree: adapter },
+    });
+    for (let index = 0; index < 102; index += 1)
+      await run.execute({ targetId: target.id, trigger: "manual" });
+    const runs = await store.query({ afterSequence: 98, limit: 10 });
+    expect(runs.map((value) => value.sequence)).toEqual([99, 100, 101, 102]);
+  });
 });

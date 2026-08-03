@@ -20,6 +20,7 @@ import {
   setAdministrativeSecurityHeaders,
   validateAdministrativeRequestTarget,
 } from "./administrative-http.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_EVENT_HISTORY_ROUTE = "/admin/event-history";
 export const ADMINISTRATIVE_EVENT_HISTORY_MAX_URL_BYTES =
@@ -41,8 +42,9 @@ export function registerAdministrativeEventHistoryRoute(
   app: Express,
   dependencies: AdministrativeEventHistoryRouteDependencies,
 ): void {
-  app.all(
-    ADMINISTRATIVE_EVENT_HISTORY_ROUTE,
+  registerAdministrativeRoute(
+    app,
+    ["event_history.read"],
     createAdministrativeEventHistoryHandler(dependencies),
   );
 }

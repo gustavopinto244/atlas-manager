@@ -18,6 +18,7 @@ import {
   mapBackupRun,
   mapBackupTarget,
 } from "./administrative-backup-response.js";
+import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_BACKUPS_PREFIX = "/admin/backups";
 const MAX_BODY_BYTES = 4_096;
@@ -69,40 +70,53 @@ export function registerAdministrativeBackupRoutes(
   app: Express,
   dependencies: AdministrativeBackupsRouteDependencies,
 ): void {
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.targets.read"],
     handler(dependencies, "targets"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets/:targetId`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.target.read"],
     handler(dependencies, "target"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/runs`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.runs.read"],
     handler(dependencies, "runs"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/runs/:runId`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.run.read"],
     handler(dependencies, "run"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets/:targetId/runs`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.run"],
     handler(dependencies, "manual"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets/:targetId/schedule`,
+  registerAdministrativeRoute(
+    app,
+    [
+      "backups.schedule.read",
+      "backups.schedule.update",
+      "backups.schedule.delete",
+    ],
     handler(dependencies, "schedule"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets/:targetId/retention`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.retention.read", "backups.retention.update"],
     handler(dependencies, "retention"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/targets/:targetId/retention/prunes`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.retention.prune"],
     handler(dependencies, "prune"),
   );
-  app.all(
-    `${ADMINISTRATIVE_BACKUPS_PREFIX}/scheduler/ticks`,
+  registerAdministrativeRoute(
+    app,
+    ["backups.scheduler.tick"],
     handler(dependencies, "tick"),
   );
 }

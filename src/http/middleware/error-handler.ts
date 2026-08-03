@@ -16,6 +16,16 @@ export function createErrorHandler(
     if (error instanceof HttpError) {
       if (request.path.startsWith("/admin")) {
         setAdministrativeSecurityHeaders(response);
+        logger.error(
+          {
+            event: "administrative_request_rejected",
+            method: request.method,
+            path: request.path,
+            correlationId: response.getHeader("X-Atlas-Request-ID"),
+            errorCode: error.code,
+          },
+          "Administrative request rejected",
+        );
       }
       response.status(error.statusCode).json({
         error: {
@@ -31,6 +41,9 @@ export function createErrorHandler(
         event: "http_request_failed",
         method: request.method,
         path: request.path,
+        ...(request.path.startsWith("/admin")
+          ? { correlationId: response.getHeader("X-Atlas-Request-ID") }
+          : {}),
         errorType: error instanceof Error ? error.name : "UnknownError",
       },
       "HTTP request failed",

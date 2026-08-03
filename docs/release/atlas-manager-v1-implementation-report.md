@@ -1,10 +1,10 @@
-# Issue #285 implementation report
+# Historical Issue #285 implementation report (superseded by audit remediation)
 
 ## Baseline and branch
 
 - baseline: `add695dcb988ce48033cd1cf736c53998deda7d9`;
 - branch: `feat/v0.9-administrative-hardening-v1.0-rc`;
-- release candidate: `1.0.0-rc.1`.
+- release candidate: `1.0.0-rc.1` (superseded; retained as historical evidence).
 
 The local `main` matched the requested baseline before branching. A fresh
 remote fetch was unavailable in the restricted environment and is explicitly

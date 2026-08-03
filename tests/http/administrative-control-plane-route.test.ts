@@ -7,6 +7,7 @@ import { FixedAdministrativeRequestAdmission } from "../../src/http/administrati
 import { FixedAdministrativePowerOperationGate } from "../../src/http/administrative-power-operation-gate.js";
 import { createApp } from "../../src/http/create-app.js";
 import type { ServerHealthSnapshot } from "../../src/server-health/domain/server-health-snapshot.js";
+import { parseAdministrativePublicOrigin } from "../../src/http/administrative-public-origin.js";
 
 const service = RegisteredService.create({
   id: "atlas-api",
@@ -254,5 +255,44 @@ describe("administrative control-plane routes", () => {
       "default-src 'none'",
     );
     expect(dashboard.text).toContain("Power safety");
+  });
+
+  it("rejects cross-site and malformed Fetch Metadata before route execution", async () => {
+    const execute = vi.fn(async () => ({
+      services: { registered: 0 },
+      availability: {},
+      powerSafety: {
+        backend: "mock",
+        effects: "disabled",
+        machineScheduler: "disabled",
+        helper: "unused",
+      },
+    }));
+    const app = createApp({
+      ...base(),
+      administrativePublicOrigin: parseAdministrativePublicOrigin(
+        "https://atlas.example.com",
+      ),
+      administrativeOverview: {
+        admission: new FixedAdministrativeRequestAdmission(base().clock),
+        createProtectedAdministration: vi.fn(() => ({
+          getOperationsOverview: { execute },
+        })),
+        getServerHealth: base().getServerHealth,
+        applicationVersion: "1.0.0-rc.2",
+      },
+    });
+    const crossSite = await request(app)
+      .get("/admin/overview")
+      .set("host", "atlas.example.com")
+      .set("sec-fetch-site", "cross-site");
+    expect(crossSite.status).toBe(403);
+    const malformed = await request(app)
+      .get("/admin/overview")
+      .set("host", "atlas.example.com")
+      .set("sec-fetch-mode", "navigate")
+      .set("sec-fetch-dest", "empty");
+    expect(malformed.status).toBe(403);
+    expect(execute).not.toHaveBeenCalled();
   });
 });

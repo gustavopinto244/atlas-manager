@@ -318,11 +318,7 @@ export class FileSegmentedAdministrativeEventHistory
       const metadata = this.#getExportUnsafe(exportId);
       if (metadata === undefined)
         throw new SegmentedEventHistoryError("event_history_export_not_found");
-      const contentPath = join(this.#exportsPath(), `${exportId}.jsonl`);
-      const content = readSafeFile(contentPath, this.#currentUserId(), 0o400);
-      if (sha256(content) !== metadata.contentSha256)
-        throw new SegmentedEventHistoryError("event_history_export_corrupt");
-      return content;
+      return this.#readVerifiedExportContent(exportId, metadata);
     });
   }
 
@@ -537,6 +533,16 @@ export class FileSegmentedAdministrativeEventHistory
     );
     const ledgerPath = join(this.#root, "retention-ledger.jsonl");
     const previousLedger = readLastLine(ledgerPath, this.#currentUserId());
+    let previousRetentionRecordSha256 = EVENT_HISTORY_GENESIS_SHA256;
+    if (previousLedger !== undefined) {
+      try {
+        previousRetentionRecordSha256 = parseRetentionAnchor(
+          parseStrictJson(previousLedger),
+        ).retentionRecordSha256;
+      } catch {
+        throw new SegmentedEventHistoryError("event_history_corrupted");
+      }
+    }
     const nextFirstRecord = state.records.find(
       (record) => record.sequence === next.manifest.firstSequence,
     );
@@ -557,10 +563,7 @@ export class FileSegmentedAdministrativeEventHistory
       removedSegmentChainHead: last.manifest.manifestSha256,
       nextRetainedSequence: next.manifest.firstSequence,
       nextRetainedPreviousRecordSha256: nextFirstRecord.previousRecordSha256,
-      previousRetentionRecordSha256:
-        previousLedger === undefined
-          ? EVENT_HISTORY_GENESIS_SHA256
-          : sha256(previousLedger),
+      previousRetentionRecordSha256,
       prunedAt: this.#clock(),
     };
     const anchor = {
@@ -776,6 +779,14 @@ export class FileSegmentedAdministrativeEventHistory
       )
     )
       throw new SegmentedEventHistoryError("event_history_corrupted");
+    const names = new Set(entries.map((entry) => entry.name));
+    for (const entry of entries) {
+      const pair = entry.name.endsWith(".manifest.json")
+        ? entry.name.replace(/\.manifest\.json$/u, ".jsonl")
+        : entry.name.replace(/\.jsonl$/u, ".manifest.json");
+      if (!names.has(pair))
+        throw new SegmentedEventHistoryError("event_history_corrupted");
+    }
     const result: EventHistoryExportMetadata[] = [];
     for (const entry of entries
       .filter((item) => item.name.endsWith(".manifest.json"))
@@ -789,13 +800,9 @@ export class FileSegmentedAdministrativeEventHistory
           ).toString("utf8"),
         ),
       );
-      const content = readSafeFile(
-        join(this.#exportsPath(), `${metadata.exportId}.jsonl`),
-        this.#currentUserId(),
-        0o400,
-      );
-      if (sha256(content) !== metadata.contentSha256)
+      if (metadata.exportId !== entry.name.replace(/\.manifest\.json$/u, ""))
         throw new SegmentedEventHistoryError("event_history_export_corrupt");
+      this.#readVerifiedExportContent(metadata.exportId, metadata);
       result.push(metadata);
     }
     return Object.freeze(
@@ -812,11 +819,37 @@ export class FileSegmentedAdministrativeEventHistory
     if (!existsSync(this.#exportsPath())) return undefined;
     const path = join(this.#exportsPath(), `${exportId}.manifest.json`);
     if (!existsSync(path)) return undefined;
-    return parseExportMetadata(
+    const metadata = parseExportMetadata(
       parseStrictJson(
         readSafeFile(path, this.#currentUserId(), 0o400).toString("utf8"),
       ),
     );
+    if (metadata.exportId !== exportId)
+      throw new SegmentedEventHistoryError("event_history_export_corrupt");
+    this.#readVerifiedExportContent(exportId, metadata);
+    return metadata;
+  }
+
+  #readVerifiedExportContent(
+    exportId: string,
+    metadata: EventHistoryExportMetadata,
+  ): Buffer {
+    try {
+      const content = readSafeFile(
+        join(this.#exportsPath(), `${exportId}.jsonl`),
+        this.#currentUserId(),
+        0o400,
+      );
+      if (
+        metadata.exportId !== sha256(content) ||
+        metadata.contentSha256 !== sha256(content) ||
+        metadata.byteCount !== content.byteLength
+      )
+        throw new Error("corrupt");
+      return content;
+    } catch {
+      throw new SegmentedEventHistoryError("event_history_export_corrupt");
+    }
   }
 
   #readRetentionAnchor():
@@ -865,7 +898,12 @@ export class FileSegmentedAdministrativeEventHistory
       join(this.#root, "retention-ledger.jsonl"),
       this.#currentUserId(),
     );
-    return line === undefined ? EVENT_HISTORY_GENESIS_SHA256 : sha256(line);
+    if (line === undefined) return EVENT_HISTORY_GENESIS_SHA256;
+    try {
+      return parseRetentionAnchor(parseStrictJson(line)).retentionRecordSha256;
+    } catch {
+      throw new SegmentedEventHistoryError("event_history_corrupted");
+    }
   }
 
   #withWriterLock<T>(operation: () => T): T {
@@ -963,6 +1001,7 @@ function parseExportMetadata(input: unknown): EventHistoryExportMetadata {
     !/^[0-9a-f]{64}$/u.test(record.exportId) ||
     !isPositiveInteger(record.fromSequence) ||
     !isPositiveInteger(record.throughSequence) ||
+    record.throughSequence < record.fromSequence ||
     !isNonNegativeInteger(record.eventCount) ||
     !isNonNegativeInteger(record.byteCount) ||
     typeof record.contentSha256 !== "string" ||
