@@ -1347,6 +1347,6 @@ Cloudflare Access assertions remain stateless authentication inputs only; JWT
 claims never assign application roles. The dashboard stores no assertions or
 roles and mutations remain strictly parsed, confirmed, and audited.
 
-The `1.0.0-rc.3` result is software qualification only. It does not certify a
+The `1.0.0-rc.4` result is software qualification only. It does not certify a
 physical Atlas host, Cloudflare ingress, RTC, helper, or real machine-power
 effect.

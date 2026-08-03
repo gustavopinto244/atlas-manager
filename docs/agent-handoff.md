@@ -6,17 +6,18 @@ Branch: `fix/runtime-identity-password-precondition`
 
 Baseline: `555cecf86a293f62b6231cb329e437de6cbcb657`
 
-Release: `1.0.0-rc.3` software-only candidate; `rc.2` is superseded for new
-qualification because its clean-absent runtime identity password precondition
-was defective. The historical `rc.2` evidence remains unchanged.
+Release: `1.0.0-rc.4` software-only candidate; `rc.3` is historical and was
+blocked by incompatible `useradd` capabilities on the qualified host. `rc.2`
+was blocked by its clean-absent runtime identity password precondition. Both
+historical evidence sets remain unchanged.
 
-The correction distinguishes a clean absent identity from unsafe residual
+The current runtime-identity corrections distinguish a clean absent identity from unsafe residual
 shadow state: zero shadow entries are `not_applicable/runtime_password_absent`
 only while passwd/group identity is absent; residual entries are blocked, and
 an existing identity still requires exactly one locked shadow entry. No
 physical host evidence is included in the repository. A clean-tree,
-commit-bound `rc.3` bundle must be built after the operator commits these
-version updates.
+commit-bound `rc.4` bundle must be built after the operator commits these
+version updates. Source-controlled release evidence remains `not_qualified`.
 
 The remediation implementation record is in
 `docs/audit/AUDIT_REMEDIATION_IMPLEMENTATION_REPORT.md`. The historical

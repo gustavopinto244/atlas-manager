@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-rc.4
+
+- resets the software release candidate after the two runtime-identity
+  corrections delivered after `rc.2` and `rc.3`;
+- probes fixed `useradd` capabilities before mutation and conditionally uses
+  `--no-log-init`;
+- validates effective `CREATE_MAIL_SPOOL=no` without the invalid `--key`
+  override;
+- preserves original failure stages and verifies complete rollback residue;
+- remains software-only and unqualified pending a new commit-bound bundle and
+  physical qualification.
+
 ## 1.0.0-rc.3
 
 - supersedes `1.0.0-rc.2` after correcting the clean-absent runtime identity

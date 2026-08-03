@@ -2781,9 +2781,10 @@ Cloudflare, Docker, Compose, PM2, systemd, or a physical host.
 
 ## Software release candidate
 
-The repository currently targets `1.0.0-rc.3` as a software-only release
-candidate; `1.0.0-rc.2` was superseded after the runtime identity password
-precondition correction, and `rc.1` was superseded by audit remediation. Administrative HTTP remains loopback-only and Cloudflare
+The repository currently targets `1.0.0-rc.4` as a software-only release
+candidate; `1.0.0-rc.3` was superseded after physical-host account-tool
+compatibility inspection, `rc.2` was superseded after the runtime identity
+password precondition correction, and `rc.1` was superseded by audit remediation. Administrative HTTP remains loopback-only and Cloudflare
 Access-authenticated with application authorization. Real ingress, physical
 Atlas deployment, helper activation, RTC, and machine-power effects remain
 separate approval gates.
