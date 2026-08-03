@@ -6,12 +6,32 @@ import { Buffer } from "node:buffer";
 import process from "node:process";
 
 const root = process.cwd();
+const outputDirectory = process.env.RELEASE_ARTIFACT_DIR
+  ? process.env.RELEASE_ARTIFACT_DIR
+  : root;
+const snapshot = process.env.RELEASE_SNAPSHOT === "true";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const bytes = async (relative) => readFile(join(root, relative));
-const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
-  cwd: root,
-  encoding: "utf8",
-}).trim();
+const documentationBytes = async (relative) =>
+  relative === "docs/release/atlas-manager-v1-requirements-traceability.md" &&
+  sourceCommit !== null &&
+  process.env.RELEASE_ARTIFACT_DIR
+    ? readFile(
+        join(
+          process.env.RELEASE_ARTIFACT_DIR,
+          "atlas-manager-v1-requirements-traceability.md",
+        ),
+      )
+    : bytes(relative);
+const sourceCommit = snapshot
+  ? null
+  : (process.env.SOURCE_COMMIT ??
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim());
+if (sourceCommit !== null && !/^[0-9a-f]{40}$/u.test(sourceCommit))
+  throw new Error("source_commit_invalid");
 const packageJson = JSON.parse(
   await readFile(join(root, "package.json"), "utf8"),
 );
@@ -19,13 +39,19 @@ const api = await bytes("docs/contracts/atlas-manager-administrative-api.json");
 const dependencies = await bytes(
   "docs/release/atlas-manager-production-dependencies.json",
 );
-const requirements = await bytes(
-  "docs/release/atlas-manager-v1-requirements-traceability.md",
+const requirements = await readFile(
+  sourceCommit !== null && process.env.RELEASE_ARTIFACT_DIR
+    ? join(
+        process.env.RELEASE_ARTIFACT_DIR,
+        "atlas-manager-v1-requirements-traceability.md",
+      )
+    : join(root, "docs/release/atlas-manager-v1-requirements-traceability.md"),
 );
 const dashboard = Buffer.concat([
   await bytes("src/dashboard/main.ts"),
   await bytes("src/dashboard/styles.css"),
 ]);
+const dashboardAssetsSha256 = process.env.DASHBOARD_ASSETS_SHA256;
 const documentationFiles = [
   "CHANGELOG.md",
   "SECURITY.md",
@@ -37,7 +63,10 @@ const documentationFiles = [
 const documentation = Buffer.concat(
   await Promise.all(
     documentationFiles.map(async (relative) =>
-      Buffer.concat([Buffer.from(`${relative}\n`), await bytes(relative)]),
+      Buffer.concat([
+        Buffer.from(`${relative}\n`),
+        await documentationBytes(relative),
+      ]),
     ),
   ),
 );
@@ -51,15 +80,21 @@ const contract = {
   nodeVersion: "24.18.0",
   npmVersion: "11.16.0",
   goVersion: "1.23.0",
-  administrativeApiContractSha256: digest(api),
-  dashboardAssetsSha256: digest(dashboard),
-  productionDependenciesSha256: digest(dependencies),
-  documentationInventorySha256: digest(documentation),
-  bundleSha256: process.env.BUNDLE_SHA256 ?? null,
-  requirementsTraceabilitySha256: digest(requirements),
-  releaseAcceptanceEvidenceSha256: process.env.RELEASE_EVIDENCE_SHA256 ?? null,
+  administrativeApiContractSha256: snapshot ? null : digest(api),
+  dashboardAssetsSha256: snapshot
+    ? null
+    : dashboardAssetsSha256 || digest(dashboard),
+  productionDependenciesSha256: snapshot ? null : digest(dependencies),
+  documentationInventorySha256: snapshot ? null : digest(documentation),
+  bundleSha256: snapshot ? null : (process.env.BUNDLE_SHA256 ?? null),
+  requirementsTraceabilitySha256: snapshot ? null : digest(requirements),
+  releaseAcceptanceEvidenceSha256: snapshot
+    ? null
+    : (process.env.RELEASE_EVIDENCE_SHA256 ?? null),
 };
 await writeFile(
-  join(root, "docs/contracts/atlas-manager-release-contract.json"),
+  process.env.RELEASE_ARTIFACT_DIR
+    ? join(outputDirectory, "atlas-manager-release-contract.json")
+    : join(root, "docs/contracts/atlas-manager-release-contract.json"),
   `${JSON.stringify(contract, null, 2)}\n`,
 );

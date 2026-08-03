@@ -255,7 +255,7 @@ func runLifecycle(t *testing.T) []byte {
 func buildRelease(t *testing.T, root, version, commit string) (string, string, string) {
 	t.Helper()
 	source := filepath.Join(root, "source-"+version)
-	for _, path := range []string{"src", "tools", "docs/contracts"} {
+	for _, path := range []string{"src", "src/dashboard", "dashboard-assets", "tools", "docs/contracts"} {
 		if err := os.MkdirAll(filepath.Join(source, path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -267,6 +267,14 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 	}
 	if err := writeFile(filepath.Join(source, "src/main.ts"), "export {};\n", 0o644); err != nil {
 		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(source, "src/dashboard/styles.css"), "body{}\n", 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, asset := range []string{"app.js", "backup.js", "event-history.js", "index.html", "styles.css"} {
+		if err := writeFile(filepath.Join(source, "dashboard-assets", asset), asset+"\n", 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := writeFile(filepath.Join(source, "package.json"), `{"name":"atlas-manager","version":"`+version+`"}`, 0o644); err != nil {
 		t.Fatal(err)
@@ -289,7 +297,7 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 		toolPaths[name] = path
 	}
 	buildOnce := func(output string) string {
-		result, err := bundle.Build(context.Background(), bundle.Config{Version: version, SourceCommit: commit, SourceDateEpoch: 0, SourceRoot: source, OutputDir: output, NodeVersion: bundle.PinnedNode, NPMVersion: bundle.PinnedNPM, GoVersion: bundle.PinnedGo, InstallerPath: toolPaths["atlas-manager-installer"], QualificationPath: toolPaths["atlas-manager-host-qualification"], IdentityInstallerPath: toolPaths["atlas-manager-runtime-identity-installer"], RuntimeConfigurationPath: toolPaths["atlas-manager-runtime-configuration"], ServiceLifecyclePath: toolPaths["atlas-manager-service-lifecycle"], Runner: buildRunner{}})
+		result, err := bundle.Build(context.Background(), bundle.Config{Version: version, SourceCommit: commit, SourceDateEpoch: 0, SourceRoot: source, OutputDir: output, DashboardAssetsRoot: filepath.Join(source, "dashboard-assets"), NodeVersion: bundle.PinnedNode, NPMVersion: bundle.PinnedNPM, GoVersion: bundle.PinnedGo, InstallerPath: toolPaths["atlas-manager-installer"], QualificationPath: toolPaths["atlas-manager-host-qualification"], IdentityInstallerPath: toolPaths["atlas-manager-runtime-identity-installer"], RuntimeConfigurationPath: toolPaths["atlas-manager-runtime-configuration"], ServiceLifecyclePath: toolPaths["atlas-manager-service-lifecycle"], Runner: buildRunner{}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node --import tsx/esm scripts/generate-dashboard-assets.mjs",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -22,7 +22,12 @@
     "release:generate-dependencies": "node scripts/generate-production-dependencies.mjs",
     "release:generate-evidence": "node scripts/generate-release-evidence.mjs",
     "release:generate-traceability": "node scripts/generate-requirements-traceability.mjs",
-    "release:validate": "node scripts/validate-release-artifacts.mjs"
+    "release:generate-digests": "node scripts/generate-release-digests.mjs",
+    "release:validate": "node scripts/validate-release-artifacts.mjs",
+    "release:validate-snapshots": "node scripts/validate-versioned-release-snapshots.mjs",
+    "dashboard:generate-assets": "node --import tsx/esm scripts/generate-dashboard-assets.mjs",
+    "dashboard:verify-assets": "node scripts/verify-dashboard-assets.mjs",
+    "release:rehearse": "node scripts/run-release-rehearsal.mjs"
   },
   "keywords": [
     "homelab",

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "result": "not_qualified",
   "releaseVersion": "1.0.0-rc.2",
-  "baselineCommit": "162191dae6415cc33aab4e30a2cb60be7845cb5f",
-  "sourceCommit": "162191dae6415cc33aab4e30a2cb60be7845cb5f",
+  "baselineCommit": null,
+  "sourceCommit": null,
   "administrativeSecurity": {
     "result": "software_checked",
     "routeCatalog": "reconciled",
@@ -25,13 +25,21 @@
   },
   "tests": {
     "node": "passed",
-    "deploymentGo": "passed",
-    "powerHelperGo": "passed",
-    "productionAudit": "zero_vulnerabilities"
+    "deploymentGo": "not_executed",
+    "powerHelperGo": "not_executed",
+    "productionAudit": "not_executed",
+    "fullAudit": "not_executed"
+  },
+  "qualificationGates": {
+    "configurationMatrix": "not_executed",
+    "dashboardEquivalence": "not_executed",
+    "administrativeRehearsal": "not_executed"
   },
   "bundle": {
-    "result": "reproducible",
-    "sha256": "9999edb750a0c5305c92100dce5698c676b7d7bfefee492e8ee0fb2189d1a15e",
+    "result": "not_built",
+    "sourceCommit": null,
+    "sha256": null,
+    "dashboardAssetsSha256": null,
     "physicalOperations": "none"
   },
   "dependencies": {
@@ -42,6 +50,7 @@
   },
   "rehearsal": {
     "result": "not_executed",
+    "sourceCommit": null,
     "evidenceSha256": null,
     "realCloudflare": false,
     "realSystemd": false,

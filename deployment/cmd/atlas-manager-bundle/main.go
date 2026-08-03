@@ -22,6 +22,7 @@ func main() {
 	epoch := flags.String("source-date-epoch", "", "")
 	source := flags.String("source-root", "", "")
 	output := flags.String("output-dir", "", "")
+	dashboardAssets := flags.String("dashboard-assets", "", "")
 	nodeVersion := flags.String("node-version", bundle.PinnedNode, "")
 	npmVersion := flags.String("npm-version", bundle.PinnedNPM, "")
 	goVersion := flags.String("go-version", bundle.PinnedGo, "")
@@ -38,7 +39,7 @@ func main() {
 	}
 	result, err := bundle.Build(context.Background(), bundle.Config{
 		Version: *version, SourceCommit: *commit, SourceDateEpoch: parsedEpoch,
-		SourceRoot: *source, OutputDir: *output, NodeVersion: *nodeVersion,
+		SourceRoot: *source, OutputDir: *output, DashboardAssetsRoot: *dashboardAssets, NodeVersion: *nodeVersion,
 		NPMVersion: *npmVersion, GoVersion: *goVersion,
 		InstallerPath:                          filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
 		QualificationPath:                      filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),

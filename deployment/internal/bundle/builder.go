@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/administrativeconfiguration"
@@ -32,6 +33,7 @@ type Config struct {
 	SourceDateEpoch                        int64
 	SourceRoot                             string
 	OutputDir                              string
+	DashboardAssetsRoot                    string
 	NodeVersion                            string
 	NPMVersion                             string
 	GoVersion                              string
@@ -131,6 +133,9 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	if _, err := config.Runner.Run(ctx, "node", []string{"node_modules/typescript/bin/tsc", "-p", "tsconfig.deployment.json"}, buildRoot, environment); err != nil {
 		return Result{}, err
 	}
+	if err := copyFile(filepath.Join(config.SourceRoot, "src", "dashboard", "styles.css"), filepath.Join(buildRoot, "dist", "dashboard", "styles.css"), 0o644); err != nil {
+		return Result{}, err
+	}
 	if err := copyFile(filepath.Join(buildRoot, "package.json"), filepath.Join(runtimeRoot, "package.json"), 0o644); err != nil {
 		return Result{}, err
 	}
@@ -158,6 +163,11 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	}
 	if err := writeMetadata(root, config); err != nil {
 		return Result{}, err
+	}
+	if config.DashboardAssetsRoot != "" {
+		if err := copyDashboardAssets(root, config.DashboardAssetsRoot); err != nil {
+			return Result{}, err
+		}
 	}
 	paths, err := manifest.Files(filepath.Join(root, "application"))
 	if err != nil {
@@ -224,6 +234,36 @@ func validateConfig(config Config) error {
 	}
 	if _, err := time.Unix(config.SourceDateEpoch, 0).MarshalText(); err != nil {
 		return fmt.Errorf("source_epoch_invalid")
+	}
+	return nil
+}
+
+func copyDashboardAssets(bundleRoot, sourceRoot string) error {
+	expected := []string{"app.js", "backup.js", "event-history.js", "index.html", "styles.css"}
+	entries, err := os.ReadDir(sourceRoot)
+	if err != nil || len(entries) != len(expected) {
+		return fmt.Errorf("dashboard_assets_invalid")
+	}
+	expectedSet := make(map[string]struct{}, len(expected))
+	for _, name := range expected {
+		expectedSet[name] = struct{}{}
+	}
+	for _, entry := range entries {
+		if _, ok := expectedSet[entry.Name()]; !ok || !entry.Type().IsRegular() {
+			return fmt.Errorf("dashboard_assets_invalid")
+		}
+		info, err := entry.Info()
+		if err != nil || info.Mode().Perm() != 0o644 || info.Size() > 256*1024 {
+			return fmt.Errorf("dashboard_assets_invalid")
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink > 1 {
+			return fmt.Errorf("dashboard_assets_invalid")
+		}
+	}
+	for _, name := range expected {
+		if err := copyFile(filepath.Join(sourceRoot, name), filepath.Join(bundleRoot, "dashboard", name), 0o644); err != nil {
+			return fmt.Errorf("dashboard_assets_invalid")
+		}
 	}
 	return nil
 }

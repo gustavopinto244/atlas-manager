@@ -5,11 +5,20 @@ import { join } from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
+const outputDirectory = process.env.RELEASE_ARTIFACT_DIR
+  ? process.env.RELEASE_ARTIFACT_DIR
+  : root;
+const snapshot = process.env.RELEASE_SNAPSHOT === "true";
 const digest = (value) => createHash("sha256").update(value).digest("hex");
-const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
-  cwd: root,
-  encoding: "utf8",
-}).trim();
+const sourceCommit = snapshot
+  ? null
+  : (process.env.SOURCE_COMMIT ??
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim());
+if (sourceCommit !== null && !/^[0-9a-f]{40}$/u.test(sourceCommit))
+  throw new Error("source_commit_invalid");
 const packageJson = JSON.parse(
   await readFile(join(root, "package.json"), "utf8"),
 );
@@ -23,16 +32,30 @@ const dependencies = await readFile(
 const deploymentGo = process.env.DEPLOYMENT_GO_RESULT ?? "not_executed";
 const powerHelperGo = process.env.POWER_HELPER_GO_RESULT ?? "not_executed";
 const productionAudit = process.env.PRODUCTION_AUDIT_RESULT ?? "not_executed";
-const bundleSha256 = process.env.BUNDLE_SHA256 ?? null;
-const rehearsalSha256 = process.env.REHEARSAL_EVIDENCE_SHA256 ?? null;
+const bundleSha256 = snapshot ? null : (process.env.BUNDLE_SHA256 ?? null);
+const rehearsalSha256 = snapshot
+  ? null
+  : (process.env.REHEARSAL_EVIDENCE_SHA256 ?? null);
+const configurationMatrix =
+  process.env.CONFIGURATION_MATRIX_RESULT ?? "not_executed";
+const dashboardEquivalence =
+  process.env.DASHBOARD_EQUIVALENCE_RESULT ?? "not_executed";
+const administrativeRehearsal =
+  process.env.ADMINISTRATIVE_REHEARSAL_RESULT ?? "not_executed";
+const fullAudit = process.env.FULL_AUDIT_RESULT ?? "not_executed";
 const bundleResult = bundleSha256 === null ? "not_built" : "reproducible";
 const rehearsalResult = rehearsalSha256 === null ? "not_executed" : "passed";
 const qualified =
+  sourceCommit !== null &&
   deploymentGo === "passed" &&
   powerHelperGo === "passed" &&
   productionAudit === "zero_vulnerabilities" &&
   bundleResult === "reproducible" &&
-  rehearsalResult === "passed";
+  rehearsalResult === "passed" &&
+  configurationMatrix === "passed" &&
+  dashboardEquivalence === "passed" &&
+  administrativeRehearsal === "passed" &&
+  ["known_dev_only_advisory", "passed_no_high_or_critical"].includes(fullAudit);
 
 const evidence = {
   schemaVersion: 1,
@@ -64,16 +87,27 @@ const evidence = {
     deploymentGo,
     powerHelperGo,
     productionAudit,
+    fullAudit,
+  },
+  qualificationGates: {
+    configurationMatrix,
+    dashboardEquivalence,
+    administrativeRehearsal,
   },
   bundle: {
     result: bundleResult,
+    sourceCommit,
     sha256: bundleSha256,
+    dashboardAssetsSha256: snapshot
+      ? null
+      : (process.env.DASHBOARD_ASSETS_SHA256 ?? null),
     physicalOperations: "none",
   },
   dependencies: { inventorySha256: digest(dependencies) },
   documentation: { result: "complete" },
   rehearsal: {
     result: rehearsalResult,
+    sourceCommit,
     evidenceSha256: rehearsalSha256,
     realCloudflare: false,
     realSystemd: false,
@@ -87,6 +121,9 @@ const evidence = {
   ],
 };
 await writeFile(
-  join(root, "atlas-manager-v1-software-release-candidate-evidence.json"),
+  join(
+    outputDirectory,
+    "atlas-manager-v1-software-release-candidate-evidence.json",
+  ),
   `${JSON.stringify(evidence, null, 2)}\n`,
 );

@@ -1,4 +1,21 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import process from "node:process";
+
+const root = process.cwd();
+const outputDirectory = process.env.RELEASE_ARTIFACT_DIR
+  ? process.env.RELEASE_ARTIFACT_DIR
+  : root;
+const sourceCommit =
+  process.env.RELEASE_SNAPSHOT === "true"
+    ? null
+    : (process.env.SOURCE_COMMIT ??
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim());
+if (sourceCommit !== null && !/^[0-9a-f]{40}$/u.test(sourceCommit))
+  throw new Error("source_commit_invalid");
 
 const requirements = await readFile("docs/requirements.md", "utf8");
 const identifiers = [
@@ -70,10 +87,13 @@ const scopeTable = table(
   ],
 );
 
+const sourceLine = sourceCommit
+  ? `Source commit: \`${sourceCommit}\``
+  : "Source commit: detached CI qualification artifact";
 const output = `# Atlas Manager v1 requirements traceability
 
 Release candidate: \`1.0.0-rc.2\`
-Baseline: the current source commit recorded by the release generators.
+${sourceLine}
 Scope: software-only qualification; physical gates are intentionally separate.
 
 The table is generated from the normative identifiers in \`docs/requirements.md\`.
@@ -88,6 +108,8 @@ Additional accepted scope boundaries:
 ${scopeTable}
 `;
 await writeFile(
-  "docs/release/atlas-manager-v1-requirements-traceability.md",
+  process.env.RELEASE_ARTIFACT_DIR
+    ? join(outputDirectory, "atlas-manager-v1-requirements-traceability.md")
+    : join(root, "docs/release/atlas-manager-v1-requirements-traceability.md"),
   output,
 );
