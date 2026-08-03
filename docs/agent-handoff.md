@@ -1,12 +1,22 @@
 # Agent handoff
 
-## Latest active work — audit remediation for Issue #285
+## Latest active work — runtime identity password precondition
 
-Branch: `fix/v1-rc-audit-remediation`
+Branch: `fix/runtime-identity-password-precondition`
 
-Baseline: `162191dae6415cc33aab4e30a2cb60be7845cb5f`
+Baseline: `555cecf86a293f62b6231cb329e437de6cbcb657`
 
-Release: `1.0.0-rc.2` software-only candidate; `rc.1` is superseded.
+Release: `1.0.0-rc.3` software-only candidate; `rc.2` is superseded for new
+qualification because its clean-absent runtime identity password precondition
+was defective. The historical `rc.2` evidence remains unchanged.
+
+The correction distinguishes a clean absent identity from unsafe residual
+shadow state: zero shadow entries are `not_applicable/runtime_password_absent`
+only while passwd/group identity is absent; residual entries are blocked, and
+an existing identity still requires exactly one locked shadow entry. No
+physical host evidence is included in the repository. A clean-tree,
+commit-bound `rc.3` bundle must be built after the operator commits these
+version updates.
 
 The remediation implementation record is in
 `docs/audit/AUDIT_REMEDIATION_IMPLEMENTATION_REPORT.md`. The historical

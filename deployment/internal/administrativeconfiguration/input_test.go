@@ -48,7 +48,7 @@ func TestStateRejectsIncompleteGenerationEvidence(t *testing.T) {
 		Profile:             ProfileName,
 		ConfigurationSHA256: strings.Repeat("a", 64),
 		SourceInputSHA256:   strings.Repeat("b", 64),
-		ApplicationVersion:  "1.0.0-rc.2",
+		ApplicationVersion:  "1.0.0-rc.3",
 		SourceCommit:        strings.Repeat("c", 40),
 		Status:              "installed",
 		CurrentGeneration:   1,

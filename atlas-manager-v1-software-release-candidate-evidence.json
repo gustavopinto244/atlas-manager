@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "result": "not_qualified",
-  "releaseVersion": "1.0.0-rc.2",
+  "releaseVersion": "1.0.0-rc.3",
   "baselineCommit": null,
   "sourceCommit": null,
   "administrativeSecurity": {

@@ -25,7 +25,9 @@ dates.
 
 ## Current phase
 
-Atlas Manager is qualifying the `1.0.0-rc.2` software candidate. Physical
+Atlas Manager is qualifying the `1.0.0-rc.3` software candidate. The `rc.2`
+candidate was blocked during physical runtime-identity inspection because its
+clean-absent password precondition was defective. Physical
 Atlas deployment and real power effects remain separately approved gates.
 
 Completed milestones include:
@@ -471,7 +473,8 @@ identity mechanism and Issue #240 delivers the first protected read-only HTTP
 route. The later Issues delivered broader protected delivery, verified
 transport/proxy configuration, deployment ownership, and operator recovery
 procedures. The v0.9 milestone is complete in software; the current candidate
-is `1.0.0-rc.2`.
+is `1.0.0-rc.3`; `rc.2` was superseded after its physical runtime-identity
+inspection exposed a software precondition defect.
 
 Issue #238 delivers the production-shaped identity-verification foundation.
 Cloudflare Access application JWTs are checked at the application boundary
@@ -811,7 +814,7 @@ implemented.
 
 ## v1.0 software release candidate — qualification pending mandatory gates
 
-`1.0.0-rc.2` is the current software-only candidate. Qualification requires
+`1.0.0-rc.3` is the current software-only candidate. Qualification requires
 the mandatory Node, Go, bundle, and rehearsal gates; the local environment
 must not claim qualification when one of those gates is unavailable.
 
