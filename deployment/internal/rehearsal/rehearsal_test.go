@@ -80,11 +80,17 @@ func (executor *accountExecutor) Run(_ context.Context, path string, args []stri
 		if err := executor.appendPasswd("atlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"); err != nil {
 			return identitycommand.Result{ExitCode: 2}
 		}
+		if err := executor.appendShadow("atlas-manager:!:19793:0:99999:7:::\n"); err != nil {
+			return identitycommand.Result{ExitCode: 2}
+		}
 	} else if path == identitycommand.UserDeleteTool {
 		if strings.Join(args, " ") != strings.Join(identitycommand.UserDeleteArguments(), " ") {
 			return identitycommand.Result{ExitCode: 2}
 		}
 		if err := executor.removePasswd(); err != nil {
+			return identitycommand.Result{ExitCode: 2}
+		}
+		if err := executor.removeShadow(); err != nil {
 			return identitycommand.Result{ExitCode: 2}
 		}
 	} else if path == identitycommand.GroupDeleteTool {
@@ -116,12 +122,24 @@ func (executor *accountExecutor) appendGroup(line string) error {
 	return os.WriteFile(executor.paths.Group, append(data, []byte(line)...), 0o644)
 }
 
+func (executor *accountExecutor) appendShadow(line string) error {
+	data, err := os.ReadFile(executor.paths.Shadow)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(executor.paths.Shadow, append(data, []byte(line)...), 0o644)
+}
+
 func (executor *accountExecutor) removePasswd() error {
 	return filterLines(executor.paths.Passwd, runtimeidentity.RuntimeUser)
 }
 
 func (executor *accountExecutor) removeGroup(name string) error {
 	return filterLines(executor.paths.Group, name)
+}
+
+func (executor *accountExecutor) removeShadow() error {
+	return filterLines(executor.paths.Shadow, runtimeidentity.RuntimeUser)
 }
 
 func filterLines(path, name string) error {
@@ -212,7 +230,7 @@ func runLifecycle(t *testing.T) []byte {
 		report, err := identitypreparation.New(f.identity, f.identityDependencies()).Run(ctx, identitypreparation.Inspect, "")
 		return expectIdentity(report, err, "absent")
 	})
-	run("identity prepare-disabled", "prepared", "prepared", "identity_account_database", []string{"etc/passwd", "etc/group", "var/lib"}, func() error {
+	run("identity prepare-disabled", "prepared", "prepared", "identity_account_database", []string{"etc/passwd", "etc/group", "etc/shadow", "var/lib"}, func() error {
 		report, err := identitypreparation.New(f.identity, f.identityDependencies()).Run(ctx, identitypreparation.PrepareDisabled, identitypreparation.Confirmation)
 		return expectIdentity(report, err, "prepared")
 	})
@@ -328,6 +346,9 @@ func newFixture(t *testing.T, root, bundleRoot string) *fixture {
 		t.Fatal(err)
 	}
 	if err := writeFile(filepath.Join(host, "etc/group"), group, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(host, "etc/shadow"), "", 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeFile(filepath.Join(host, "usr/bin/node"), "synthetic node\n", 0o755); err != nil {

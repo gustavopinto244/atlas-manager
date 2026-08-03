@@ -239,7 +239,7 @@ func (preparation Preparation) inspectSnapshot() snapshot {
 	if preparation.deps.Exists(preparation.paths.Helper) {
 		value.helperCheck = check("helper_installation", identityreport.Blocked, "helper_installation_present")
 	}
-	value.passwordCheck = preparation.inspectPasswordState()
+	value.passwordCheck = preparation.inspectPasswordState(value.state)
 	if preparation.deps.Exists(preparation.paths.Configuration) || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.deps.Exists(preparation.paths.ApplicationState) || preparation.deps.Exists(preparation.paths.DeploymentCurrent) || preparation.deps.Exists(preparation.paths.DeploymentReleases) || preparation.deps.Exists(preparation.paths.DeploymentUnit) || preparation.deps.Exists(preparation.paths.DeploymentEnable) || preparation.deps.Exists(preparation.paths.DeploymentState) || preparation.deps.Exists(preparation.paths.DeploymentLock) || preparation.deps.Exists(preparation.paths.RuntimeActivity) {
 		value.deploymentCheck = check("deployment", identityreport.Blocked, "deployment_present")
 	}
@@ -315,8 +315,8 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	createdUser = true
 	identity, verifyErr := preparation.currentIdentity()
 	createdIdentity = identity
-	passwordCheck := preparation.inspectPasswordState()
-	if verifyErr != nil || passwordCheck.Status == identityreport.Blocked || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.deps.Exists(filepath.Join("/var/mail", runtimeidentity.RuntimeUser)) || preparation.deps.Exists(filepath.Join("/var/spool/mail", runtimeidentity.RuntimeUser)) || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
+	passwordCheck := preparation.inspectPasswordState(identitystate.ExactUnmanaged)
+	if verifyErr != nil || passwordCheck.Status != identityreport.Passed || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.deps.Exists(filepath.Join("/var/mail", runtimeidentity.RuntimeUser)) || preparation.deps.Exists(filepath.Join("/var/spool/mail", runtimeidentity.RuntimeUser)) || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
 		return fail("runtime_user_verification_failed")
 	}
 	state := identitystate.ManagedState{SchemaVersion: identitystate.SchemaVersion, Status: "prepared", RuntimeUser: identitystate.Resource{Name: identitystate.RuntimeUser, ID: identity.UserID}, PrimaryGroup: identitystate.GroupResource{Name: identitystate.PrimaryGroup, ID: identity.PrimaryGroupID}, HelperGroup: identitystate.GroupResource{Name: identitystate.HelperGroup, ID: identity.HelperGroupID}, SourceCommit: commit, BundleVersion: version}
@@ -485,9 +485,12 @@ func check(name string, status identityreport.Status, code string) identityrepor
 	return identityreport.Check{Name: name, Status: status, Code: code}
 }
 
-func (preparation Preparation) inspectPasswordState() identityreport.Check {
+func (preparation Preparation) inspectPasswordState(state identitystate.State) identityreport.Check {
 	if !preparation.deps.Exists(preparation.paths.Shadow) {
-		return check("runtime_password", identityreport.NotApplicable, "password_database_absent")
+		if state == identitystate.Absent {
+			return check("runtime_password", identityreport.NotApplicable, "runtime_password_absent")
+		}
+		return check("runtime_password", identityreport.Blocked, "runtime_password_missing")
 	}
 	if err := preparation.deps.ValidateAccountFile(preparation.paths.Shadow); err != nil {
 		return check("runtime_password", identityreport.Blocked, "account_database_unsafe")
@@ -508,7 +511,19 @@ func (preparation Preparation) inspectPasswordState() identityreport.Check {
 			locked = true
 		}
 	}
-	if count != 1 || !locked {
+	if state == identitystate.Absent {
+		if count == 0 {
+			return check("runtime_password", identityreport.NotApplicable, "runtime_password_absent")
+		}
+		return check("runtime_password", identityreport.Blocked, "runtime_password_residual")
+	}
+	if count == 0 {
+		return check("runtime_password", identityreport.Blocked, "runtime_password_missing")
+	}
+	if count > 1 {
+		return check("runtime_password", identityreport.Blocked, "runtime_password_duplicate")
+	}
+	if !locked {
 		return check("runtime_password", identityreport.Blocked, "runtime_password_unlocked")
 	}
 	return check("runtime_password", identityreport.Passed, "runtime_password_locked")

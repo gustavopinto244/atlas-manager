@@ -30,6 +30,16 @@ empty; later systemd configuration supplies supplementary membership. No home
 directory, mail spool, service unit, configuration, helper, or power state is
 created.
 
+Runtime-password inspection is conditioned on the classified identity state.
+Zero `atlas-manager` shadow entries is valid only while the complete
+passwd/group identity is absent and is reported as `not_applicable` with code
+`runtime_password_absent`. A shadow entry without the corresponding identity
+is residual state and blocks preparation with `runtime_password_residual`.
+After account creation, exactly one shadow entry beginning with `!` or `*` is
+mandatory. Missing, duplicate, unlocked, unreadable, or unsafe shadow state
+remains blocked. The installer does not repair or remove unexpected account
+database entries.
+
 Before mutation, fixed account-management binaries, account files, deployment
 absence, and the nonblocking preparation lock are validated. A private,
 synchronized transaction journal is written before the first command and

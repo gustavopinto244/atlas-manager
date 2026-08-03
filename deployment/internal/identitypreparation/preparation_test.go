@@ -8,12 +8,14 @@ import (
 	"testing"
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/identitycommand"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/identityreport"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/qualificationreport"
 )
 
 type fakeAccountExecutor struct {
 	passwd   string
 	group    string
+	shadow   string
 	fail     string
 	failPath string
 	paths    Paths
@@ -35,8 +37,10 @@ func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []
 		}
 	case identitycommand.UserTool:
 		executor.passwd += "atlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"
+		executor.shadow += "atlas-manager:!:19793:0:99999:7:::\n"
 	case identitycommand.UserDeleteTool:
 		executor.passwd = removeLine(executor.passwd, "atlas-manager")
+		executor.shadow = removeLine(executor.shadow, "atlas-manager")
 	case identitycommand.GroupDeleteTool:
 		executor.group = removeLine(executor.group, name)
 	}
@@ -44,6 +48,9 @@ func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []
 		return identitycommand.Result{ExitCode: 2}
 	}
 	if err := os.WriteFile(executor.paths.Group, []byte(executor.group), 0o600); err != nil {
+		return identitycommand.Result{ExitCode: 2}
+	}
+	if err := os.WriteFile(executor.paths.Shadow, []byte(executor.shadow), 0o600); err != nil {
 		return identitycommand.Result{ExitCode: 2}
 	}
 	return identitycommand.Result{}
@@ -94,8 +101,10 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 	executor.paths = paths
 	executor.passwd = "root:x:0:0:root:/root:/bin/sh\n"
 	executor.group = "root:x:0:\n"
+	executor.shadow = ""
 	_ = os.WriteFile(paths.Passwd, []byte(executor.passwd), 0o600)
 	_ = os.WriteFile(paths.Group, []byte(executor.group), 0o600)
+	_ = os.WriteFile(paths.Shadow, []byte(executor.shadow), 0o600)
 	return New(paths, Dependencies{
 		EffectiveUID: func() int { return 0 }, Platform: func() string { return "linux" }, Architecture: func() string { return "amd64" },
 		ValidateTool: func(string) error { return nil }, ValidateDirectory: func(string) error { return nil }, Executor: executor,
@@ -123,6 +132,9 @@ func TestPrepareDisabledCreatesManagedIdentityWithoutHome(t *testing.T) {
 	if _, err := os.Stat(preparation.paths.Journal); !os.IsNotExist(err) {
 		t.Fatal("journal was retained after success")
 	}
+	if executor.shadow != "atlas-manager:!:19793:0:99999:7:::\n" {
+		t.Fatalf("password state=%q", executor.shadow)
+	}
 	verifyPreparation := New(preparation.paths, Dependencies{
 		EffectiveUID: func() int { return 0 }, Platform: func() string { return "linux" }, Architecture: func() string { return "amd64" },
 		ValidateTool: func(string) error { return nil }, ValidateDirectory: func(string) error { return nil }, Executor: executor,
@@ -135,6 +147,112 @@ func TestPrepareDisabledCreatesManagedIdentityWithoutHome(t *testing.T) {
 	verify, err := verifyPreparation.Run(context.Background(), VerifyManaged, "")
 	if err != nil || verify.Result != "managed_prepared" {
 		t.Fatalf("verify=%s err=%v", verify.Result, err)
+	}
+}
+
+func passwordCheck(report identityreport.Report) qualificationreport.Check {
+	for _, check := range report.Checks {
+		if check.Name == "runtime_password" {
+			return check
+		}
+	}
+	return qualificationreport.Check{}
+}
+
+func writeExistingIdentity(t *testing.T, preparation Preparation, shadow string) {
+	t.Helper()
+	passwd := "root:x:0:0:root:/root:/bin/sh\natlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"
+	group := "root:x:0:\natlas-manager:x:1001:\natlas-manager-power:x:1002:\n"
+	if err := os.WriteFile(preparation.paths.Passwd, []byte(passwd), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.Group, []byte(group), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.Shadow, []byte(shadow), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInspectCleanAbsentIdentityAllowsAbsentPasswordState(t *testing.T) {
+	preparation := testPreparation(t, "preparation_required", &fakeAccountExecutor{})
+	report, err := preparation.Run(context.Background(), Inspect, "")
+	if err != nil || report.Result != "absent" || report.IdentityState != "absent" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	check := passwordCheck(report)
+	if check.Status != qualificationreport.NotApplicable || check.Code != "runtime_password_absent" {
+		t.Fatalf("password check=%+v", check)
+	}
+}
+
+func TestPrepareDisabledRejectsResidualShadowEntryWithoutMutation(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.WriteFile(preparation.paths.Shadow, []byte("atlas-manager:!:19793:0:99999:7:::\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || passwordCheck(report).Code != "runtime_password_residual" || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestInspectExistingIdentityRequiresOneLockedShadowEntry(t *testing.T) {
+	tests := []struct {
+		name       string
+		shadow     string
+		wantStatus qualificationreport.Status
+		wantCode   string
+	}{
+		{name: "missing", shadow: "", wantStatus: qualificationreport.Blocked, wantCode: "runtime_password_missing"},
+		{name: "unlocked", shadow: "atlas-manager:$6$hash:19793:0:99999:7:::\n", wantStatus: qualificationreport.Blocked, wantCode: "runtime_password_unlocked"},
+		{name: "duplicate", shadow: "atlas-manager:!:19793:0:99999:7:::\natlas-manager:*:19793:0:99999:7:::\n", wantStatus: qualificationreport.Blocked, wantCode: "runtime_password_duplicate"},
+		{name: "bang_locked", shadow: "atlas-manager:!:19793:0:99999:7:::\n", wantStatus: qualificationreport.Passed, wantCode: "runtime_password_locked"},
+		{name: "star_locked", shadow: "atlas-manager:*:19793:0:99999:7:::\n", wantStatus: qualificationreport.Passed, wantCode: "runtime_password_locked"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			preparation := testPreparation(t, "preparation_required", &fakeAccountExecutor{})
+			writeExistingIdentity(t, preparation, test.shadow)
+			report, err := preparation.Run(context.Background(), Inspect, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			check := passwordCheck(report)
+			if check.Status != test.wantStatus || check.Code != test.wantCode {
+				t.Fatalf("password check=%+v report=%+v", check, report)
+			}
+		})
+	}
+}
+
+func TestInspectPasswordStateBlocksUnsafeShadowMetadataAndReadFailure(t *testing.T) {
+	preparation := testPreparation(t, "preparation_required", &fakeAccountExecutor{})
+	writeExistingIdentity(t, preparation, "atlas-manager:!:19793:0:99999:7:::\n")
+	preparation.deps.ValidateAccountFile = func(path string) error {
+		if path == preparation.paths.Shadow {
+			return os.ErrPermission
+		}
+		return nil
+	}
+	report, err := preparation.Run(context.Background(), Inspect, "")
+	if err != nil || passwordCheck(report).Status != qualificationreport.Blocked || passwordCheck(report).Code != "account_database_unsafe" {
+		t.Fatalf("unsafe metadata report=%+v err=%v", report, err)
+	}
+
+	preparation = testPreparation(t, "preparation_required", &fakeAccountExecutor{})
+	writeExistingIdentity(t, preparation, "atlas-manager:!:19793:0:99999:7:::\n")
+	originalRead := preparation.deps.ReadFile
+	preparation.deps.ReadFile = func(path string) ([]byte, error) {
+		if path == preparation.paths.Shadow {
+			return nil, os.ErrPermission
+		}
+		return originalRead(path)
+	}
+	report, err = preparation.Run(context.Background(), Inspect, "")
+	if err != nil || passwordCheck(report).Status != qualificationreport.Blocked || passwordCheck(report).Code != "account_database_unsafe" {
+		t.Fatalf("read failure report=%+v err=%v", report, err)
 	}
 }
 

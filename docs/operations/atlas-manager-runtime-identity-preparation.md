@@ -30,6 +30,16 @@ Preparation is allowed only when all three identities are absent, deployment
 and configuration are absent, the helper is absent, the service is absent and
 inactive, and no deployment or identity-preparation operation is active.
 
+The runtime-password check is state-aware. While the complete passwd/group
+identity is absent, zero `atlas-manager` entries in the shadow database is the
+valid pre-preparation state and is reported as `runtime_password_absent` with
+status `not_applicable`. Any shadow entry in that state is residual account
+data and blocks preparation with `runtime_password_residual`. Once the runtime
+identity exists, exactly one shadow entry is required and its password field
+must begin with `!` or `*`; missing, duplicate, or unlocked entries block.
+The installer never repairs or removes unexpected passwd, group, shadow, or
+gshadow entries.
+
 The installer writes private managed state and a transaction journal. If a
 command fails, same-process rollback removes only resources created by that
 attempt. If rollback cannot safely finish, the journal remains and the next
