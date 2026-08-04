@@ -341,13 +341,19 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 func newFixture(t *testing.T, root, bundleRoot string) *fixture {
 	t.Helper()
 	host := filepath.Join(root, "host")
-	for _, path := range []string{"opt", "etc/systemd/system/multi-user.target.wants", "var/lib", "run/systemd/system", "usr/bin", "usr/sbin", "usr/local/libexec"} {
+	for _, path := range []string{"opt", "etc/systemd/system/multi-user.target.wants", "var", "var/log", "var/lib", "run/systemd/system", "usr/bin", "usr/sbin", "usr/local/libexec"} {
 		if err := os.MkdirAll(filepath.Join(host, path), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := os.Chmod(filepath.Join(host, "var/log"), 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("usr/sbin", filepath.Join(host, "sbin")); err != nil {
+		t.Fatal(err)
+	}
 	passwd := "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n"
-	group := "root:x:0:\nnobody:x:65534:\n"
+	group := "root:x:0:\nnobody:x:65534:\nsyslog:x:100:\nutmp:x:101:\n"
 	if err := writeFile(filepath.Join(host, "etc/passwd"), passwd, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -454,6 +460,7 @@ func identityPaths(root, bundleRoot string) identitypreparation.Paths {
 	paths.Etc = filepath.Join(root, "etc")
 	paths.Usr = filepath.Join(root, "usr")
 	paths.UsrSbin = filepath.Join(root, "usr/sbin")
+	paths.PamTally2 = filepath.Join(root, "sbin/pam_tally2")
 	paths.Helper = filepath.Join(root, "usr/local/libexec/atlas-manager-power-helper")
 	paths.RuntimeHome = filepath.Join(root, "var/lib/atlas-manager")
 	paths.ApplicationState = paths.RuntimeHome

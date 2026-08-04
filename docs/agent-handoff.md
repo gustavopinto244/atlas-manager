@@ -1,5 +1,19 @@
 # Agent handoff
 
+## Latest active work — runtime identity login-log path safety
+
+The immutable rc.5 bundle passed construction and all read-only qualification,
+but one physical `prepare-disabled` attempt was blocked before identity
+mutation with `login_log_path_unsafe`. The source false positive rejected the
+trusted Ubuntu `root:syslog` group-writable `/var/log`, `root:utmp` group-
+writable `lastlog`, and canonical merged-usr `/sbin -> /usr/sbin` layout. No
+managed resource was created, so no rollback or manual cleanup was required.
+The corrective source change accepts only those explicitly proven trusted
+layout conditions and preserves immutable external-artifact baselines. Rc.5
+must not be retried physically; a new release candidate is required. Operators
+must not modify system login-log permissions or merged-usr links to bypass
+validation. Physical requalification remains pending.
+
 ## Latest active work — runtime identity password precondition
 
 Branch: `fix/runtime-identity-password-precondition`

@@ -277,12 +277,26 @@ type loginLogArtifact struct {
 	digest          [sha256.Size]byte
 }
 
-type loginLogBaseline []loginLogArtifact
+type loginLogLayoutArtifact struct {
+	path         string
+	present      bool
+	mode         os.FileMode
+	uid, gid     uint64
+	nlink        uint64
+	dev, ino     uint64
+	mtime, ctime int64
+	target       string
+}
+
+type loginLogBaseline struct {
+	Artifacts []loginLogArtifact
+	Layout    []loginLogLayoutArtifact
+}
 
 func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.Readiness) (string, loginLogBaseline, string) {
 	baseline, ok := preparation.captureLoginLogBaseline()
 	if !ok {
-		return "", nil, "login_log_path_unsafe"
+		return "", loginLogBaseline{}, "login_log_path_unsafe"
 	}
 	if readiness.Capabilities.NoLogInit {
 		return loginLogsSuppressedByOption, baseline, ""
@@ -299,7 +313,7 @@ func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.
 	// shadow 4.17.4 only writes the UID-indexed files when their size reaches
 	// the selected UID's record. A zero-length existing file proves that no
 	// positive system UID can address a record in it; any content is ambiguous.
-	for _, artifact := range baseline {
+	for _, artifact := range baseline.Artifacts {
 		if !artifact.present || artifact.path == preparation.paths.LoginLogPaths[2] {
 			continue
 		}
@@ -311,28 +325,162 @@ func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.
 }
 
 func (preparation Preparation) captureLoginLogBaseline() (loginLogBaseline, bool) {
+	layout, ok := preparation.captureLoginLogLayout()
+	if !ok {
+		return loginLogBaseline{}, false
+	}
 	paths := append([]string{}, preparation.paths.LoginLogPaths...)
 	if preparation.paths.PamTally2 != "" {
 		paths = append(paths, preparation.paths.PamTally2)
 	}
-	baseline := make(loginLogBaseline, 0, len(paths))
-	for _, path := range paths {
-		artifact, ok := captureLoginLogArtifact(path)
+	baseline := loginLogBaseline{Artifacts: make([]loginLogArtifact, 0, len(paths)), Layout: layout}
+	for index, path := range paths {
+		artifact, ok := captureLoginLogArtifact(path, artifactPolicyFor(index, preparation.paths.LoginLogPaths), preparation.paths.Group)
 		if !ok {
-			return nil, false
+			return loginLogBaseline{}, false
 		}
-		baseline = append(baseline, artifact)
+		baseline.Artifacts = append(baseline.Artifacts, artifact)
 	}
 	return baseline, true
 }
 
-func captureLoginLogArtifact(path string) (loginLogArtifact, bool) {
+func (preparation Preparation) captureLoginLogLayout() ([]loginLogLayoutArtifact, bool) {
+	if len(preparation.paths.LoginLogPaths) == 0 || preparation.paths.PamTally2 == "" {
+		return nil, false
+	}
+	logDir := filepath.Dir(preparation.paths.LoginLogPaths[0])
+	varDir := filepath.Dir(logDir)
+	for _, path := range preparation.paths.LoginLogPaths {
+		if filepath.Dir(path) != logDir {
+			return nil, false
+		}
+	}
+	sbin := filepath.Dir(preparation.paths.PamTally2)
+	entries := []loginLogLayoutArtifact{}
+	for _, path := range []string{varDir, logDir, preparation.paths.Usr, preparation.paths.UsrSbin, sbin} {
+		if duplicateLayoutPath(entries, path) {
+			continue
+		}
+		entry, ok := captureLoginLogLayoutArtifact(path)
+		if !ok {
+			return nil, false
+		}
+		entries = append(entries, entry)
+	}
+	if !validateTrustedSafeDirectory(varDir) || !validateTrustedLogDirectory(logDir, preparation.paths.Group) || !validateTrustedMergedUsr(sbin, preparation.paths.Usr, preparation.paths.UsrSbin) {
+		return nil, false
+	}
+	return entries, true
+}
+
+func duplicateLayoutPath(entries []loginLogLayoutArtifact, path string) bool {
+	for _, entry := range entries {
+		if entry.path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func captureLoginLogLayoutArtifact(path string) (loginLogLayoutArtifact, bool) {
+	entry := loginLogLayoutArtifact{path: path}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return entry, false
+	}
+	stats, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || info.Mode()&os.ModeSymlink != 0 && fileUID(info) != expectedExternalUID() {
+		return entry, false
+	}
+	entry.present = true
+	entry.mode = info.Mode()
+	entry.uid = uint64(stats.Uid)
+	entry.gid = uint64(stats.Gid)
+	entry.nlink = uint64(stats.Nlink)
+	entry.dev = uint64(stats.Dev)
+	entry.ino = uint64(stats.Ino)
+	entry.mtime = info.ModTime().UnixNano()
+	entry.ctime = stats.Ctim.Sec*1e9 + int64(stats.Ctim.Nsec)
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(path)
+		if err != nil {
+			return entry, false
+		}
+		entry.target = target
+	}
+	return entry, true
+}
+
+func validateTrustedLogDirectory(path, groupPath string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() || fileUID(info) != expectedExternalUID() || info.Mode().Perm()&0o002 != 0 {
+		return false
+	}
+	if info.Mode().Perm()&0o020 != 0 {
+		if os.Geteuid() == 0 {
+			return groupNameForGID(groupPath, fileGID(info)) == "syslog"
+		}
+		return fileGID(info) == uint32(os.Getegid())
+	}
+	return true
+}
+
+func validateTrustedSafeDirectory(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink == 0 && info.IsDir() && fileUID(info) == expectedExternalUID() && info.Mode().Perm()&0o022 == 0
+}
+
+func validateTrustedMergedUsr(sbin, usr, usrSbin string) bool {
+	if !validateTrustedSafeDirectory(usr) || !validateTrustedSafeDirectory(usrSbin) {
+		return false
+	}
+	info, err := os.Lstat(sbin)
+	if err != nil || fileUID(info) != expectedExternalUID() {
+		return false
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return info.IsDir() && info.Mode().Perm()&0o022 == 0
+	}
+	target, err := os.Readlink(sbin)
+	if err != nil || !canonicalMergedUsrTarget(target) {
+		return false
+	}
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(sbin), resolved)
+	}
+	return filepath.Clean(resolved) == filepath.Clean(usrSbin)
+}
+
+func canonicalMergedUsrTarget(target string) bool {
+	return target == "usr/sbin" || target == "/usr/sbin"
+}
+
+type loginLogArtifactPolicy int
+
+const (
+	loginLogLastlog loginLogArtifactPolicy = iota
+	loginLogOther
+	loginLogPamTally
+)
+
+func artifactPolicyFor(index int, paths []string) loginLogArtifactPolicy {
+	if index < len(paths) {
+		if index == 0 {
+			return loginLogLastlog
+		}
+		return loginLogOther
+	}
+	return loginLogPamTally
+}
+
+func captureLoginLogArtifact(path string, policy loginLogArtifactPolicy, groupPath string) (loginLogArtifact, bool) {
 	artifact := loginLogArtifact{path: path}
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		return artifact, true
 	}
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o022 != 0 || fileUID(info) != uint32(os.Geteuid()) || fileNlink(info) != 1 || info.Size() > maxLoginLogBaselineSize {
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || fileUID(info) != expectedExternalUID() || fileNlink(info) != 1 || info.Size() > maxLoginLogBaselineSize || !safeLoginLogMode(info.Mode(), policy) || !safeLoginLogGroup(info, policy, groupPath) {
 		return artifact, false
 	}
 	data, err := os.ReadFile(path)
@@ -357,9 +505,68 @@ func captureLoginLogArtifact(path string) (loginLogArtifact, bool) {
 	return artifact, true
 }
 
-func (baseline loginLogBaseline) matches() bool {
-	for _, expected := range baseline {
-		actual, ok := captureLoginLogArtifact(expected.path)
+func safeLoginLogMode(mode os.FileMode, policy loginLogArtifactPolicy) bool {
+	if mode.Perm()&0o002 != 0 {
+		return false
+	}
+	if policy == loginLogLastlog {
+		return true
+	}
+	return mode.Perm()&0o022 == 0
+}
+
+func safeLoginLogGroup(info os.FileInfo, policy loginLogArtifactPolicy, groupPath string) bool {
+	if policy != loginLogLastlog {
+		return info.Mode().Perm()&0o020 == 0
+	}
+	if os.Geteuid() != 0 && fileGID(info) == uint32(os.Getegid()) {
+		return true
+	}
+	return groupNameForGID(groupPath, fileGID(info)) == "utmp"
+}
+
+func expectedExternalUID() uint32 {
+	if os.Geteuid() == 0 {
+		return 0
+	}
+	return uint32(os.Geteuid())
+}
+
+func fileGID(info os.FileInfo) uint32 {
+	stats, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return ^uint32(0)
+	}
+	return stats.Gid
+}
+
+func groupNameForGID(path string, gid uint32) string {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) > 1<<20 {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) >= 4 && fields[3] == strconv.FormatUint(uint64(gid), 10) {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
+func (preparation Preparation) baselineMatches(baseline loginLogBaseline) bool {
+	layout, ok := preparation.captureLoginLogLayout()
+	if !ok || len(layout) != len(baseline.Layout) {
+		return false
+	}
+	for index, expected := range baseline.Layout {
+		actual := layout[index]
+		if actual != expected {
+			return false
+		}
+	}
+	for index, expected := range baseline.Artifacts {
+		actual, ok := captureLoginLogArtifact(expected.path, artifactPolicyFor(index, preparation.paths.LoginLogPaths), preparation.paths.Group)
 		if !ok || actual.present != expected.present {
 			return false
 		}
@@ -411,7 +618,7 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 		return preparation.failureReport(PrepareDisabled, current, "identity_state_not_absent"), nil
 	}
 	current.loginLogCheck = snapshot.loginLogCheck
-	if !baseline.matches() {
+	if !preparation.baselineMatches(baseline) {
 		return preparation.failureReport(PrepareDisabled, current, "login_log_artifact_changed"), nil
 	}
 	commit, version, metadataErr := preparation.deps.BundleMetadata(preparation.paths.BundleRoot)
@@ -467,8 +674,8 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	identity, verifyErr := preparation.currentIdentity()
 	createdIdentity = identity
 	passwordCheck := preparation.inspectPasswordState(identitystate.ExactUnmanaged)
-	if verifyErr != nil || passwordCheck.Status != identityreport.Passed || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.anyPathExists(preparation.paths.MailSpoolPaths) || !baseline.matches() || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
-		if !baseline.matches() {
+	if verifyErr != nil || passwordCheck.Status != identityreport.Passed || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.anyPathExists(preparation.paths.MailSpoolPaths) || !preparation.baselineMatches(baseline) || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
+		if !preparation.baselineMatches(baseline) {
 			return fail("login_log_artifact_changed")
 		}
 		return fail("runtime_user_verification_failed")
@@ -537,7 +744,7 @@ func (preparation Preparation) verifyRollbackArtifacts(journalAbsent bool, basel
 			return false
 		}
 	}
-	if !baseline.matches() {
+	if !preparation.baselineMatches(baseline) {
 		return false
 	}
 	if journalAbsent && preparation.deps.Exists(preparation.paths.Journal) {
@@ -797,7 +1004,7 @@ func validateTool(path string) error {
 
 func validateLoginLogExecutable(path string) bool {
 	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0o111 != 0 && info.Mode().Perm()&0o022 == 0 && fileUID(info) == uint32(os.Geteuid()) && fileNlink(info) == 1
+	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0o111 != 0 && info.Mode().Perm()&0o022 == 0 && fileUID(info) == expectedExternalUID() && fileNlink(info) == 1
 }
 
 func validateAccountFile(path string) error {

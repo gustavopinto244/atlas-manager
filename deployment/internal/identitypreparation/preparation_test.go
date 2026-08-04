@@ -98,6 +98,7 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 	paths.Etc = filepath.Join(root, "etc")
 	paths.Usr = filepath.Join(root, "usr")
 	paths.UsrSbin = filepath.Join(root, "usr/sbin")
+	paths.PamTally2 = filepath.Join(root, "sbin/pam_tally2")
 	paths.Helper = filepath.Join(root, "usr/local/libexec/helper")
 	paths.RuntimeHome = filepath.Join(root, "var/lib/atlas-manager")
 	paths.ApplicationState = paths.RuntimeHome
@@ -119,9 +120,12 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 	_ = os.MkdirAll(filepath.Dir(paths.Passwd), 0o755)
 	_ = os.MkdirAll(filepath.Dir(paths.RuntimeHome), 0o755)
 	_ = os.MkdirAll(filepath.Dir(paths.Lock), 0o755)
+	_ = os.MkdirAll(filepath.Dir(paths.LoginLogPaths[0]), 0o755)
+	_ = os.MkdirAll(paths.UsrSbin, 0o755)
+	_ = os.Symlink("usr/sbin", filepath.Join(root, "sbin"))
 	executor.paths = paths
 	executor.passwd = "root:x:0:0:root:/root:/bin/sh\n"
-	executor.group = "root:x:0:\n"
+	executor.group = "root:x:0:\nsyslog:x:100:\nutmp:x:101:\n"
 	executor.shadow = ""
 	if executor.help == "" {
 		executor.help = "  -r, --system\n  -M, --no-create-home\n  -N, --no-user-group\n  -g, --gid GROUP\n  -d, --home-dir HOME_DIR\n  -s, --shell SHELL\n"
@@ -416,6 +420,130 @@ func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *tes
 	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
 	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
 		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func trustedLoginLogFixture(t *testing.T, target string) (string, string, string) {
+	t.Helper()
+	root := t.TempDir()
+	logDir := filepath.Join(root, "var/log")
+	usrSbin := filepath.Join(root, "usr/sbin")
+	if err := os.MkdirAll(logDir, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(usrSbin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(logDir, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(root, "var"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "sbin")); err != nil {
+		t.Fatal(err)
+	}
+	lastlog := filepath.Join(logDir, "lastlog")
+	if err := os.WriteFile(lastlog, nil, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(lastlog, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	return root, logDir, lastlog
+}
+
+func TestTrustedUbuntuLoginLogLayoutIsAccepted(t *testing.T) {
+	root, logDir, lastlog := trustedLoginLogFixture(t, "usr/sbin")
+	preparation := Preparation{paths: Paths{
+		Usr: root + "/usr", UsrSbin: root + "/usr/sbin", PamTally2: root + "/sbin/pam_tally2",
+		LoginLogPaths: []string{lastlog, logDir + "/faillog", logDir + "/tallylog"},
+	}}
+	baseline, ok := preparation.captureLoginLogBaseline()
+	if !ok || len(baseline.Layout) != 5 || !preparation.baselineMatches(baseline) {
+		t.Fatalf("trusted layout rejected: ok=%v baseline=%+v", ok, baseline)
+	}
+}
+
+func TestTrustedMergedUsrAbsoluteTargetIsAccepted(t *testing.T) {
+	for _, target := range []string{"usr/sbin", "/usr/sbin"} {
+		if !canonicalMergedUsrTarget(target) {
+			t.Fatalf("canonical target rejected: %q", target)
+		}
+	}
+}
+
+func TestUnsafeLoginLogLayoutIsRejected(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(string, string)
+	}{
+		{name: "world writable log directory", setup: func(_ string, logDir string) { _ = os.Chmod(logDir, 0o777) }},
+		{name: "log directory symlink", setup: func(root, logDir string) {
+			_ = os.RemoveAll(logDir)
+			_ = os.Symlink("/tmp", logDir)
+		}},
+		{name: "lastlog world writable", setup: func(_ string, logDir string) {
+			_ = os.Chmod(filepath.Join(logDir, "lastlog"), 0o666)
+		}},
+		{name: "lastlog directory", setup: func(_ string, logDir string) {
+			_ = os.Remove(filepath.Join(logDir, "lastlog"))
+			_ = os.Mkdir(filepath.Join(logDir, "lastlog"), 0o664)
+		}},
+		{name: "lastlog oversized", setup: func(_ string, logDir string) {
+			_ = os.Truncate(filepath.Join(logDir, "lastlog"), maxLoginLogBaselineSize+1)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root, logDir, lastlog := trustedLoginLogFixture(t, "usr/sbin")
+			tc.setup(root, logDir)
+			preparation := Preparation{paths: Paths{
+				Usr: root + "/usr", UsrSbin: root + "/usr/sbin", PamTally2: root + "/sbin/pam_tally2",
+				LoginLogPaths: []string{lastlog, logDir + "/faillog", logDir + "/tallylog"},
+			}}
+			if _, ok := preparation.captureLoginLogBaseline(); ok {
+				t.Fatal("unsafe layout accepted")
+			}
+		})
+	}
+}
+
+func TestMergedUsrRejectsUnexpectedTargetsAndWritableResolvedDirectories(t *testing.T) {
+	cases := []string{"/tmp/sbin", "../../tmp/sbin", "usr/other"}
+	for _, target := range cases {
+		t.Run(target, func(t *testing.T) {
+			root, logDir, lastlog := trustedLoginLogFixture(t, target)
+			preparation := Preparation{paths: Paths{
+				Usr: root + "/usr", UsrSbin: root + "/usr/sbin", PamTally2: root + "/sbin/pam_tally2",
+				LoginLogPaths: []string{lastlog, logDir + "/faillog", logDir + "/tallylog"},
+			}}
+			if _, ok := preparation.captureLoginLogBaseline(); ok {
+				t.Fatal("unexpected merged-usr target accepted")
+			}
+		})
+	}
+	root, logDir, lastlog := trustedLoginLogFixture(t, "usr/sbin")
+	if err := os.Chmod(root+"/usr/sbin", 0o775); err != nil {
+		t.Fatal(err)
+	}
+	preparation := Preparation{paths: Paths{
+		Usr: root + "/usr", UsrSbin: root + "/usr/sbin", PamTally2: root + "/sbin/pam_tally2",
+		LoginLogPaths: []string{lastlog, logDir + "/faillog", logDir + "/tallylog"},
+	}}
+	if _, ok := preparation.captureLoginLogBaseline(); ok {
+		t.Fatal("writable resolved directory accepted")
+	}
+}
+
+func TestAbsentLoginLogLeavesAndPamTallyAreAccepted(t *testing.T) {
+	root, logDir, lastlog := trustedLoginLogFixture(t, "usr/sbin")
+	preparation := Preparation{paths: Paths{
+		Usr: root + "/usr", UsrSbin: root + "/usr/sbin", PamTally2: root + "/sbin/pam_tally2",
+		LoginLogPaths: []string{lastlog, logDir + "/faillog", logDir + "/tallylog"},
+	}}
+	if _, ok := preparation.captureLoginLogBaseline(); !ok {
+		t.Fatal("absent optional login-log leaves rejected")
 	}
 }
 

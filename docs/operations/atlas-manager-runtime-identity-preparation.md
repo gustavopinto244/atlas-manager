@@ -52,6 +52,22 @@ permissions, size and content prove it cannot be addressed. Ambiguous or
 unsafe state blocks before group creation. `btmp` and `wtmp` are not part of
 this useradd-owned set.
 
+The trusted Ubuntu path layout is checked separately from the immutable log
+baseline. `/var` must be a safe root-owned directory. `/var/log` may be the
+normal root-owned `syslog` group directory with mode `0775`, provided it is not
+world-writable, a symlink, or controlled by an unexpected group. A proven
+`/var/log/lastlog` may be a root-owned `utmp` group regular file with mode
+`0664`; it must not be world-writable or a symlink. Absent `faillog`,
+`tallylog`, and `pam_tally2` remain valid when the selected backend proof
+permits absence.
+
+On merged-usr systems `/sbin` is accepted only as a root-owned symlink to
+exactly `usr/sbin` or `/usr/sbin`, with root-owned, non-writable `/usr` and
+`/usr/sbin` directories. Arbitrary targets, traversal, chained links, writable
+resolved components, changed metadata, and unexpected file types still block
+with `login_log_path_unsafe`. Do not modify system login-log permissions or
+merged-usr links to work around this check.
+
 The runtime-password check is state-aware. While the complete passwd/group
 identity is absent, zero `atlas-manager` entries in the shadow database is the
 valid pre-preparation state and is reported as `runtime_password_absent` with

@@ -63,6 +63,25 @@ cannot be addressed; ambiguous state blocks before mutation. `btmp` and
 source contract, not on a missing option alone; an implementation that cannot
 satisfy the same proof must be classified or rejected.
 
+The path proof distinguishes a trusted system layout from the external files
+being baselined. On the supported Ubuntu merged-usr layout, `/var` and `/usr`
+and `/usr/sbin` must be root-owned, non-symlink directories without untrusted
+write permission. `/var/log` may be the expected root-owned `syslog` group,
+mode `0775` directory (never world-writable); its group write permission is
+accepted only for that trusted group. A proven `lastlog` may be a root-owned
+`utmp` group, mode `0664` regular file (never world-writable and never a
+symlink). `faillog`, `tallylog`, and `pam_tally2` may be absent when the
+selected backend proof permits absence. Existing present artifacts retain
+their strict type, owner, group, permission, size, and baseline requirements.
+
+For merged-usr, `/sbin` may be a root-owned symlink whose target is exactly
+`usr/sbin` or `/usr/sbin`, with safe resolved `/usr` and `/usr/sbin`
+directories. Symlink mode bits are not treated as directory permissions, but
+arbitrary targets, traversal, extra hops, writable resolved components, and
+unexpected replacements remain unsafe. Operators must not change login-log
+permissions or merged-usr links to work around validation; an unexpected or
+ambiguous layout remains fail-closed as `login_log_path_unsafe`.
+
 Every preexisting login-log artifact and relevant tally executable receives a
 bounded immutable baseline containing identity, metadata and a SHA-256 digest.
 The baseline must match after creation and during rollback. Preexisting logs

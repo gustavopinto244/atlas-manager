@@ -23,6 +23,20 @@ identity corrections from commits `555cecf`, `c593d80`, and `939ba56`:
   transaction. Preexisting login logs are never deleted, truncated, restored,
   or treated as installer-owned artifacts.
 
+The commit-bound rc.5 bundle, read-only host qualification, read-only identity
+inspection, and account-tool readiness all passed. Physical `prepare-disabled`
+was then attempted once and blocked before identity mutation with
+`login_log_path_unsafe`. The false positive rejected the normal trusted
+group-writable `/var/log` and `lastlog` layout and the canonical merged-usr
+`/sbin` symlink. No rollback or manual cleanup was required because no managed
+resource was created. This is historical rc.5 evidence: rc.5 must never be
+retried or used for identity preparation, and a new release candidate is
+required.
+
+The corrected source-level policy accepts only the proven trusted layout and
+continues to fail closed for untrusted ownership, permissions, types, targets,
+or metadata changes. It has not been physically qualified.
+
 The deterministic tests include the Ubuntu 26.04 source-level fixture with no
 `--no-log-init`, `GROUPS=`, `CREATE_MAIL_SPOOL=no`, an existing `lastlog`, and
 no `faillog`. They also cover defaults compatibility, backend classification,
