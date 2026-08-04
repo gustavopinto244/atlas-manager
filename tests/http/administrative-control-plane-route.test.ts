@@ -279,7 +279,7 @@ describe("administrative control-plane routes", () => {
           getOperationsOverview: { execute },
         })),
         getServerHealth: base().getServerHealth,
-        applicationVersion: "1.0.0-rc.5",
+        applicationVersion: "1.0.0-rc.6",
       },
     });
     const crossSite = await request(app)

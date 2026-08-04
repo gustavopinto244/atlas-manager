@@ -1,6 +1,18 @@
 # Agent handoff
 
-## Latest active work — runtime identity login-log path safety
+## Latest active work — rc.6 release-candidate source update
+
+The active candidate is `1.0.0-rc.6`, based on commit
+`1aaf0893d0f6ece4f90293f5ba10d311135993e9`. The rc.5 bundle and read-only
+qualification history remain historical. Rc.5 had one authorized physical
+preparation attempt that blocked before mutation with `login_log_path_unsafe`;
+trusted Ubuntu group-writable login-log paths and the canonical merged-usr
+symlink were falsely rejected. Commit `1aaf089` is the correction. Rc.6 is
+not physically qualified and must undergo complete physical requalification.
+Operators must not change login-log permissions, ACLs, ownership, or
+merged-usr links to bypass validation.
+
+## Historical rc.5 runtime identity login-log path safety
 
 The immutable rc.5 bundle passed construction and all read-only qualification,
 but one physical `prepare-disabled` attempt was blocked before identity

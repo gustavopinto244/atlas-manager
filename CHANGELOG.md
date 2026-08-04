@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0-rc.6
+
+- accepts the proven trusted Ubuntu login-log layout without permitting
+  arbitrary group-writable paths;
+- supports canonical merged-usr `/sbin -> /usr/sbin` resolution while
+  rejecting unsafe ownership, permissions, types, and symlink targets;
+- captures immutable path-layout and external-artifact baselines and preserves
+  `recovery_required` behavior when they change;
+- records rc.5 as historically blocked for physical identity preparation and
+  requires complete physical requalification for this candidate.
+
 ## 1.0.0-rc.5
 
 - corrects clean-absent runtime identity password-state handling;
