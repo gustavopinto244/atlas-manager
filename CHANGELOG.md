@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.0-rc.5
+
+- corrects clean-absent runtime identity password-state handling;
+- hardens real `useradd` capability probing and removes unsupported hardcoded
+  `--no-log-init` assumptions;
+- accepts `GROUPS=`, expanded canonical defaults, and compatible
+  `USRSKEL`/`LOG_INIT` output while requiring exactly one
+  `CREATE_MAIL_SPOOL=no`;
+- classifies login-log backends and verifies immutable external baselines;
+- hardens rollback ownership boundaries and recovery-required reporting;
+- adds Ubuntu 26.04 source-level fixture coverage;
+- keeps rc.2, rc.3, and rc.4 historical blockers intact; physical
+  requalification and a new commit-bound bundle remain required.
+
 ## 1.0.0-rc.4
 
 - resets the software release candidate after the two runtime-identity

@@ -89,3 +89,14 @@ After identity preparation, the separate mock-only runtime configuration and
 service lifecycle tools may be used. They preserve these committed identities
 through service deactivation and configuration removal; neither tool enrolls
 the account textually in the helper group or enables Linux power effects.
+
+## rc.5 operator sequence
+
+For the active `1.0.0-rc.5` candidate, inspect the commit-bound bundle, run
+read-only host qualification, run read-only identity inspection, and review
+account-tool readiness before the explicitly authorized `prepare-disabled`
+operation. Then run `inspect`, `verify-managed`, and host `verify-prepared`.
+Only after those results are reviewed may the separately authorized
+`install-disabled` and `verify-disabled-installation` steps run. Complete the
+remaining mock-only and physical qualification gates afterward. The rc.4
+bundle is historical and must never be used for physical identity preparation.
