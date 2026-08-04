@@ -13,16 +13,17 @@ import (
 )
 
 type fakeAccountExecutor struct {
-	passwd   string
-	group    string
-	shadow   string
-	fail     string
-	failPath string
-	paths    Paths
-	seen     []string
-	help     string
-	defaults string
-	mail     bool
+	passwd         string
+	group          string
+	shadow         string
+	fail           string
+	failPath       string
+	paths          Paths
+	seen           []string
+	help           string
+	defaults       string
+	mail           bool
+	mutateLoginLog bool
 }
 
 func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []string) identitycommand.Result {
@@ -53,6 +54,9 @@ func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []
 	case identitycommand.UserTool:
 		executor.passwd += "atlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"
 		executor.shadow += "atlas-manager:!:19793:0:99999:7:::\n"
+		if executor.mutateLoginLog {
+			_ = os.WriteFile(executor.paths.LoginLogPaths[0], []byte("unexpected mutation"), 0o600)
+		}
 	case identitycommand.UserDeleteTool:
 		executor.passwd = removeLine(executor.passwd, "atlas-manager")
 		executor.shadow = removeLine(executor.shadow, "atlas-manager")
@@ -123,7 +127,7 @@ func testPreparation(t *testing.T, hostResult string, executor *fakeAccountExecu
 		executor.help = "  -r, --system\n  -M, --no-create-home\n  -N, --no-user-group\n  -g, --gid GROUP\n  -d, --home-dir HOME_DIR\n  -s, --shell SHELL\n"
 	}
 	if executor.defaults == "" {
-		executor.defaults = "GROUP=100\nHOME=/home\nINACTIVE=-1\nEXPIRE=\nSHELL=/bin/sh\nSKEL=/etc/skel\nCREATE_MAIL_SPOOL=no\n"
+		executor.defaults = "GROUP=100\nGROUPS=\nHOME=/home\nINACTIVE=-1\nEXPIRE=\nSHELL=/bin/sh\nSKEL=/etc/skel\nUSRSKEL=/usr/etc/skel\nCREATE_MAIL_SPOOL=no\nLOG_INIT=yes\n"
 	}
 	_ = os.WriteFile(paths.Passwd, []byte(executor.passwd), 0o600)
 	_ = os.WriteFile(paths.Group, []byte(executor.group), 0o600)
@@ -334,6 +338,20 @@ func TestPrepareDisabledUsesUbuntuCapabilitySetWithoutNoLogInit(t *testing.T) {
 	}
 }
 
+func TestPrepareDisabledUsesEffectiveLogInitNoWithoutOptionalFlag(t *testing.T) {
+	executor := &fakeAccountExecutor{defaults: "GROUPS=\nCREATE_MAIL_SPOOL=no\nLOG_INIT=no\n"}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "prepared" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	for _, command := range executor.seen {
+		if strings.HasPrefix(command, identitycommand.UserTool) && strings.Contains(command, "--no-log-init") {
+			t.Fatalf("unsupported optional flag used: %s", command)
+		}
+	}
+}
+
 func TestPrepareDisabledIncludesNoLogInitOnlyWhenProbed(t *testing.T) {
 	executor := &fakeAccountExecutor{help: "--system --no-create-home --no-user-group --gid --home-dir --shell --no-log-init"}
 	preparation := testPreparation(t, "preparation_required", executor)
@@ -348,6 +366,44 @@ func TestPrepareDisabledIncludesNoLogInitOnlyWhenProbed(t *testing.T) {
 	}
 }
 
+func TestPrepareDisabledExistingLastlogBaselineIsPreserved(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(preparation.paths.LoginLogPaths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "prepared" || report.Checks[len(report.Checks)-1].Code != "login_logs_backend_proven_safe" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	after, err := os.ReadFile(preparation.paths.LoginLogPaths[0])
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("lastlog changed: before=%q after=%q err=%v", before, after, err)
+	}
+}
+
+func TestPrepareDisabledUbuntu26FixturePassesReadinessContract(t *testing.T) {
+	executor := &fakeAccountExecutor{defaults: "GROUPS=\nCREATE_MAIL_SPOOL=no\n"}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "prepared" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+}
+
 func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *testing.T) {
 	executor := &fakeAccountExecutor{}
 	preparation := testPreparation(t, "preparation_required", executor)
@@ -358,8 +414,75 @@ func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *tes
 		t.Fatal(err)
 	}
 	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
-	if err != nil || report.Result != "blocked" || report.Transaction.Code != "account_log_suppression_unsafe" || len(executor.seen) != 0 {
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
 		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestPrepareDisabledExistingFaillogStateBlocksBeforeMutation(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[1]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[1], []byte("faillog record"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestPrepareDisabledPamTallyExecutableBlocksBeforeMutation(t *testing.T) {
+	executor := &fakeAccountExecutor{}
+	preparation := testPreparation(t, "preparation_required", executor)
+	preparation.paths.PamTally2 = filepath.Join(filepath.Dir(preparation.paths.LoginLogPaths[0]), "pam_tally2")
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.PamTally2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.PamTally2, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+}
+
+func TestPrepareDisabledChangedLoginLogRequiresRecovery(t *testing.T) {
+	executor := &fakeAccountExecutor{mutateLoginLog: true}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "preparation_failed_recovery_required" || report.Transaction.Code != "login_log_artifact_changed_recovery_required" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	if _, err := os.Stat(preparation.paths.LoginLogPaths[0]); err != nil {
+		t.Fatalf("preexisting login log was removed: %v", err)
+	}
+}
+
+func TestPrepareDisabledRollbackPreservesPreexistingLoginLog(t *testing.T) {
+	executor := &fakeAccountExecutor{failPath: identitycommand.UserTool}
+	preparation := testPreparation(t, "preparation_required", executor)
+	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "preparation_failed_rolled_back" {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+	if _, err := os.Stat(preparation.paths.LoginLogPaths[0]); err != nil {
+		t.Fatalf("preexisting login log was deleted: %v", err)
 	}
 }
 
@@ -377,7 +500,11 @@ func TestPrepareDisabledBlocksUnsafeMailSpoolDefaultBeforeGroups(t *testing.T) {
 		executor := &fakeAccountExecutor{defaults: defaults}
 		preparation := testPreparation(t, "preparation_required", executor)
 		report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
-		if err != nil || report.Result != "blocked" || report.Transaction.Code != "mail_spool_default_unsafe" || len(executor.seen) != 0 {
+		wantCode := "mail_spool_default_unsafe"
+		if strings.Contains(defaults, "CREATE_MAIL_SPOOL=no\nCREATE_MAIL_SPOOL=no") || defaults == "CREATE_MAIL_SPOOL =no\n" {
+			wantCode = "account_defaults_invalid"
+		}
+		if err != nil || report.Result != "blocked" || report.Transaction.Code != wantCode || len(executor.seen) != 0 {
 			t.Fatalf("defaults=%q report=%+v err=%v commands=%v", defaults, report, err, executor.seen)
 		}
 	}

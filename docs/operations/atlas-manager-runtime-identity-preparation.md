@@ -31,14 +31,26 @@ and configuration are absent, the helper is absent, the service is absent and
 inactive, and no deployment or identity-preparation operation is active.
 
 Before acquiring the preparation lock or creating either group, the installer
-probes the fixed `/usr/sbin/useradd` with `--help` and `-D`. The probe is
-shell-free, bounded, timed, and uses the fixed `LANG=C`, `LC_ALL=C`, `TZ=UTC`
-environment. Required account options must be present. `--no-log-init` is
-optional because supported `useradd` versions differ; it is included only
-when the probe confirms it. If it is unavailable, fixed legacy login-log
-paths must be absent or preparation blocks. The effective defaults must
-contain exactly one canonical `CREATE_MAIL_SPOOL=no`; the installer never
-edits `/etc/default/useradd` or `/etc/login.defs`.
+probes the fixed `/usr/sbin/useradd` with `--help` and `-D`. The readiness
+probe is shell-free, bounded, timed, UTF-8 checked, and uses the fixed
+`LANG=C`, `LC_ALL=C`, `TZ=UTC` environment. Required account options must be
+present. Defaults are parsed from stdout only: each nonempty line has one
+canonical uppercase key, duplicate keys and surrounding whitespace are
+rejected, and unrelated keys (including `GROUPS=` and `USRSKEL=`) are
+accepted. Exactly one `CREATE_MAIL_SPOOL=no` is required. `LOG_INIT`, when
+reported, must be exactly `yes` or `no`. The installer never edits
+`/etc/default/useradd` or `/etc/login.defs`.
+
+The selected suppression strategy is reported without exposing command output:
+supported `--no-log-init` is included in account creation; when that option is
+unavailable, effective `LOG_INIT=no` is used; otherwise the installer checks
+the exact shadow 4.17.4 side effects. That implementation can reset the
+UID-indexed `lastlog` and `faillog` records and, when `/sbin/pam_tally2` is an
+executable, invokes its fixed tally reset command after closing account files.
+An existing backend is accepted only when its bounded type, ownership,
+permissions, size and content prove it cannot be addressed. Ambiguous or
+unsafe state blocks before group creation. `btmp` and `wtmp` are not part of
+this useradd-owned set.
 
 The runtime-password check is state-aware. While the complete passwd/group
 identity is absent, zero `atlas-manager` entries in the shadow database is the
@@ -50,13 +62,19 @@ must begin with `!` or `*`; missing, duplicate, or unlocked entries block.
 The installer never repairs or removes unexpected passwd, group, shadow, or
 gshadow entries.
 
+Before the first account mutation, each relevant preexisting login-log file
+and tally executable is captured as an immutable baseline of absence/presence,
+type, device/inode, mode, owner, group, link count, size, timestamps and a
+bounded SHA-256 digest. The baseline must match after user creation and during
+rollback. Preexisting logs are never removed, truncated or rewritten.
+
 The installer writes private managed state and a transaction journal. If a
 command fails, same-process rollback removes only resources created by that
 attempt and reports the original bounded failing stage together with the
 rollback outcome. A complete `preparation_failed_rolled_back` result is
 emitted only after the user, groups, shadow entry, home, mail spool, managed
-state, candidate files, journal, and operation lock are verified absent. If
-any artifact remains, the result is
+state, candidate files, journal, operation lock and every preexisting login-log
+baseline are verified. If any artifact remains or an external log changed, the result is
 `preparation_failed_recovery_required` and the journal remains for analysis.
 The operation does not report its own held lock as an external conflict. Do
 not retry or delete identities manually under this procedure. There is no

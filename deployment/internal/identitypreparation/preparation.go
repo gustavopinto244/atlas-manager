@@ -2,6 +2,7 @@ package identitypreparation
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ type Paths struct {
 	Usr                string
 	UsrSbin            string
 	Helper             string
+	PamTally2          string
 	RuntimeHome        string
 	ApplicationState   string
 	DeploymentRoot     string
@@ -67,7 +69,7 @@ type Paths struct {
 func ProductionPaths(bundleRoot string) Paths {
 	return Paths{
 		BundleRoot: bundleRoot, Passwd: "/etc/passwd", Group: "/etc/group", Shadow: "/etc/shadow", GShadow: "/etc/gshadow", Etc: "/etc", Usr: "/usr", UsrSbin: "/usr/sbin",
-		Helper: "/usr/local/libexec/atlas-manager-power-helper", RuntimeHome: "/var/lib/atlas-manager", ApplicationState: "/var/lib/atlas-manager",
+		Helper: "/usr/local/libexec/atlas-manager-power-helper", PamTally2: "/sbin/pam_tally2", RuntimeHome: "/var/lib/atlas-manager", ApplicationState: "/var/lib/atlas-manager",
 		DeploymentRoot: "/opt/atlas-manager", DeploymentCurrent: "/opt/atlas-manager/current", DeploymentReleases: "/opt/atlas-manager/releases", DeploymentUnit: "/etc/systemd/system/atlas-manager.service",
 		DeploymentEnable: "/etc/systemd/system/multi-user.target.wants/atlas-manager.service", DeploymentState: "/var/lib/atlas-manager-deployment/state.json", DeploymentLock: "/run/atlas-manager-deployment.lock", RuntimeActivity: "/run/atlas-manager",
 		Configuration: "/etc/atlas-manager/atlas-manager.env", StateDirectory: "/var/lib/atlas-manager-identity-preparation", StateFile: "/var/lib/atlas-manager-identity-preparation/state.json", Journal: "/var/lib/atlas-manager-identity-preparation/transaction.json", Lock: "/run/atlas-manager-identity-preparation.lock",
@@ -180,6 +182,7 @@ type snapshot struct {
 	journalSeen                                                                      bool
 	identityCheck, stateCheck, journalCheck, deploymentCheck, helperCheck, lockCheck identityreport.Check
 	passwordCheck                                                                    identityreport.Check
+	loginLogCheck                                                                    identityreport.Check
 }
 
 func (preparation Preparation) inspectSnapshot(lockHeld ...bool) snapshot {
@@ -191,6 +194,7 @@ func (preparation Preparation) inspectSnapshot(lockHeld ...bool) snapshot {
 		helperCheck:     check("helper_installation", identityreport.Passed, "helper_absent"),
 		lockCheck:       check("preparation_lock", identityreport.Passed, "preparation_lock_absent"),
 		passwordCheck:   check("runtime_password", identityreport.NotApplicable, "password_state_not_inspected"),
+		loginLogCheck:   check("login_log_strategy", identityreport.NotApplicable, "login_log_strategy_not_inspected"),
 	}
 	passwd, passwdErr := preparation.deps.ReadFile(preparation.paths.Passwd)
 	group, groupErr := preparation.deps.ReadFile(preparation.paths.Group)
@@ -255,6 +259,120 @@ func (preparation Preparation) dependencyReport(ctx context.Context) (qualificat
 	return preparation.deps.HostQualify(ctx)
 }
 
+const (
+	loginLogsSuppressedByOption  = "login_logs_suppressed_by_no_log_init"
+	loginLogsSuppressedByDefault = "login_logs_suppressed_by_log_init_no"
+	loginLogsBackendProvenSafe   = "login_logs_backend_proven_safe"
+	maxLoginLogBaselineSize      = 1 << 20
+)
+
+type loginLogArtifact struct {
+	path            string
+	present         bool
+	mode            os.FileMode
+	uid, gid, nlink uint64
+	dev, ino        uint64
+	size            int64
+	mtime, ctime    int64
+	digest          [sha256.Size]byte
+}
+
+type loginLogBaseline []loginLogArtifact
+
+func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.Readiness) (string, loginLogBaseline, string) {
+	baseline, ok := preparation.captureLoginLogBaseline()
+	if !ok {
+		return "", nil, "login_log_path_unsafe"
+	}
+	if readiness.Capabilities.NoLogInit {
+		return loginLogsSuppressedByOption, baseline, ""
+	}
+	if readiness.Defaults.LogInit == "no" {
+		return loginLogsSuppressedByDefault, baseline, ""
+	}
+	if preparation.deps.Exists(preparation.paths.PamTally2) {
+		if !validateLoginLogExecutable(preparation.paths.PamTally2) {
+			return "", baseline, "login_log_path_unsafe"
+		}
+		return "", baseline, "login_log_strategy_unsupported"
+	}
+	// shadow 4.17.4 only writes the UID-indexed files when their size reaches
+	// the selected UID's record. A zero-length existing file proves that no
+	// positive system UID can address a record in it; any content is ambiguous.
+	for _, artifact := range baseline {
+		if !artifact.present || artifact.path == preparation.paths.LoginLogPaths[2] {
+			continue
+		}
+		if artifact.size != 0 {
+			return "", baseline, "login_log_strategy_unsupported"
+		}
+	}
+	return loginLogsBackendProvenSafe, baseline, ""
+}
+
+func (preparation Preparation) captureLoginLogBaseline() (loginLogBaseline, bool) {
+	paths := append([]string{}, preparation.paths.LoginLogPaths...)
+	if preparation.paths.PamTally2 != "" {
+		paths = append(paths, preparation.paths.PamTally2)
+	}
+	baseline := make(loginLogBaseline, 0, len(paths))
+	for _, path := range paths {
+		artifact, ok := captureLoginLogArtifact(path)
+		if !ok {
+			return nil, false
+		}
+		baseline = append(baseline, artifact)
+	}
+	return baseline, true
+}
+
+func captureLoginLogArtifact(path string) (loginLogArtifact, bool) {
+	artifact := loginLogArtifact{path: path}
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return artifact, true
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o022 != 0 || fileUID(info) != uint32(os.Geteuid()) || fileNlink(info) != 1 || info.Size() > maxLoginLogBaselineSize {
+		return artifact, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return artifact, false
+	}
+	stats, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return artifact, false
+	}
+	artifact.present = true
+	artifact.mode = info.Mode()
+	artifact.uid = uint64(stats.Uid)
+	artifact.gid = uint64(stats.Gid)
+	artifact.nlink = uint64(stats.Nlink)
+	artifact.dev = uint64(stats.Dev)
+	artifact.ino = uint64(stats.Ino)
+	artifact.size = info.Size()
+	artifact.mtime = info.ModTime().UnixNano()
+	artifact.ctime = stats.Ctim.Sec*1e9 + int64(stats.Ctim.Nsec)
+	artifact.digest = sha256.Sum256(data)
+	return artifact, true
+}
+
+func (baseline loginLogBaseline) matches() bool {
+	for _, expected := range baseline {
+		actual, ok := captureLoginLogArtifact(expected.path)
+		if !ok || actual.present != expected.present {
+			return false
+		}
+		if !expected.present {
+			continue
+		}
+		if actual.mode != expected.mode || actual.uid != expected.uid || actual.gid != expected.gid || actual.nlink != expected.nlink || actual.dev != expected.dev || actual.ino != expected.ino || actual.size != expected.size || actual.mtime != expected.mtime || actual.ctime != expected.ctime || actual.digest != expected.digest {
+			return false
+		}
+	}
+	return true
+}
+
 func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (identityreport.Report, error) {
 	if snapshot.state != identitystate.Absent || snapshot.journalSeen || snapshot.passwordCheck.Status == identityreport.Blocked || snapshot.deploymentCheck.Status == identityreport.Blocked || snapshot.helperCheck.Status == identityreport.Blocked || snapshot.lockCheck.Status == identityreport.Blocked {
 		return preparation.failureReport(PrepareDisabled, snapshot, "qualification_precondition_failed"), nil
@@ -268,16 +386,16 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 			return preparation.failureReport(PrepareDisabled, snapshot, "account_tool_unsafe"), nil
 		}
 	}
-	capabilities, capabilityErr := identitycommand.ProbeUserAdd(ctx, preparation.deps.Executor)
-	if capabilityErr != nil {
-		return preparation.failureReport(PrepareDisabled, snapshot, "account_tool_capability_unsupported"), nil
+	readiness, readinessErr := identitycommand.ProbeReadiness(ctx, preparation.deps.Executor)
+	if readinessErr != nil {
+		return preparation.failureReport(PrepareDisabled, snapshot, readinessErr.Error()), nil
 	}
-	if !capabilities.NoLogInit && preparation.anyPathExists(preparation.paths.LoginLogPaths) {
-		return preparation.failureReport(PrepareDisabled, snapshot, "account_log_suppression_unsafe"), nil
+	strategy, baseline, strategyCode := preparation.selectLoginLogStrategy(readiness)
+	if strategyCode != "" {
+		return preparation.failureReport(PrepareDisabled, snapshot, strategyCode), nil
 	}
-	if err := identitycommand.ValidateMailSpoolDefault(ctx, preparation.deps.Executor); err != nil {
-		return preparation.failureReport(PrepareDisabled, snapshot, "mail_spool_default_unsafe"), nil
-	}
+	readiness.SuppressionStrategy = strategy
+	snapshot.loginLogCheck = check("login_log_strategy", identityreport.Passed, strategy)
 	lock, err := preparation.acquireLock()
 	if err != nil {
 		return preparation.failureReport(PrepareDisabled, snapshot, "preparation_lock_conflict"), nil
@@ -292,6 +410,10 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	if current.state != identitystate.Absent || current.journalSeen || current.passwordCheck.Status == identityreport.Blocked || current.deploymentCheck.Status == identityreport.Blocked || current.helperCheck.Status == identityreport.Blocked {
 		return preparation.failureReport(PrepareDisabled, current, "identity_state_not_absent"), nil
 	}
+	current.loginLogCheck = snapshot.loginLogCheck
+	if !baseline.matches() {
+		return preparation.failureReport(PrepareDisabled, current, "login_log_artifact_changed"), nil
+	}
 	commit, version, metadataErr := preparation.deps.BundleMetadata(preparation.paths.BundleRoot)
 	if metadataErr != nil {
 		return preparation.failureReport(PrepareDisabled, current, "bundle_invalid"), nil
@@ -305,10 +427,10 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	createdIdentity := runtimeidentity.Identity{}
 	fail := func(code string) (identityreport.Report, error) {
 		if createdUser || createdHelper || createdPrimary {
-			if preparation.rollback(ctx, createdUser, createdHelper, createdPrimary, createdIdentity, primaryID, helperID, !capabilities.NoLogInit) {
+			if preparation.rollback(ctx, createdUser, createdHelper, createdPrimary, createdIdentity, primaryID, helperID, baseline) {
 				preparation.releaseLock(lock)
 				lockReleased = true
-				if identitystate.RemoveJournal(preparation.paths.Journal) == nil && preparation.verifyRollbackArtifacts(true, !capabilities.NoLogInit, false) {
+				if identitystate.RemoveJournal(preparation.paths.Journal) == nil && preparation.verifyRollbackArtifacts(true, baseline, false) {
 					return preparation.failureReport(PrepareDisabled, current, code+"_rolled_back"), nil
 				}
 				_ = preparation.retainRecoveryJournal(journal)
@@ -338,14 +460,17 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	if !preparation.verifyGroup(identitystate.HelperGroup, false) || !preparation.updateJournal(&journal, identitystate.ResourceHelperGroup) {
 		return fail("helper_group_verification_failed")
 	}
-	if result := preparation.deps.Executor.Run(ctx, identitycommand.UserTool, identitycommand.UserArguments(capabilities)); result.ExitCode != 0 {
+	if result := preparation.deps.Executor.Run(ctx, identitycommand.UserTool, identitycommand.UserArguments(readiness.Capabilities)); result.ExitCode != 0 {
 		return fail("runtime_user_creation_failed")
 	}
 	createdUser = true
 	identity, verifyErr := preparation.currentIdentity()
 	createdIdentity = identity
 	passwordCheck := preparation.inspectPasswordState(identitystate.ExactUnmanaged)
-	if verifyErr != nil || passwordCheck.Status != identityreport.Passed || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.anyPathExists(preparation.paths.MailSpoolPaths) || (!capabilities.NoLogInit && preparation.anyPathExists(preparation.paths.LoginLogPaths)) || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
+	if verifyErr != nil || passwordCheck.Status != identityreport.Passed || preparation.deps.Exists(preparation.paths.RuntimeHome) || preparation.anyPathExists(preparation.paths.MailSpoolPaths) || !baseline.matches() || !preparation.updateJournal(&journal, identitystate.ResourceRuntimeUser) {
+		if !baseline.matches() {
+			return fail("login_log_artifact_changed")
+		}
 		return fail("runtime_user_verification_failed")
 	}
 	state := identitystate.ManagedState{SchemaVersion: identitystate.SchemaVersion, Status: "prepared", RuntimeUser: identitystate.Resource{Name: identitystate.RuntimeUser, ID: identity.UserID}, PrimaryGroup: identitystate.GroupResource{Name: identitystate.PrimaryGroup, ID: identity.PrimaryGroupID}, HelperGroup: identitystate.GroupResource{Name: identitystate.HelperGroup, ID: identity.HelperGroupID}, SourceCommit: commit, BundleVersion: version}
@@ -355,13 +480,16 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	if err := identitystate.RemoveJournal(preparation.paths.Journal); err != nil {
 		return preparation.failureReport(PrepareDisabled, preparation.inspectSnapshot(), "preparation_failed_recovery_required"), nil
 	}
+	preparation.releaseLock(lock)
+	lockReleased = true
 	result := preparation.inspectSnapshot()
+	result.loginLogCheck = snapshot.loginLogCheck
 	report := preparation.report(PrepareDisabled, result)
 	report.Result = "prepared"
 	return report, nil
 }
 
-func (preparation Preparation) rollback(ctx context.Context, user, helper, primary bool, expected runtimeidentity.Identity, primaryID, helperID int, requireLoginLogsAbsent bool) bool {
+func (preparation Preparation) rollback(ctx context.Context, user, helper, primary bool, expected runtimeidentity.Identity, primaryID, helperID int, baseline loginLogBaseline) bool {
 	if user {
 		identity, err := preparation.currentIdentity()
 		if err != nil || identity != expected || preparation.deps.Executor.Run(ctx, identitycommand.UserDeleteTool, identitycommand.UserDeleteArguments()).ExitCode != 0 {
@@ -380,10 +508,10 @@ func (preparation Preparation) rollback(ctx context.Context, user, helper, prima
 			return false
 		}
 	}
-	return preparation.verifyRollbackArtifacts(false, requireLoginLogsAbsent, true)
+	return preparation.verifyRollbackArtifacts(false, baseline, true)
 }
 
-func (preparation Preparation) verifyRollbackArtifacts(journalAbsent, requireLoginLogsAbsent, lockMayBeHeld bool) bool {
+func (preparation Preparation) verifyRollbackArtifacts(journalAbsent bool, baseline loginLogBaseline, lockMayBeHeld bool) bool {
 	passwd, passwdErr := preparation.deps.ReadFile(preparation.paths.Passwd)
 	group, groupErr := preparation.deps.ReadFile(preparation.paths.Group)
 	if passwdErr != nil || groupErr != nil {
@@ -409,7 +537,7 @@ func (preparation Preparation) verifyRollbackArtifacts(journalAbsent, requireLog
 			return false
 		}
 	}
-	if requireLoginLogsAbsent && preparation.anyPathExists(preparation.paths.LoginLogPaths) {
+	if !baseline.matches() {
 		return false
 	}
 	if journalAbsent && preparation.deps.Exists(preparation.paths.Journal) {
@@ -566,7 +694,7 @@ func (preparation Preparation) report(action Action, snapshot snapshot) identity
 	if result == string(identitystate.Absent) && action == VerifyManaged {
 		result = "blocked"
 	}
-	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: snapshot.journalCheck, Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck}}
+	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: snapshot.journalCheck, Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck, snapshot.loginLogCheck}}
 }
 
 func (preparation Preparation) failureReport(action Action, snapshot snapshot, code string) identityreport.Report {
@@ -576,7 +704,7 @@ func (preparation Preparation) failureReport(action Action, snapshot snapshot, c
 	} else if strings.HasSuffix(code, "_recovery_required") {
 		result = "preparation_failed_recovery_required"
 	}
-	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: check("transaction", identityreport.Blocked, code), Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck}}
+	return identityreport.Report{SchemaVersion: qualificationreport.SchemaVersion, Action: string(action), Result: result, IdentityState: string(snapshot.state), ManagedState: snapshot.stateCheck, Transaction: check("transaction", identityreport.Blocked, code), Checks: []identityreport.Check{snapshot.identityCheck, snapshot.deploymentCheck, snapshot.helperCheck, snapshot.lockCheck, snapshot.passwordCheck, snapshot.loginLogCheck}}
 }
 
 func identityCheck(code string, status identityreport.Status) identityreport.Check {
@@ -649,6 +777,7 @@ func (preparation Preparation) blockedSnapshot(code string) snapshot {
 		helperCheck:     check("helper_installation", identityreport.NotApplicable, "helper_not_inspected"),
 		lockCheck:       check("preparation_lock", identityreport.NotApplicable, "lock_not_inspected"),
 		passwordCheck:   check("runtime_password", identityreport.NotApplicable, "password_not_inspected"),
+		loginLogCheck:   check("login_log_strategy", identityreport.NotApplicable, "login_log_strategy_not_inspected"),
 	}
 }
 
@@ -664,6 +793,11 @@ func validateTool(path string) error {
 		return fmt.Errorf("account_tool_unsafe")
 	}
 	return nil
+}
+
+func validateLoginLogExecutable(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0o111 != 0 && info.Mode().Perm()&0o022 == 0 && fileUID(info) == uint32(os.Geteuid()) && fileNlink(info) == 1
 }
 
 func validateAccountFile(path string) error {

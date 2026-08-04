@@ -58,8 +58,23 @@ func TestProbeUserAddCapabilitiesAndMailDefaults(t *testing.T) {
 	if err != nil || !capabilities.NoLogInit || executor.calls != 1 {
 		t.Fatalf("capabilities=%+v err=%v calls=%d", capabilities, err, executor.calls)
 	}
-	if err := ValidateMailSpoolDefault(context.Background(), executor); err != nil || executor.calls != 2 {
+	defaults, err := ProbeUserAddDefaults(context.Background(), executor)
+	if err != nil || defaults.CreateMailSpool != "no" || defaults.LogInit != "" || executor.calls != 2 {
 		t.Fatalf("mail default err=%v calls=%d", err, executor.calls)
+	}
+}
+
+func TestParseUbuntuDefaultsAndPermissiveUnrelatedFields(t *testing.T) {
+	for _, output := range []string{
+		"GROUPS=\nUSRSKEL=/usr/etc/skel\nCREATE_MAIL_SPOOL=no\nLOG_INIT=yes\n",
+		"UNKNOWN=value\nCREATE_MAIL_SPOOL=no\n",
+		"GROUPS=\nCREATE_MAIL_SPOOL=no\n",
+	} {
+		executor := &recordingOutputExecutor{defaults: output}
+		defaults, err := ProbeUserAddDefaults(context.Background(), executor)
+		if err != nil || defaults.Values["GROUPS"] != "" || defaults.CreateMailSpool != "no" {
+			t.Fatalf("output=%q defaults=%+v err=%v", output, defaults, err)
+		}
 	}
 }
 
@@ -71,11 +86,25 @@ func TestProbeUserAddRejectsMissingRequiredCapability(t *testing.T) {
 }
 
 func TestValidateMailSpoolDefaultRejectsUnsafeOutput(t *testing.T) {
-	for _, output := range []string{"", "CREATE_MAIL_SPOOL=yes\n", "CREATE_MAIL_SPOOL=no\nCREATE_MAIL_SPOOL=no\n", "CREATE_MAIL_SPOOL =no\n", "UNKNOWN=value\nCREATE_MAIL_SPOOL=no\n", string([]byte{0xff, 0xfe})} {
-		executor := &recordingOutputExecutor{defaults: output}
-		if err := ValidateMailSpoolDefault(context.Background(), executor); err == nil {
-			t.Fatalf("unsafe defaults accepted: %q", output)
+	for _, test := range []struct{ output, code string }{
+		{"", "mail_spool_default_unsafe"},
+		{"CREATE_MAIL_SPOOL=yes\n", "mail_spool_default_unsafe"},
+		{"CREATE_MAIL_SPOOL=no\nCREATE_MAIL_SPOOL=no\n", "account_defaults_invalid"},
+		{"CREATE_MAIL_SPOOL =no\n", "account_defaults_invalid"},
+		{"create_mail_spool=no\n", "account_defaults_invalid"},
+		{string([]byte{0xff, 0xfe}), "account_defaults_invalid"},
+	} {
+		executor := &recordingOutputExecutor{defaults: test.output}
+		if err := ValidateMailSpoolDefault(context.Background(), executor); err == nil || err.Error() != test.code {
+			t.Fatalf("defaults=%q err=%v want=%s", test.output, err, test.code)
 		}
+	}
+}
+
+func TestDefaultsDoNotCombineStdoutAndStderr(t *testing.T) {
+	executor := &recordingOutputExecutor{defaults: "CREATE_MAIL_SPOOL=no\n", defaultsErr: "LOG_INIT=yes\n"}
+	if _, err := ProbeUserAddDefaults(context.Background(), executor); err == nil {
+		t.Fatal("stderr was accepted as configuration output")
 	}
 }
 
@@ -87,9 +116,10 @@ func TestValidateMailSpoolDefaultRejectsOversizedOutput(t *testing.T) {
 }
 
 type recordingOutputExecutor struct {
-	help     string
-	defaults string
-	calls    int
+	help        string
+	defaults    string
+	defaultsErr string
+	calls       int
 }
 
 func (executor *recordingOutputExecutor) Run(_ context.Context, _ string, args []string) Result {
@@ -97,5 +127,5 @@ func (executor *recordingOutputExecutor) Run(_ context.Context, _ string, args [
 	if len(args) == 1 && args[0] == "--help" {
 		return Result{Stdout: []byte(executor.help)}
 	}
-	return Result{Stdout: []byte(executor.defaults)}
+	return Result{Stdout: []byte(executor.defaults), Stderr: []byte(executor.defaultsErr)}
 }

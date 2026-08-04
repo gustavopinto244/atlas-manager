@@ -42,12 +42,32 @@ database entries.
 
 Before mutation, fixed account-management binaries, account files, deployment
 absence, and the nonblocking preparation lock are validated. The fixed
-`useradd` capability set is probed without mutation and the effective
-`useradd -D` defaults are strictly parsed; exactly one
-`CREATE_MAIL_SPOOL=no` is required. Required account options must be
-available. `--no-log-init` is optional and is passed only when supported; when
-it is unavailable, fixed legacy login-log paths must be absent. The installer
-never changes `/etc/default/useradd` or `/etc/login.defs`.
+`useradd` capability set and effective `useradd -D` defaults are collected as
+one structured, read-only readiness result before the lock or either group is
+created. Defaults are bounded UTF-8 stdout with separate bounded stderr, and
+accept every canonical uppercase setting while rejecting malformed or
+duplicate keys. Exactly one `CREATE_MAIL_SPOOL=no` is required; `GROUPS=`,
+`USRSKEL=`, `LOG_INIT=` and future unrelated settings are valid. Required
+account options must be available. The installer never changes
+`/etc/default/useradd` or `/etc/login.defs`.
+
+Login-log handling selects one explicit strategy. Supported `--no-log-init` is
+passed to `useradd`; otherwise effective `LOG_INIT=no` supplies suppression.
+Otherwise the implementation evaluates the actual shadow 4.17.4 paths: the
+UID-indexed `faillog` and optional `lastlog` resets in `usr_update`, and the
+optional fixed `/sbin/pam_tally2 --user ... --reset --quiet` invocation after
+the account files close. Existing artifacts are accepted only when their
+type, ownership, permissions, size and content prove the relevant backend
+cannot be addressed; ambiguous state blocks before mutation. `btmp` and
+`wtmp` are not treated as useradd-owned. This relies on the upstream 4.17.4
+source contract, not on a missing option alone; an implementation that cannot
+satisfy the same proof must be classified or rejected.
+
+Every preexisting login-log artifact and relevant tally executable receives a
+bounded immutable baseline containing identity, metadata and a SHA-256 digest.
+The baseline must match after creation and during rollback. Preexisting logs
+are never deleted, truncated, restored or otherwise treated as transaction
+resources.
 
 A private,
 synchronized transaction journal is written before the first command and
@@ -57,7 +77,8 @@ or ambiguous resource stops rollback and preserves the journal for manual
 review. The report retains the original failing stage and never treats the
 operation's own held lock as a conflict. Complete rollback is reported only
 after all account, shadow, home, mail-spool, managed-state, candidate, journal,
-and lock postconditions are verified; otherwise recovery is required.
+lock, and external login-log baseline postconditions are verified; otherwise
+recovery is required.
 Restart recovery and public identity deletion are deliberately not provided.
 
 Managed preparation state records only the fixed names, private numeric IDs,
