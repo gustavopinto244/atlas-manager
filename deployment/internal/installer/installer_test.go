@@ -36,6 +36,13 @@ func TestSandboxDisabledInstallUpgradeRollbackAndUninstall(t *testing.T) {
 	if err := newInstaller(bundleA).Run(context.Background(), InstallDisabled); err != nil {
 		t.Fatal(err)
 	}
+	releaseInfo, err := os.Stat(filepath.Join(paths.ReleaseRoot, "0.1.0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := releaseInfo.Mode().Perm(); mode != 0o755 {
+		t.Fatalf("release root mode = %04o, want 0755", mode)
+	}
 	if err := newInstaller(bundleA).Run(context.Background(), VerifyDisabled); err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +107,41 @@ func TestSandboxVerificationRejectsModifiedManagedRelease(t *testing.T) {
 	}
 	if err := newInstaller().Run(context.Background(), VerifyDisabled); err == nil {
 		t.Fatal("modified managed release was accepted")
+	}
+}
+
+func TestSandboxVerificationRejectsReleaseRootWithUnsafeMode(t *testing.T) {
+	root := t.TempDir()
+	bundle := createBundle(t, filepath.Join(root, "bundle"), "0.1.0")
+	paths := sandboxPaths(filepath.Join(root, "host"))
+	identity := runtimeidentity.Identity{
+		UserID:         1001,
+		PrimaryGroupID: 1001,
+		HelperGroupID:  1002,
+	}
+	installer := New(Config{
+		Paths:        paths,
+		BundleRoot:   bundle,
+		EffectiveUID: func() int { return 0 },
+		ResolveIdentity: func() (runtimeidentity.Identity, error) {
+			return identity, nil
+		},
+		CheckNode:      func(_ context.Context) error { return nil },
+		ApplyOwnership: false,
+	})
+
+	if err := installer.Run(context.Background(), InstallDisabled); err != nil {
+		t.Fatal(err)
+	}
+
+	release := filepath.Join(paths.ReleaseRoot, "0.1.0")
+	if err := os.Chmod(release, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := installer.Run(context.Background(), VerifyDisabled)
+	if err == nil || err.Error() != "release_invalid" {
+		t.Fatalf("verify-disabled error = %v, want release_invalid", err)
 	}
 }
 

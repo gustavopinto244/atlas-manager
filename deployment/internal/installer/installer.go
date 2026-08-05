@@ -335,6 +335,9 @@ func (installer *Installer) install(ctx context.Context, identity runtimeidentit
 		return fmt.Errorf("candidate_create_failed")
 	}
 	defer os.RemoveAll(candidate)
+	if err := os.Chmod(candidate, 0o755); err != nil {
+		return fmt.Errorf("candidate_metadata_failed")
+	}
 	if err := copyTree(filepath.Join(installer.config.BundleRoot, "application"), candidate); err != nil {
 		return err
 	}
@@ -536,7 +539,7 @@ func verifyCurrent(current, releases, version string, files []manifest.File) err
 
 func verifyReleaseDirectory(path string) error {
 	info, err := os.Lstat(path)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o755 {
 		return fmt.Errorf("release_invalid")
 	}
 	return nil
