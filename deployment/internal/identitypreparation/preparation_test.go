@@ -440,6 +440,45 @@ func TestPrepareDisabledAcceptsExistingLastlogWhenLastlogBackendIsNotBuilt(t *te
 	}
 }
 
+func TestGroupNameForGIDUsesGIDField(t *testing.T) {
+	groupPath := filepath.Join(t.TempDir(), "group")
+	contents := strings.Join([]string{
+		"root:x:0:",
+		"member-trap:x:999:43",
+		"syslog:x:103:",
+		"utmp:x:43:",
+		"malformed",
+		"",
+	}, "\n")
+
+	if err := os.WriteFile(groupPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		gid  uint32
+		want string
+	}{
+		{name: "syslog", gid: 103, want: "syslog"},
+		{name: "utmp", gid: 43, want: "utmp"},
+		{name: "unknown", gid: 777, want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := groupNameForGID(groupPath, tc.gid); got != tc.want {
+				t.Fatalf(
+					"groupNameForGID(%d)=%q want=%q",
+					tc.gid,
+					got,
+					tc.want,
+				)
+			}
+		})
+	}
+}
+
 func trustedLoginLogFixture(t *testing.T, target string) (string, string, string) {
 	t.Helper()
 	root := t.TempDir()

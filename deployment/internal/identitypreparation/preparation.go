@@ -551,7 +551,7 @@ func groupNameForGID(path string, gid uint32) string {
 	}
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Split(line, ":")
-		if len(fields) >= 4 && fields[3] == strconv.FormatUint(uint64(gid), 10) {
+		if len(fields) >= 3 && fields[2] == strconv.FormatUint(uint64(gid), 10) {
 			return fields[0]
 		}
 	}
