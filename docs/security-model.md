@@ -1347,6 +1347,14 @@ Cloudflare Access assertions remain stateless authentication inputs only; JWT
 claims never assign application roles. The dashboard stores no assertions or
 roles and mutations remain strictly parsed, confirmed, and audited.
 
-The `1.0.0-rc.2` result is software qualification only. It does not certify a
+The `1.0.0-rc.7` result is software qualification only. It does not certify a
 physical Atlas host, Cloudflare ingress, RTC, helper, or real machine-power
 effect.
+
+Runtime identity readiness uses a fail-closed package gate before selecting
+`login_logs_backend_proven_safe`: only the exact Ubuntu amd64 `passwd`/`shadow`
+build `1:4.17.4-2ubuntu3` is accepted. Explicit login-log suppression through
+the probed `--no-log-init` option or effective `LOG_INIT=no` remains portable
+and bypasses that package-specific fallback gate. The metadata probe is fixed,
+shell-free, and read-only; no experimental user creation or real-log access is
+used to identify the build.

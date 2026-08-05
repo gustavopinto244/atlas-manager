@@ -1,6 +1,6 @@
 # Atlas Manager v1 software security review
 
-Release candidate: `1.0.0-rc.2`.
+Release candidate: `1.0.0-rc.7`.
 
 | Area                                            | Result                                       | Evidence boundary                                                           |
 | ----------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |

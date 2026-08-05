@@ -57,6 +57,15 @@ type accountExecutor struct {
 }
 
 func (executor *accountExecutor) Run(_ context.Context, path string, args []string) identitycommand.Result {
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "--help" {
+		return identitycommand.Result{Stdout: []byte("--system --no-create-home --no-user-group --gid --home-dir --shell\n")}
+	}
+	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "-D" {
+		return identitycommand.Result{Stdout: []byte("CREATE_MAIL_SPOOL=no\n")}
+	}
+	if path == identitycommand.DpkgQueryTool {
+		return identitycommand.Result{Stdout: []byte("passwd\n1:4.17.4-2ubuntu3\nshadow\n1:4.17.4-2ubuntu3\namd64\n")}
+	}
 	executor.seen = append(executor.seen, path+" "+strings.Join(args, " "))
 	if path == executor.failPath || path+" "+strings.Join(args, " ") == executor.failCommand {
 		return identitycommand.Result{ExitCode: 1}
@@ -74,10 +83,13 @@ func (executor *accountExecutor) Run(_ context.Context, path string, args []stri
 			return identitycommand.Result{ExitCode: 2}
 		}
 	} else if path == identitycommand.UserTool {
-		if strings.Join(args, " ") != strings.Join(identitycommand.UserArguments(), " ") {
+		if strings.Join(args, " ") != strings.Join(identitycommand.UserArguments(identitycommand.UserAddCapabilities{System: true, NoCreateHome: true, NoUserGroup: true, GID: true, HomeDir: true, Shell: true}), " ") {
 			return identitycommand.Result{ExitCode: 2}
 		}
 		if err := executor.appendPasswd("atlas-manager:x:1003:1001::/var/lib/atlas-manager:/usr/sbin/nologin\n"); err != nil {
+			return identitycommand.Result{ExitCode: 2}
+		}
+		if err := executor.appendShadow("atlas-manager:!:19793:0:99999:7:::\n"); err != nil {
 			return identitycommand.Result{ExitCode: 2}
 		}
 	} else if path == identitycommand.UserDeleteTool {
@@ -85,6 +97,9 @@ func (executor *accountExecutor) Run(_ context.Context, path string, args []stri
 			return identitycommand.Result{ExitCode: 2}
 		}
 		if err := executor.removePasswd(); err != nil {
+			return identitycommand.Result{ExitCode: 2}
+		}
+		if err := executor.removeShadow(); err != nil {
 			return identitycommand.Result{ExitCode: 2}
 		}
 	} else if path == identitycommand.GroupDeleteTool {
@@ -116,12 +131,24 @@ func (executor *accountExecutor) appendGroup(line string) error {
 	return os.WriteFile(executor.paths.Group, append(data, []byte(line)...), 0o644)
 }
 
+func (executor *accountExecutor) appendShadow(line string) error {
+	data, err := os.ReadFile(executor.paths.Shadow)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(executor.paths.Shadow, append(data, []byte(line)...), 0o644)
+}
+
 func (executor *accountExecutor) removePasswd() error {
 	return filterLines(executor.paths.Passwd, runtimeidentity.RuntimeUser)
 }
 
 func (executor *accountExecutor) removeGroup(name string) error {
 	return filterLines(executor.paths.Group, name)
+}
+
+func (executor *accountExecutor) removeShadow() error {
+	return filterLines(executor.paths.Shadow, runtimeidentity.RuntimeUser)
 }
 
 func filterLines(path, name string) error {
@@ -212,7 +239,7 @@ func runLifecycle(t *testing.T) []byte {
 		report, err := identitypreparation.New(f.identity, f.identityDependencies()).Run(ctx, identitypreparation.Inspect, "")
 		return expectIdentity(report, err, "absent")
 	})
-	run("identity prepare-disabled", "prepared", "prepared", "identity_account_database", []string{"etc/passwd", "etc/group", "var/lib"}, func() error {
+	run("identity prepare-disabled", "prepared", "prepared", "identity_account_database", []string{"etc/passwd", "etc/group", "etc/shadow", "var/lib"}, func() error {
 		report, err := identitypreparation.New(f.identity, f.identityDependencies()).Run(ctx, identitypreparation.PrepareDisabled, identitypreparation.Confirmation)
 		return expectIdentity(report, err, "prepared")
 	})
@@ -317,17 +344,26 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 func newFixture(t *testing.T, root, bundleRoot string) *fixture {
 	t.Helper()
 	host := filepath.Join(root, "host")
-	for _, path := range []string{"opt", "etc/systemd/system/multi-user.target.wants", "var/lib", "run/systemd/system", "usr/bin", "usr/sbin", "usr/local/libexec"} {
+	for _, path := range []string{"opt", "etc/systemd/system/multi-user.target.wants", "var", "var/log", "var/lib", "run/systemd/system", "usr/bin", "usr/sbin", "usr/local/libexec"} {
 		if err := os.MkdirAll(filepath.Join(host, path), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := os.Chmod(filepath.Join(host, "var/log"), 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("usr/sbin", filepath.Join(host, "sbin")); err != nil {
+		t.Fatal(err)
+	}
 	passwd := "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n"
-	group := "root:x:0:\nnobody:x:65534:\n"
+	group := "root:x:0:\nnobody:x:65534:\nsyslog:x:100:\nutmp:x:101:\n"
 	if err := writeFile(filepath.Join(host, "etc/passwd"), passwd, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeFile(filepath.Join(host, "etc/group"), group, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(host, "etc/shadow"), "", 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeFile(filepath.Join(host, "usr/bin/node"), "synthetic node\n", 0o755); err != nil {
@@ -427,6 +463,7 @@ func identityPaths(root, bundleRoot string) identitypreparation.Paths {
 	paths.Etc = filepath.Join(root, "etc")
 	paths.Usr = filepath.Join(root, "usr")
 	paths.UsrSbin = filepath.Join(root, "usr/sbin")
+	paths.PamTally2 = filepath.Join(root, "sbin/pam_tally2")
 	paths.Helper = filepath.Join(root, "usr/local/libexec/atlas-manager-power-helper")
 	paths.RuntimeHome = filepath.Join(root, "var/lib/atlas-manager")
 	paths.ApplicationState = paths.RuntimeHome
@@ -442,6 +479,8 @@ func identityPaths(root, bundleRoot string) identitypreparation.Paths {
 	paths.StateFile = filepath.Join(paths.StateDirectory, "state.json")
 	paths.Journal = filepath.Join(paths.StateDirectory, "transaction.json")
 	paths.Lock = filepath.Join(root, "run/atlas-manager-identity-preparation.lock")
+	paths.MailSpoolPaths = []string{filepath.Join(root, "var/mail/atlas-manager"), filepath.Join(root, "var/spool/mail/atlas-manager")}
+	paths.LoginLogPaths = []string{filepath.Join(root, "var/log/lastlog"), filepath.Join(root, "var/log/faillog"), filepath.Join(root, "var/log/tallylog")}
 	return paths
 }
 

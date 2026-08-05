@@ -1,12 +1,65 @@
 # Agent handoff
 
-## Latest active work — audit remediation for Issue #285
+## Latest active work — rc.7 lastlog build-capability correction
 
-Branch: `fix/v1-rc-audit-remediation`
+The active candidate is `1.0.0-rc.7` on branch
+`fix/runtime-identity-lastlog-build-capability`. It is based on the tested rc.6
+source commit `06191cb7f65eee3a6f3e080d04a77d8354cfe325`, but the rc.7 correction
+has not yet been committed or physically qualified.
 
-Baseline: `162191dae6415cc33aab4e30a2cb60be7845cb5f`
+Physical Atlas inspection proved that Ubuntu shadow `4.17.4-2ubuntu3` was
+built with `--enable-lastlog=no`. Its `useradd` does not advertise
+`--no-log-init`, reports `LOG_INIT=yes`, and does not access or modify the
+preexisting non-empty `/var/log/lastlog`. Rc.6 incorrectly classified that
+state as `login_log_strategy_unsupported` and was blocked before mutation.
 
-Release: `1.0.0-rc.2` software-only candidate; `rc.1` is superseded.
+The rc.7 source correction uses the shadow 4.17.4 contract that places both
+the `--no-log-init` help entry and `lastlog_reset` under `ENABLE_LASTLOG`.
+When the option is absent, the `lastlog` backend is therefore treated as not
+built. This does not disable the independent `faillog` checks: a non-empty
+`faillog`, executable `pam_tally2`, unsafe path, or changed immutable baseline
+still blocks fail-closed.
+
+The trusted preexisting `lastlog` remains baselined and must not be deleted,
+truncated, restored, chmodded, chowned, or otherwise normalized. Rc.6 evidence
+remains historical. Rc.6 must not be retried, merged, tagged, or released.
+Rc.7 requires a new commit-bound bundle and complete physical
+requalification.
+
+## Historical rc.5 runtime identity login-log path safety
+
+The immutable rc.5 bundle passed construction and all read-only qualification,
+but one physical `prepare-disabled` attempt was blocked before identity
+mutation with `login_log_path_unsafe`. The source false positive rejected the
+trusted Ubuntu `root:syslog` group-writable `/var/log`, `root:utmp` group-
+writable `lastlog`, and canonical merged-usr `/sbin -> /usr/sbin` layout. No
+managed resource was created, so no rollback or manual cleanup was required.
+The corrective source change accepts only those explicitly proven trusted
+layout conditions and preserves immutable external-artifact baselines. Rc.5
+must not be retried physically; a new release candidate is required. Operators
+must not modify system login-log permissions or merged-usr links to bypass
+validation. Physical requalification remains pending.
+
+## Latest active work — runtime identity password precondition
+
+Branch: `fix/runtime-identity-password-precondition`
+
+Baseline: `555cecf86a293f62b6231cb329e437de6cbcb657`
+
+Release: `1.0.0-rc.5` software-only candidate; `rc.2`, `rc.3`, and `rc.4` are
+historical and their evidence remains unchanged. `rc.2` was blocked by its
+clean-absent runtime identity password precondition. `rc.3` was blocked by
+incompatible `useradd` capabilities and rolled back a physical preparation
+attempt. `rc.4` was blocked before mutation by its login-log policy, strict
+defaults parser, and absence-based rollback model.
+
+The current runtime-identity corrections distinguish a clean absent identity from unsafe residual
+shadow state: zero shadow entries are `not_applicable/runtime_password_absent`
+only while passwd/group identity is absent; residual entries are blocked, and
+an existing identity still requires exactly one locked shadow entry. No
+physical host evidence is included in the repository. A clean-tree,
+commit-bound `rc.5` bundle must be built after the operator commits these
+version updates. Source-controlled release evidence remains `not_qualified`.
 
 The remediation implementation record is in
 `docs/audit/AUDIT_REMEDIATION_IMPLEMENTATION_REPORT.md`. The historical

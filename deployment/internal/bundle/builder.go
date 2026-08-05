@@ -183,6 +183,9 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	if err := copyFile(filepath.Join(config.SourceRoot, "docs", "contracts", "atlas-manager-administrative-api.json"), filepath.Join(root, "contracts", "atlas-manager-administrative-api.json"), 0o644); err != nil {
 		return Result{}, err
 	}
+	if err := canonicalizeTree(root); err != nil {
+		return Result{}, err
+	}
 	paths = append(paths, metadataPaths...)
 	files, err := manifest.Inventory(root, paths)
 	if err != nil {
@@ -253,7 +256,11 @@ func copyDashboardAssets(bundleRoot, sourceRoot string) error {
 			return fmt.Errorf("dashboard_assets_invalid")
 		}
 		info, err := entry.Info()
-		if err != nil || info.Mode().Perm() != 0o644 || info.Size() > 256*1024 {
+		if err != nil {
+			return fmt.Errorf("dashboard_assets_invalid")
+		}
+		mode, modeErr := canonicalBundleMode(info)
+		if modeErr != nil || mode != 0o644 || info.Size() > 256*1024 {
 			return fmt.Errorf("dashboard_assets_invalid")
 		}
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Nlink > 1 {
@@ -414,7 +421,7 @@ func writeMetadata(root string, config Config) error {
 	if err := os.WriteFile(filepath.Join(root, "systemd", "atlas-manager.service"), []byte(systemdunit.Content), 0o644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), envTemplate(config), 0o640); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), envTemplate(config), 0o644); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(root, "LICENSE"), []byte(mitLicense), 0o644); err != nil {
@@ -519,7 +526,10 @@ func archiveTree(ctx context.Context, root, archive string, epoch int64) error {
 		default:
 		}
 		full := filepath.Join(filepath.Dir(root), filepath.FromSlash(entry.path))
-		mode := entry.info.Mode().Perm()
+		mode, err := canonicalBundleMode(entry.info)
+		if err != nil {
+			return err
+		}
 		header := &tar.Header{Name: entry.path, Mode: int64(mode), ModTime: time.Unix(epoch, 0).UTC(), Uid: 0, Gid: 0, Uname: "root", Gname: "root"}
 		if entry.info.IsDir() {
 			header.Name = strings.TrimSuffix(header.Name, "/") + "/"
@@ -575,12 +585,49 @@ func copyTree(source, destination string) error {
 		}
 		target := filepath.Join(destination, rel)
 		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
+			mode, modeErr := canonicalBundleMode(info)
+			if modeErr != nil {
+				return modeErr
+			}
+			return os.MkdirAll(target, mode)
 		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("bundle_file_type_invalid")
+		mode, modeErr := canonicalBundleMode(info)
+		if modeErr != nil {
+			return modeErr
 		}
-		return copyFile(path, target, info.Mode().Perm())
+		return copyFile(path, target, mode)
+	})
+}
+
+func canonicalBundleMode(info os.FileInfo) (os.FileMode, error) {
+	if info.Mode()&os.ModeSymlink != 0 {
+		return 0, fmt.Errorf("bundle_file_type_invalid")
+	}
+	if info.IsDir() {
+		return 0o755, nil
+	}
+	if info.Mode().IsRegular() {
+		if info.Mode()&0o111 != 0 {
+			return 0o755, nil
+		}
+		return 0o644, nil
+	}
+	return 0, fmt.Errorf("bundle_file_type_invalid")
+}
+
+func canonicalizeTree(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		mode, modeErr := canonicalBundleMode(info)
+		if modeErr != nil {
+			return modeErr
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			return fmt.Errorf("bundle_mode_normalization_failed")
+		}
+		return nil
 	})
 }
 

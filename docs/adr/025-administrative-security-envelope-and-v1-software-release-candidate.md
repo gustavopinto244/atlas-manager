@@ -21,7 +21,16 @@ The dashboard has no login session and stores no assertion, role, or identity
 data in browser storage. Mutations continue to use strict JSON and exact,
 operation-specific confirmations. A narrow maintenance entrypoint remains for
 deployment and security verification; a general administrative CLI is deferred.
-The release candidate produced after remediation is `1.0.0-rc.2`; `rc.1` is
+The release candidate produced after remediation was `1.0.0-rc.2`; it is now
+historical and was superseded by `1.0.0-rc.3` after the physical runtime-identity
+inspection exposed a clean-absent password precondition defect. `rc.3` is also
+historical and was superseded by `1.0.0-rc.4` after account-tool compatibility
+inspection. `rc.4` is historical and was blocked before identity mutation by
+its preexisting-`lastlog` policy, strict `GROUPS=` parser, and absence-based
+rollback model; `1.0.0-rc.5` is historical and was blocked during physical
+identity preparation by trusted-layout false positives; `1.0.0-rc.6` is
+historical after the physical host exposed a lastlog build-capability false
+positive, and `1.0.0-rc.7` is the active software-only candidate. `rc.1` remains
 superseded because its release evidence was not reproducible.
 
 ## Boundaries
@@ -29,12 +38,14 @@ superseded because its release evidence was not reproducible.
 This decision distinguishes loopback binding, public origin, Cloudflare Tunnel
 or equivalent ingress, Cloudflare identity, application authorization, browser
 same-origin protection, the route catalog, the API contract, and release
-qualification. A `1.0.0-rc.2` software candidate is not proof of physical Atlas
+qualification. The `1.0.0-rc.4` software candidate was not proof of physical Atlas
 deployment, real RTC or shutdown effects, helper activation, or a stable
-physical release. The earlier `rc.1` candidate is superseded by audit
-remediation.
+physical release; `1.0.0-rc.5` and `1.0.0-rc.6` are likewise historical and not physically
+qualified; `1.0.0-rc.7` is not physically qualified yet. The earlier `rc.2` and `rc.3` candidates remain historical
+and are superseded for new qualification by the runtime-identity corrections;
+`rc.1` was superseded by audit remediation.
 
-The candidate explicitly rejects generic proxy trust, source-IP
+The current candidate explicitly rejects generic proxy trust, source-IP
 authentication, JWT role assignment, cookies, wildcard CORS, unregistered
 routes, automatic lockout repair, automatic physical deployment, helper
 activation, and public unauthenticated API-contract delivery.
