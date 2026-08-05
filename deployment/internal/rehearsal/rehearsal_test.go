@@ -63,6 +63,9 @@ func (executor *accountExecutor) Run(_ context.Context, path string, args []stri
 	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "-D" {
 		return identitycommand.Result{Stdout: []byte("CREATE_MAIL_SPOOL=no\n")}
 	}
+	if path == identitycommand.DpkgQueryTool {
+		return identitycommand.Result{Stdout: []byte("passwd\n1:4.17.4-2ubuntu3\nshadow\n1:4.17.4-2ubuntu3\namd64\n")}
+	}
 	executor.seen = append(executor.seen, path+" "+strings.Join(args, " "))
 	if path == executor.failPath || path+" "+strings.Join(args, " ") == executor.failCommand {
 		return identitycommand.Result{ExitCode: 1}

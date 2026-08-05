@@ -287,7 +287,7 @@ export function createAdministrativeRuntime(
               execute: () => Promise.resolve({ status: "ok" }),
             },
             applicationVersion:
-              compositionDependencies.applicationVersion ?? "1.0.0-rc.6",
+              compositionDependencies.applicationVersion ?? "1.0.0-rc.7",
           }),
         }
       : {}),

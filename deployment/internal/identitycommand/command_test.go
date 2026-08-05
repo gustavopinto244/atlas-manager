@@ -64,6 +64,65 @@ func TestProbeUserAddCapabilitiesAndMailDefaults(t *testing.T) {
 	}
 }
 
+func TestProbeAccountToolPackageAcceptsProvenUbuntuPackage(t *testing.T) {
+	executor := &recordingOutputExecutor{packageOutput: provenPackageOutput()}
+	value, err := ProbeAccountToolPackage(context.Background(), executor)
+	if err != nil || value != ProvenAccountToolPackage() || executor.packageCalls != 1 {
+		t.Fatalf("package=%+v err=%v packageCalls=%d", value, err, executor.packageCalls)
+	}
+	if executor.packagePath != DpkgQueryTool || !equalStrings(executor.packageArgs, AccountToolPackageArguments()) {
+		t.Fatalf("command=%q %q", executor.packagePath, executor.packageArgs)
+	}
+}
+
+func TestProbeAccountToolPackageRejectsUnprovenOutput(t *testing.T) {
+	proven := strings.Split(provenPackageOutput(), "\n")
+	tests := []struct {
+		name   string
+		result Result
+	}{
+		{name: "binary version", result: Result{Stdout: []byte(strings.Join([]string{proven[0], "1:4.17.4-2ubuntu4", proven[2], proven[3], proven[4], ""}, "\n"))}},
+		{name: "source version", result: Result{Stdout: []byte(strings.Join([]string{proven[0], proven[1], proven[2], "1:4.17.4-2ubuntu4", proven[4], ""}, "\n"))}},
+		{name: "binary package", result: Result{Stdout: []byte(strings.Join([]string{"login", proven[1], proven[2], proven[3], proven[4], ""}, "\n"))}},
+		{name: "source package", result: Result{Stdout: []byte(strings.Join([]string{proven[0], proven[1], "shadow-common", proven[3], proven[4], ""}, "\n"))}},
+		{name: "architecture", result: Result{Stdout: []byte(strings.Join([]string{proven[0], proven[1], proven[2], proven[3], "arm64", ""}, "\n"))}},
+		{name: "stderr", result: Result{Stdout: []byte(provenPackageOutput()), Stderr: []byte("warning\n")}},
+		{name: "invalid utf8", result: Result{Stdout: []byte{0xff, 0xfe}}},
+		{name: "wrong line count", result: Result{Stdout: []byte("passwd\n1:4.17.4-2ubuntu3\n")}},
+		{name: "nonzero exit", result: Result{ExitCode: 1, Stdout: []byte(provenPackageOutput())}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			executor := &recordingOutputExecutor{packageResult: test.result}
+			if _, err := ProbeAccountToolPackage(context.Background(), executor); err == nil || err.Error() != "account_tool_package_unsupported" {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
+}
+
+func TestProbeReadinessOnlyQueriesPackageForFallback(t *testing.T) {
+	baseHelp := "--system --no-create-home --no-user-group --gid --home-dir --shell"
+	for _, test := range []struct {
+		name       string
+		help       string
+		defaults   string
+		packageHit int
+	}{
+		{name: "no log init option", help: baseHelp + " --no-log-init", defaults: "CREATE_MAIL_SPOOL=no\nLOG_INIT=yes\n", packageHit: 0},
+		{name: "log init no", help: baseHelp, defaults: "CREATE_MAIL_SPOOL=no\nLOG_INIT=no\n", packageHit: 0},
+		{name: "fallback", help: baseHelp, defaults: "CREATE_MAIL_SPOOL=no\nLOG_INIT=yes\n", packageHit: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			executor := &recordingOutputExecutor{help: test.help, defaults: test.defaults, packageOutput: provenPackageOutput()}
+			readiness, err := ProbeReadiness(context.Background(), executor)
+			if err != nil || executor.packageCalls != test.packageHit {
+				t.Fatalf("readiness=%+v err=%v packageCalls=%d", readiness, err, executor.packageCalls)
+			}
+		})
+	}
+}
+
 func TestParseUbuntuDefaultsAndPermissiveUnrelatedFields(t *testing.T) {
 	for _, output := range []string{
 		"GROUPS=\nUSRSKEL=/usr/etc/skel\nCREATE_MAIL_SPOOL=no\nLOG_INIT=yes\n",
@@ -116,16 +175,46 @@ func TestValidateMailSpoolDefaultRejectsOversizedOutput(t *testing.T) {
 }
 
 type recordingOutputExecutor struct {
-	help        string
-	defaults    string
-	defaultsErr string
-	calls       int
+	help          string
+	defaults      string
+	defaultsErr   string
+	packageOutput string
+	packageResult Result
+	packageCalls  int
+	packagePath   string
+	packageArgs   []string
+	calls         int
 }
 
-func (executor *recordingOutputExecutor) Run(_ context.Context, _ string, args []string) Result {
+func (executor *recordingOutputExecutor) Run(_ context.Context, path string, args []string) Result {
 	executor.calls++
+	if len(args) == 3 && args[0] == "-W" {
+		executor.packageCalls++
+		executor.packagePath = path
+		executor.packageArgs = append([]string(nil), args...)
+		if executor.packageResult.ExitCode != 0 || executor.packageResult.Stdout != nil || executor.packageResult.Stderr != nil {
+			return executor.packageResult
+		}
+		return Result{Stdout: []byte(executor.packageOutput)}
+	}
 	if len(args) == 1 && args[0] == "--help" {
 		return Result{Stdout: []byte(executor.help)}
 	}
 	return Result{Stdout: []byte(executor.defaults), Stderr: []byte(executor.defaultsErr)}
+}
+
+func provenPackageOutput() string {
+	return "passwd\n1:4.17.4-2ubuntu3\nshadow\n1:4.17.4-2ubuntu3\namd64\n"
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

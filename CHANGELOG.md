@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0-rc.7
+
+- corrects the false-positive runtime identity preparation block when the
+  supported shadow 4.17.4 build omits the `lastlog` backend and the trusted
+  preexisting `lastlog` contains records;
+- classifies `lastlog` build capability from the shared `ENABLE_LASTLOG`
+  contract governing the advertised `--no-log-init` option and
+  `lastlog_reset` implementation;
+- retains fail-closed handling for non-empty `faillog`, executable
+  `pam_tally2`, unsafe paths, and changed immutable login-log baselines;
+- supersedes rc.6 and requires a new commit-bound bundle plus complete
+  physical Atlas requalification before merge, tag, or release.
+
 ## 1.0.0-rc.6
 
 - accepts the proven trusted Ubuntu login-log layout without permitting

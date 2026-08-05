@@ -14,6 +14,7 @@ const (
 	PrimaryGroupTool = "/usr/sbin/groupadd"
 	HelperGroupTool  = "/usr/sbin/groupadd"
 	UserTool         = "/usr/sbin/useradd"
+	DpkgQueryTool    = "/usr/bin/dpkg-query"
 	UserDeleteTool   = "/usr/sbin/userdel"
 	GroupDeleteTool  = "/usr/sbin/groupdel"
 	OutputLimit      = 8 * 1024
@@ -40,6 +41,14 @@ type UserAddDefaults struct {
 	Values          map[string]string
 	CreateMailSpool string
 	LogInit         string
+}
+
+type AccountToolPackage struct {
+	BinaryPackage string
+	Version       string
+	SourcePackage string
+	SourceVersion string
+	Architecture  string
 }
 
 type Readiness struct {
@@ -116,6 +125,47 @@ func ProbeReadiness(ctx context.Context, executor Executor) (Readiness, error) {
 		return Readiness{}, err
 	}
 	return Readiness{Capabilities: capabilities, Defaults: defaults}, nil
+}
+
+func ProvenAccountToolPackage() AccountToolPackage {
+	return AccountToolPackage{
+		BinaryPackage: "passwd",
+		Version:       "1:4.17.4-2ubuntu3",
+		SourcePackage: "shadow",
+		SourceVersion: "1:4.17.4-2ubuntu3",
+		Architecture:  "amd64",
+	}
+}
+
+func AccountToolPackageArguments() []string {
+	return []string{"-W", "-f=${binary:Package}\n${Version}\n${source:Package}\n${source:Version}\n${Architecture}\n", "passwd"}
+}
+
+func ProbeAccountToolPackage(ctx context.Context, executor Executor) (AccountToolPackage, error) {
+	result := executor.Run(ctx, DpkgQueryTool, AccountToolPackageArguments())
+	if result.ExitCode != 0 || len(result.Stdout) > OutputLimit || len(result.Stderr) != 0 || !utf8.Valid(result.Stdout) || !utf8.Valid(result.Stderr) {
+		return AccountToolPackage{}, errors.New("account_tool_package_unsupported")
+	}
+	lines := strings.Split(string(result.Stdout), "\n")
+	if len(lines) != 6 || lines[5] != "" {
+		return AccountToolPackage{}, errors.New("account_tool_package_unsupported")
+	}
+	for _, line := range lines[:5] {
+		if line == "" {
+			return AccountToolPackage{}, errors.New("account_tool_package_unsupported")
+		}
+	}
+	accountToolPackage := AccountToolPackage{
+		BinaryPackage: lines[0],
+		Version:       lines[1],
+		SourcePackage: lines[2],
+		SourceVersion: lines[3],
+		Architecture:  lines[4],
+	}
+	if accountToolPackage != ProvenAccountToolPackage() {
+		return AccountToolPackage{}, errors.New("account_tool_package_unsupported")
+	}
+	return accountToolPackage, nil
 }
 
 func ValidateMailSpoolDefault(ctx context.Context, executor Executor) error {

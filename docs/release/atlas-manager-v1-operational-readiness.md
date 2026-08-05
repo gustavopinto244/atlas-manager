@@ -1,6 +1,6 @@
 # Atlas Manager v1 operational readiness
 
-The `1.0.0-rc.6` software candidate documents the lifecycle for install,
+The `1.0.0-rc.7` software candidate documents the lifecycle for install,
 verify, managed mock-administrative configuration, disabled replacement,
 disabled rollback, activation, active verification, deactivation, upgrade,
 release rollback, backup recovery, event-history recovery, identity-readiness

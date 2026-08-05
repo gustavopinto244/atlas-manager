@@ -25,12 +25,11 @@ dates.
 
 ## Current phase
 
-Atlas Manager is preparing the `1.0.0-rc.6` software candidate. The `rc.3`
-candidate was blocked during physical runtime-identity preparation because
-its account-tool option set was incompatible with the qualified host. The
-earlier `rc.2` candidate was blocked by a clean-absent password precondition.
-Physical
-Atlas deployment and real power effects remain separately approved gates.
+Atlas Manager is preparing the `1.0.0-rc.7` software candidate. The `rc.6`
+candidate was blocked before mutation by a false-positive lastlog backend
+classification on the qualified host. Earlier candidates exposed account-tool,
+password-state, and trusted-layout compatibility defects. Physical Atlas
+deployment and real power effects remain separately approved gates.
 
 Completed milestones include:
 
@@ -475,9 +474,10 @@ identity mechanism and Issue #240 delivers the first protected read-only HTTP
 route. The later Issues delivered broader protected delivery, verified
 transport/proxy configuration, deployment ownership, and operator recovery
 procedures. The v0.9 milestone is complete in software; the current candidate
-is `1.0.0-rc.6`; `rc.3` was superseded after physical account-tool
-compatibility inspection and `rc.2` was superseded after its runtime-identity
-password precondition defect.
+is `1.0.0-rc.7`; `rc.6` was superseded after physical lastlog build-capability
+inspection, `rc.3` was superseded after account-tool compatibility inspection,
+and `rc.2` was superseded after its runtime-identity password precondition
+defect.
 
 Issue #238 delivers the production-shaped identity-verification foundation.
 Cloudflare Access application JWTs are checked at the application boundary
@@ -817,7 +817,7 @@ implemented.
 
 ## v1.0 software release candidate — qualification pending mandatory gates
 
-`1.0.0-rc.6` is the current software-only candidate. Qualification requires
+`1.0.0-rc.7` is the current software-only candidate. Qualification requires
 the mandatory Node, Go, bundle, and rehearsal gates; the local environment
 must not claim qualification when one of those gates is unavailable.
 

@@ -53,15 +53,33 @@ account options must be available. The installer never changes
 
 Login-log handling selects one explicit strategy. Supported `--no-log-init` is
 passed to `useradd`; otherwise effective `LOG_INIT=no` supplies suppression.
-Otherwise the implementation evaluates the actual shadow 4.17.4 paths: the
-UID-indexed `faillog` and optional `lastlog` resets in `usr_update`, and the
-optional fixed `/sbin/pam_tally2 --user ... --reset --quiet` invocation after
-the account files close. Existing artifacts are accepted only when their
-type, ownership, permissions, size and content prove the relevant backend
-cannot be addressed; ambiguous state blocks before mutation. `btmp` and
-`wtmp` are not treated as useradd-owned. This relies on the upstream 4.17.4
-source contract, not on a missing option alone; an implementation that cannot
-satisfy the same proof must be classified or rejected.
+When neither suppression mechanism applies, the implementation evaluates the
+exact shadow 4.17.4 build and execution contract. The `--no-log-init` help
+entry and `lastlog_reset` implementation are compiled under the same
+`ENABLE_LASTLOG` guard. Absence of that advertised option therefore proves,
+for this exact supported source contract, that the `lastlog` backend was not
+built. It does not prove that every login-log backend is disabled:
+UID-indexed `faillog` handling remains independent, and an executable fixed
+`/sbin/pam_tally2` remains unsupported.
+
+Existing artifacts are accepted only when their type, ownership, permissions
+and bounded size are safe and the relevant active backend cannot address
+their content. A preexisting `lastlog` is baselined and preserved when its
+backend is proven absent, including when the file contains existing records.
+Present non-empty `faillog`, executable `pam_tally2`, ambiguous build state,
+or unsafe path state blocks before mutation. `btmp` and `wtmp` are not treated
+as useradd-owned. This classification relies on the upstream shadow 4.17.4
+source contract and must not be generalized from a missing option alone.
+
+The fallback `login_logs_backend_proven_safe` classification is additionally
+bound to the proven Ubuntu amd64 package identity: binary package `passwd`,
+binary and source version `1:4.17.4-2ubuntu3`, source package `shadow`, and
+architecture `amd64`. The fixed `/usr/bin/dpkg-query` probe is shell-free and
+read-only and requires the exact five-line result. A different, missing, or
+malformed package result fails closed. Explicit suppression through
+`--no-log-init` or `LOG_INIT=no` remains portable and does not require this
+Debian package probe. No experimental account creation is used for detection,
+and readiness never touches real login logs.
 
 The path proof distinguishes a trusted system layout from the external files
 being baselined. On the supported Ubuntu merged-usr layout, `/var` and `/usr`

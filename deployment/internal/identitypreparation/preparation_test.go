@@ -22,6 +22,8 @@ type fakeAccountExecutor struct {
 	seen           []string
 	help           string
 	defaults       string
+	packageResult  identitycommand.Result
+	packageCalls   int
 	mail           bool
 	mutateLoginLog bool
 }
@@ -32,6 +34,13 @@ func (executor *fakeAccountExecutor) Run(_ context.Context, path string, args []
 	}
 	if path == identitycommand.UserTool && len(args) == 1 && args[0] == "-D" {
 		return identitycommand.Result{Stdout: []byte(executor.defaults)}
+	}
+	if path == identitycommand.DpkgQueryTool {
+		executor.packageCalls++
+		if executor.packageResult.ExitCode != 0 || executor.packageResult.Stdout != nil || executor.packageResult.Stderr != nil {
+			return executor.packageResult
+		}
+		return identitycommand.Result{Stdout: []byte("passwd\n1:4.17.4-2ubuntu3\nshadow\n1:4.17.4-2ubuntu3\namd64\n")}
 	}
 	name := args[len(args)-1]
 	executor.seen = append(executor.seen, path+" "+strings.Join(args, " "))
@@ -408,7 +417,7 @@ func TestPrepareDisabledUbuntu26FixturePassesReadinessContract(t *testing.T) {
 	}
 }
 
-func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *testing.T) {
+func TestPrepareDisabledAcceptsExistingLastlogWhenLastlogBackendIsNotBuilt(t *testing.T) {
 	executor := &fakeAccountExecutor{}
 	preparation := testPreparation(t, "preparation_required", executor)
 	if err := os.MkdirAll(filepath.Dir(preparation.paths.LoginLogPaths[0]), 0o755); err != nil {
@@ -417,9 +426,17 @@ func TestPrepareDisabledBlocksUnsafeLoginLogsWhenSuppressionIsUnavailable(t *tes
 	if err := os.WriteFile(preparation.paths.LoginLogPaths[0], []byte("existing"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	before, err := os.ReadFile(preparation.paths.LoginLogPaths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
-	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
+	if err != nil || report.Result != "prepared" || report.Checks[len(report.Checks)-1].Code != "login_logs_backend_proven_safe" {
 		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
+	}
+	after, err := os.ReadFile(preparation.paths.LoginLogPaths[0])
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("lastlog changed: before=%q after=%q err=%v", before, after, err)
 	}
 }
 
@@ -562,6 +579,15 @@ func TestPrepareDisabledExistingFaillogStateBlocksBeforeMutation(t *testing.T) {
 	}
 }
 
+func TestPrepareDisabledUnprovenAccountToolPackageBlocksBeforeMutation(t *testing.T) {
+	executor := &fakeAccountExecutor{packageResult: identitycommand.Result{Stdout: []byte("passwd\n1:4.17.4-2ubuntu4\nshadow\n1:4.17.4-2ubuntu4\namd64\n")}}
+	preparation := testPreparation(t, "preparation_required", executor)
+	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || executor.packageCalls != 1 || len(executor.seen) != 0 {
+		t.Fatalf("report=%+v err=%v packageCalls=%d commands=%v", report, err, executor.packageCalls, executor.seen)
+	}
+}
+
 func TestPrepareDisabledPamTallyExecutableBlocksBeforeMutation(t *testing.T) {
 	executor := &fakeAccountExecutor{}
 	preparation := testPreparation(t, "preparation_required", executor)
@@ -573,7 +599,7 @@ func TestPrepareDisabledPamTallyExecutableBlocksBeforeMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	report, err := preparation.Run(context.Background(), PrepareDisabled, Confirmation)
-	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || len(executor.seen) != 0 {
+	if err != nil || report.Result != "blocked" || report.Transaction.Code != "login_log_strategy_unsupported" || executor.packageCalls != 0 || len(executor.seen) != 0 {
 		t.Fatalf("report=%+v err=%v commands=%v", report, err, executor.seen)
 	}
 }

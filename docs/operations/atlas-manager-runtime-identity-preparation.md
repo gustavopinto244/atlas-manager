@@ -43,14 +43,29 @@ reported, must be exactly `yes` or `no`. The installer never edits
 
 The selected suppression strategy is reported without exposing command output:
 supported `--no-log-init` is included in account creation; when that option is
-unavailable, effective `LOG_INIT=no` is used; otherwise the installer checks
-the exact shadow 4.17.4 side effects. That implementation can reset the
-UID-indexed `lastlog` and `faillog` records and, when `/sbin/pam_tally2` is an
-executable, invokes its fixed tally reset command after closing account files.
-An existing backend is accepted only when its bounded type, ownership,
-permissions, size and content prove it cannot be addressed. Ambiguous or
-unsafe state blocks before group creation. `btmp` and `wtmp` are not part of
-this useradd-owned set.
+unavailable, effective `LOG_INIT=no` is used. When neither suppression
+mechanism applies, the installer uses the supported shadow 4.17.4 source
+contract to classify the remaining backends. The `--no-log-init` help entry
+and `lastlog_reset` are controlled by the same `ENABLE_LASTLOG` build guard,
+so absence of the advertised option proves that this version cannot reset
+`lastlog`.
+
+That proof applies only to `lastlog`. UID-indexed `faillog` handling remains
+active independently, and an executable fixed `/sbin/pam_tally2` remains
+unsupported. A trusted preexisting `lastlog`, including one containing
+records, is baselined and must remain unchanged. Present non-empty `faillog`,
+executable `pam_tally2`, ambiguous classification, or unsafe path state blocks
+before group creation. `btmp` and `wtmp` are not part of this useradd-owned
+set.
+
+The `login_logs_backend_proven_safe` fallback is fail-closed to the proven
+Ubuntu amd64 package only: binary `passwd`, source `shadow`, binary and source
+version `1:4.17.4-2ubuntu3`, architecture `amd64`. Readiness obtains these
+five exact fields through fixed `/usr/bin/dpkg-query` arguments without a
+shell. Other builds, missing metadata, non-empty stderr, invalid UTF-8, or
+unexpected output block the fallback. Hosts with explicit `--no-log-init` or
+`LOG_INIT=no` remain portable and skip the package probe. The probe is read-only
+and does not create an account or touch real logs.
 
 The trusted Ubuntu path layout is checked separately from the immutable log
 baseline. `/var` must be a safe root-owned directory. `/var/log` may be the
@@ -106,9 +121,9 @@ service lifecycle tools may be used. They preserve these committed identities
 through service deactivation and configuration removal; neither tool enrolls
 the account textually in the helper group or enables Linux power effects.
 
-## rc.6 operator sequence
+## rc.7 operator sequence
 
-For the active `1.0.0-rc.6` candidate, inspect the commit-bound bundle, run
+For the active `1.0.0-rc.7` candidate, inspect the commit-bound bundle, run
 read-only host qualification, run read-only runtime identity inspection, and
 review account-tool and trusted-layout readiness before the explicitly
 authorized `prepare-disabled` operation. Then run `inspect`, `verify-managed`,

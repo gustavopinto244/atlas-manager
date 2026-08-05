@@ -2781,7 +2781,7 @@ Cloudflare, Docker, Compose, PM2, systemd, or a physical host.
 
 ## Software release candidate
 
-The repository currently targets `1.0.0-rc.6` as a software-only release
+The repository currently targets `1.0.0-rc.7` as a software-only release
 candidate; `1.0.0-rc.3` was superseded after physical-host account-tool
 compatibility inspection, `rc.2` was superseded after the runtime identity
 password precondition correction, and `rc.1` was superseded by audit remediation. Administrative HTTP remains loopback-only and Cloudflare

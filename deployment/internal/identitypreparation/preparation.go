@@ -293,7 +293,7 @@ type loginLogBaseline struct {
 	Layout    []loginLogLayoutArtifact
 }
 
-func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.Readiness) (string, loginLogBaseline, string) {
+func (preparation Preparation) selectLoginLogStrategy(ctx context.Context, readiness identitycommand.Readiness) (string, loginLogBaseline, string) {
 	baseline, ok := preparation.captureLoginLogBaseline()
 	if !ok {
 		return "", loginLogBaseline{}, "login_log_path_unsafe"
@@ -310,11 +310,15 @@ func (preparation Preparation) selectLoginLogStrategy(readiness identitycommand.
 		}
 		return "", baseline, "login_log_strategy_unsupported"
 	}
-	// shadow 4.17.4 only writes the UID-indexed files when their size reaches
-	// the selected UID's record. A zero-length existing file proves that no
-	// positive system UID can address a record in it; any content is ambiguous.
+	if _, err := identitycommand.ProbeAccountToolPackage(ctx, preparation.deps.Executor); err != nil {
+		return "", baseline, "login_log_strategy_unsupported"
+	}
+	// In shadow 4.17.4, the --no-log-init help entry and lastlog_reset are
+	// compiled under the same ENABLE_LASTLOG guard. Reaching this branch
+	// without that advertised option proves that the lastlog backend is not
+	// built. Faillog remains active independently and must still be empty.
 	for _, artifact := range baseline.Artifacts {
-		if !artifact.present || artifact.path == preparation.paths.LoginLogPaths[2] {
+		if !artifact.present || artifact.path == preparation.paths.LoginLogPaths[0] || artifact.path == preparation.paths.LoginLogPaths[2] {
 			continue
 		}
 		if artifact.size != 0 {
@@ -597,7 +601,7 @@ func (preparation Preparation) prepare(ctx context.Context, snapshot snapshot) (
 	if readinessErr != nil {
 		return preparation.failureReport(PrepareDisabled, snapshot, readinessErr.Error()), nil
 	}
-	strategy, baseline, strategyCode := preparation.selectLoginLogStrategy(readiness)
+	strategy, baseline, strategyCode := preparation.selectLoginLogStrategy(ctx, readiness)
 	if strategyCode != "" {
 		return preparation.failureReport(PrepareDisabled, snapshot, strategyCode), nil
 	}

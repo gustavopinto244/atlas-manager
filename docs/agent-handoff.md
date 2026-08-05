@@ -1,16 +1,30 @@
 # Agent handoff
 
-## Latest active work — rc.6 release-candidate source update
+## Latest active work — rc.7 lastlog build-capability correction
 
-The active candidate is `1.0.0-rc.6`, based on commit
-`1aaf0893d0f6ece4f90293f5ba10d311135993e9`. The rc.5 bundle and read-only
-qualification history remain historical. Rc.5 had one authorized physical
-preparation attempt that blocked before mutation with `login_log_path_unsafe`;
-trusted Ubuntu group-writable login-log paths and the canonical merged-usr
-symlink were falsely rejected. Commit `1aaf089` is the correction. Rc.6 is
-not physically qualified and must undergo complete physical requalification.
-Operators must not change login-log permissions, ACLs, ownership, or
-merged-usr links to bypass validation.
+The active candidate is `1.0.0-rc.7` on branch
+`fix/runtime-identity-lastlog-build-capability`. It is based on the tested rc.6
+source commit `06191cb7f65eee3a6f3e080d04a77d8354cfe325`, but the rc.7 correction
+has not yet been committed or physically qualified.
+
+Physical Atlas inspection proved that Ubuntu shadow `4.17.4-2ubuntu3` was
+built with `--enable-lastlog=no`. Its `useradd` does not advertise
+`--no-log-init`, reports `LOG_INIT=yes`, and does not access or modify the
+preexisting non-empty `/var/log/lastlog`. Rc.6 incorrectly classified that
+state as `login_log_strategy_unsupported` and was blocked before mutation.
+
+The rc.7 source correction uses the shadow 4.17.4 contract that places both
+the `--no-log-init` help entry and `lastlog_reset` under `ENABLE_LASTLOG`.
+When the option is absent, the `lastlog` backend is therefore treated as not
+built. This does not disable the independent `faillog` checks: a non-empty
+`faillog`, executable `pam_tally2`, unsafe path, or changed immutable baseline
+still blocks fail-closed.
+
+The trusted preexisting `lastlog` remains baselined and must not be deleted,
+truncated, restored, chmodded, chowned, or otherwise normalized. Rc.6 evidence
+remains historical. Rc.6 must not be retried, merged, tagged, or released.
+Rc.7 requires a new commit-bound bundle and complete physical
+requalification.
 
 ## Historical rc.5 runtime identity login-log path safety
 
