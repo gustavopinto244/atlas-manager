@@ -2,6 +2,10 @@
 
 ## 1.0.0-rc.7
 
+- canonicalizes bundle directories and regular files to `0755` or `0644`,
+  making manifests, checksums, and archives independent of the builder's
+  `umask`; commit-bound rc.7 bundles built before this correction are
+  superseded and must not be used for physical qualification;
 - corrects the false-positive runtime identity preparation block when the
   supported shadow 4.17.4 build omits the `lastlog` backend and the trusted
   preexisting `lastlog` contains records;

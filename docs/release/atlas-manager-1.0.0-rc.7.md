@@ -6,6 +6,12 @@ accepted the trusted Ubuntu path layout, but still required an existing
 `lastlog` to be empty when neither `--no-log-init` nor `LOG_INIT=no` supplied
 global login-log suppression.
 
+The bundle builder now canonicalizes every directory to `0755`, every regular
+executable file to `0755`, and every other regular file to `0644`. This makes
+the manifest, checksums, archive, and extracted modes independent of the
+builder environment's `umask`. Commit-bound rc.7 bundles produced before this
+correction are superseded and must not be used for physical qualification.
+
 The Atlas host runs Ubuntu shadow `4.17.4-2ubuntu3`, built with
 `--enable-lastlog=no`. Its fixed `/usr/sbin/useradd` does not advertise
 `--no-log-init`, reports `LOG_INIT=yes`, and leaves the preexisting non-empty
