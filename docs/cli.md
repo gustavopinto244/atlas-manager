@@ -25,6 +25,7 @@ code; they never claim success.
 atlas health
 atlas health --json
 atlas status
+atlas doctor
 atlas services list
 atlas services status <service-id>
 atlas services schedule show <service-id>
@@ -36,6 +37,11 @@ different HTTP endpoint. Public health responses are read directly. Protected
 administrative responses require an already authenticated transport; the
 default CLI transport does not forge Cloudflare Access assertions and reports
 `authentication_required` in a partial `atlas status` result.
+
+`atlas doctor` is read-only and never invokes a repair action. Its current
+checks cover `/health/live`, `/health/server` and administrative overview
+reachability; a failed administrative check is reported individually rather
+than hidden behind a generic failure.
 
 ## Security boundary
 

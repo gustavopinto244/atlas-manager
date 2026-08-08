@@ -23,6 +23,7 @@ complete. Update this file in every capability commit.
 | Wake/shutdown                 | No      | No        | Feature-flagged            | Yes                               | power RBAC                            | exact/gated                  | Yes              | Yes                  | Implemented, deployed disabled                    |
 | Infrastructure diagnostics    | No      | No        | No                         | deployment tools only             | OS-level                              | No                           | evidence only    | No                   | Tooling only                                      |
 | Operator CLI                  | Partial | n/a       | HTTP adapter               | TypeScript parser/output contract | protected admin routes; public health | n/a                          | n/a              | n/a                  | CLI-1 + read-only health/status/services          |
+| Operator doctor               | Partial | No        | CLI health/admin reads     | HTTP transport                    | public health; admin protected        | No                           | No               | No                   | Initial read-only checks; host adapters pending   |
 
 Detailed planning and source mappings are in
 `docs/milestones/operator-experience-inventory.md`.

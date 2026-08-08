@@ -14,7 +14,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["doctor"],
     summary: "Run read-only diagnostics",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "list"],

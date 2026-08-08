@@ -29,6 +29,8 @@ async function executeHttpCommand(
       return readHealth(baseUrl, fetchImplementation, signal);
     case "status":
       return readStatus(baseUrl, fetchImplementation, signal);
+    case "doctor":
+      return readDoctor(baseUrl, fetchImplementation, signal);
     case "services list":
       return readEndpoint(
         baseUrl,
@@ -102,6 +104,39 @@ async function readStatus(
   return Object.freeze({
     atlasManager: Object.freeze({ endpoint: endpointLabel(baseUrl), health }),
     administrative,
+  });
+}
+
+async function readDoctor(
+  baseUrl: URL,
+  fetchImplementation: typeof fetch,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const checks: Array<Record<string, unknown>> = [];
+  for (const [name, path] of [
+    ["atlas_health_live", "/health/live"],
+    ["atlas_health_server", "/health/server"],
+    ["administrative_overview", "/admin/overview"],
+  ] as const) {
+    try {
+      await readEndpoint(baseUrl, fetchImplementation, path, signal);
+      checks.push({ name, status: "pass" });
+    } catch (error) {
+      checks.push({
+        name,
+        status: "fail",
+        code:
+          error instanceof AtlasCliError
+            ? error.code
+            : "infrastructure_unavailable",
+      });
+    }
+  }
+  const failed = checks.filter((check) => check.status === "fail");
+  return Object.freeze({
+    endpoint: endpointLabel(baseUrl),
+    status: failed.length === 0 ? "pass" : "partial",
+    checks: Object.freeze(checks),
   });
 }
 
