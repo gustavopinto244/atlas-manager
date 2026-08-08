@@ -49,22 +49,27 @@ function renderServices(value: unknown): void {
       `${String(service.displayName)} — ${String(service.status)} — ${String(service.availability)}`,
     );
     article.append(summary);
+    const metadata = document.createElement("p");
+    addText(
+      metadata,
+      `Adapter: ${String(service.managementKind)} · Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
+    );
+    article.append(metadata);
     for (const operation of ["start", "stop", "restart"] as const) {
       const form = document.createElement("form");
       form.className = "mutation";
-      const label = document.createElement("label");
-      addText(label, `${operation} confirmation`);
-      const input = document.createElement("input");
-      input.type = "text";
-      input.required = true;
-      input.autocomplete = "off";
-      label.append(input);
       const button = document.createElement("button");
       button.type = "submit";
       addText(button, operation);
-      form.append(label, button);
+      form.append(button);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
+        if (
+          !window.confirm(
+            `${operation} ${String(service.displayName)}? This action is audited.`,
+          )
+        )
+          return;
         button.disabled = true;
         void fetch(
           `/admin/services/${encodeURIComponent(String(service.id))}/actions/${operation}`,
@@ -72,17 +77,17 @@ function renderServices(value: unknown): void {
             method: "POST",
             credentials: "same-origin",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ confirmation: input.value }),
+            body: JSON.stringify({
+              confirmation: `confirm_registered_service_${operation}`,
+            }),
             redirect: "error",
           },
         )
           .then(async (response) => {
-            input.value = "";
             if (!response.ok) throw new Error("operation_failed");
             await refresh();
           })
           .catch(() => {
-            input.value = "";
             if (status !== null)
               addText(
                 status,
