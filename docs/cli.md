@@ -52,6 +52,10 @@ checks cover `/health/live`, `/health/server`, administrative overview and the
 protected security posture endpoint; a failed administrative check is reported
 individually rather than hidden behind a generic failure.
 
+Schedule preview defaults to the next 24 hours. Use
+`--from <canonical-timestamp> --to <canonical-timestamp>` for an explicit
+interval.
+
 ## Security boundary
 
 The CLI must not forge Cloudflare Access assertions or bypass administrative

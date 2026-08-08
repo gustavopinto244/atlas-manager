@@ -236,6 +236,9 @@ describe("administrative control-plane routes", () => {
           observedAt: "2026-01-01T00:00:00.000Z",
         })),
       },
+      getRegisteredServiceAvailabilityPreview: {
+        execute: vi.fn(async (_id: string, input: unknown) => input),
+      },
       setRegisteredServiceAvailability: {
         execute: vi.fn(async (_id: string, policy: unknown) => policy),
       },
@@ -255,6 +258,16 @@ describe("administrative control-plane routes", () => {
     expect(
       (await request(app).get("/admin/services/atlas-api/availability")).status,
     ).toBe(200);
+    const preview = await request(app).get(
+      "/admin/services/atlas-api/availability/preview?startsAt=2026-01-01T08:00:00.000Z&endsAt=2026-01-01T18:00:00.000Z",
+    );
+    expect(preview.status).toBe(200);
+    expect(
+      availability.getRegisteredServiceAvailabilityPreview.execute,
+    ).toHaveBeenCalledWith("atlas-api", {
+      startsAt: "2026-01-01T08:00:00.000Z",
+      endsAt: "2026-01-01T18:00:00.000Z",
+    });
     const updated = await request(app)
       .put("/admin/services/atlas-api/availability")
       .set("content-type", "application/json")

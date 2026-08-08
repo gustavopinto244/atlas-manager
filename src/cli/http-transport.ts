@@ -56,13 +56,22 @@ async function executeHttpCommand(
         signal,
       );
     }
-    case "services schedule show":
-    case "services schedule preview": {
+    case "services schedule show": {
       const serviceId = requireArgument(args, "service id");
       return readEndpoint(
         baseUrl,
         fetchImplementation,
         `/admin/services/${encodeURIComponent(serviceId)}/availability`,
+        signal,
+      );
+    }
+    case "services schedule preview": {
+      const serviceId = requireArgument(args, "service id");
+      const interval = readPreviewInterval(args.slice(1));
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        `/admin/services/${encodeURIComponent(serviceId)}/availability/preview?startsAt=${encodeURIComponent(interval.startsAt)}&endsAt=${encodeURIComponent(interval.endsAt)}`,
         signal,
       );
     }
@@ -134,6 +143,26 @@ async function readOverviewField(
   );
   if (typeof overview !== "object" || overview === null) return null;
   return (overview as Record<string, unknown>)[field] ?? null;
+}
+
+function readPreviewInterval(args: readonly string[]): Readonly<{
+  startsAt: string;
+  endsAt: string;
+}> {
+  if (args.length === 0) {
+    const starts = new Date();
+    starts.setUTCSeconds(0, 0);
+    return {
+      startsAt: starts.toISOString(),
+      endsAt: new Date(starts.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+  if (args.length !== 4 || args[0] !== "--from" || args[2] !== "--to")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "Preview options require --from <timestamp> --to <timestamp>",
+    );
+  return { startsAt: args[1]!, endsAt: args[3]! };
 }
 
 async function readHealth(

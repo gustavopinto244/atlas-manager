@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
-  "routeCount": 41,
-  "catalogSha256": "689d82b2dd56ef8f09f20d3a7739faf03fe63baa1f80ae09cc7986e049b67850",
+  "routeCount": 42,
+  "catalogSha256": "0fff89398c2b3e0220c60e8ae56b8e5fcd6b06a046266e7149c78d5d0fcf5ff8",
   "routeIds": [
     "dashboard.read",
     "dashboard.asset.read",
@@ -20,6 +20,7 @@
     "services.stop",
     "services.restart",
     "services.availability.read",
+    "services.availability.preview",
     "services.availability.update",
     "services.availability.delete",
     "operations.read",

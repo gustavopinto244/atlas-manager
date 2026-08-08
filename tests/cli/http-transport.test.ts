@@ -101,6 +101,33 @@ describe("Atlas HTTP CLI transport", () => {
     );
   });
 
+  it("reads a service schedule preview for an explicit interval", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { outcome: "required" }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute(
+        "services schedule preview",
+        [
+          "task-manager",
+          "--from",
+          "2026-08-08T08:00:00.000Z",
+          "--to",
+          "2026-08-08T18:00:00.000Z",
+        ],
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ outcome: "required" });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      new URL(
+        "http://127.0.0.1:3000/admin/services/task-manager/availability/preview?startsAt=2026-08-08T08%3A00%3A00.000Z&endsAt=2026-08-08T18%3A00%3A00.000Z",
+      ),
+      expect.objectContaining({ headers: { accept: "application/json" } }),
+    );
+  });
+
   it("projects backup status from the protected overview", async () => {
     const fetchImplementation = vi
       .fn<typeof fetch>()
