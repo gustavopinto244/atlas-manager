@@ -146,7 +146,23 @@ function renderMachinePlan(value: unknown): void {
 
 function renderAvailability(value: unknown): void {
   if (availability === null) return;
-  renderScheduleTimeline(document, availability, value);
+  availability.replaceChildren();
+  if (!Array.isArray(value) || value.length === 0) {
+    addText(availability, "No service schedules available.");
+    return;
+  }
+  for (const entry of value) {
+    const article = document.createElement("article");
+    const heading = document.createElement("h3");
+    const serviceId =
+      typeof entry === "object" && entry !== null
+        ? (entry as { serviceId?: unknown }).serviceId
+        : undefined;
+    addText(heading, serviceId ?? "Unknown service");
+    article.append(heading);
+    renderScheduleTimeline(document, article, entry);
+    availability.append(article);
+  }
 }
 
 function renderBackups(value: unknown, runsValue: unknown): void {
@@ -366,12 +382,36 @@ async function refresh(): Promise<void> {
       ),
     ),
   );
+  const previewWindow = createPreviewWindow();
+  const previews = await Promise.all(
+    serviceValues.map((service) =>
+      readJson(
+        `/admin/services/${encodeURIComponent(String(service.id))}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
+      ).catch(() => null),
+    ),
+  );
+  const schedules = policies.map((policy, index) => ({
+    ...(typeof policy === "object" && policy !== null ? policy : {}),
+    preview: previews[index],
+  }));
   if (root !== null) root.textContent = JSON.stringify(overview, null, 2);
   renderMachinePlan(overview);
   renderServices(serviceList);
-  renderAvailability(policies);
+  renderAvailability(schedules);
   renderAudit({ history, integrity, retention, exports });
   renderBackups(backupTargets, backupRuns);
+}
+
+function createPreviewWindow(): Readonly<{
+  startsAt: string;
+  endsAt: string;
+}> {
+  const starts = new Date();
+  starts.setUTCSeconds(0, 0);
+  return {
+    startsAt: starts.toISOString(),
+    endsAt: new Date(starts.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  };
 }
 
 void refresh().catch(() => {

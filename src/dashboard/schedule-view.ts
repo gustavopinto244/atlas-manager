@@ -18,6 +18,12 @@ export function renderScheduleTimeline(
   const summary = document.createElement("p");
   summary.textContent = `Mode: ${policy.mode}${policy.timezone === null ? "" : ` · Timezone: ${policy.timezone}`}`;
   parent.append(summary);
+  const preview = readPreview(value);
+  if (preview !== null) {
+    const previewSummary = document.createElement("p");
+    previewSummary.textContent = `Preview: ${preview.outcome}${preview.firstRequiredAt === null ? "" : ` · First required at: ${preview.firstRequiredAt}`}`;
+    parent.append(previewSummary);
+  }
   if (policy.mode !== "scheduled") return;
   const table = document.createElement("table");
   table.className = "schedule-timeline";
@@ -84,5 +90,23 @@ function readPolicy(value: unknown): Readonly<{
     mode: typeof record.mode === "string" ? record.mode : "unavailable",
     timezone: typeof record.timezone === "string" ? record.timezone : null,
     windows,
+  };
+}
+
+function readPreview(value: unknown): Readonly<{
+  outcome: string;
+  firstRequiredAt: string | null;
+}> | null {
+  if (typeof value !== "object" || value === null) return null;
+  const preview = (value as { preview?: unknown }).preview;
+  if (typeof preview !== "object" || preview === null) return null;
+  const record = preview as Record<string, unknown>;
+  if (typeof record.outcome !== "string") return null;
+  return {
+    outcome: record.outcome,
+    firstRequiredAt:
+      typeof record.firstRequiredAt === "string"
+        ? record.firstRequiredAt
+        : null,
   };
 }
