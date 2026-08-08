@@ -1,4 +1,5 @@
 import { initializeDashboardNavigation } from "./navigation.js";
+import { renderMachinePlan as renderMachinePlanView } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 
 initializeDashboardNavigation(document);
@@ -118,7 +119,7 @@ function renderMachinePlan(value: unknown): void {
   if (section === null) return;
   let plan = section.querySelector<HTMLElement>("#machine-plan");
   if (plan === null) {
-    plan = document.createElement("pre");
+    plan = document.createElement("div");
     plan.id = "machine-plan";
     section.append(plan);
   }
@@ -126,11 +127,7 @@ function renderMachinePlan(value: unknown): void {
     typeof value === "object" && value !== null
       ? (value as { machinePlan?: unknown }).machinePlan
       : undefined;
-  plan.textContent = JSON.stringify(
-    machinePlan ?? { status: "unavailable" },
-    null,
-    2,
-  );
+  renderMachinePlanView(document, plan, machinePlan);
 }
 
 function renderAvailability(value: unknown): void {
