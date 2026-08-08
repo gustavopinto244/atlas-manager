@@ -73,6 +73,8 @@ async function executeHttpCommand(
         "/admin/backups/targets",
         signal,
       );
+    case "backups status":
+      return readOverviewField(baseUrl, fetchImplementation, "backups", signal);
     case "backups runs":
       return readEndpoint(
         baseUrl,
@@ -90,10 +92,10 @@ async function executeHttpCommand(
       );
     }
     case "machine plan":
-      return readEndpoint(
+      return readOverviewField(
         baseUrl,
         fetchImplementation,
-        "/admin/overview",
+        "machinePlan",
         signal,
       );
     default:
@@ -102,6 +104,22 @@ async function executeHttpCommand(
         `Command not implemented yet: ${command}`,
       );
   }
+}
+
+async function readOverviewField(
+  baseUrl: URL,
+  fetchImplementation: typeof fetch,
+  field: "backups" | "machinePlan",
+  signal: AbortSignal,
+): Promise<unknown> {
+  const overview = await readEndpoint(
+    baseUrl,
+    fetchImplementation,
+    "/admin/overview",
+    signal,
+  );
+  if (typeof overview !== "object" || overview === null) return null;
+  return (overview as Record<string, unknown>)[field] ?? null;
 }
 
 async function readHealth(

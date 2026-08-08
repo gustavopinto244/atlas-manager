@@ -72,14 +72,25 @@ describe("Atlas HTTP CLI transport", () => {
     await expect(
       transport.execute("machine plan", [], new AbortController().signal),
     ).resolves.toEqual({
-      machinePlan: {
-        mode: "simulation",
-        nextTransition: null,
-      },
+      mode: "simulation",
+      nextTransition: null,
     });
     expect(fetchImplementation).toHaveBeenCalledWith(
       new URL("http://127.0.0.1:3000/admin/overview"),
       expect.objectContaining({ headers: { accept: "application/json" } }),
     );
+  });
+
+  it("projects backup status from the protected overview", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, { backups: { schedulerState: "available" } }),
+      );
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute("backups status", [], new AbortController().signal),
+    ).resolves.toEqual({ schedulerState: "available" });
   });
 });

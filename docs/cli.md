@@ -32,6 +32,7 @@ atlas services logs <service-id>
 atlas services schedule show <service-id>
 atlas services schedule preview <service-id>
 atlas backups list
+atlas backups status
 atlas backups runs
 atlas events
 atlas events --tail
