@@ -45,6 +45,16 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "services schedule show":
+    case "services schedule preview": {
+      const serviceId = requireArgument(args, "service id");
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        `/admin/services/${encodeURIComponent(serviceId)}/availability`,
+        signal,
+      );
+    }
     default:
       throw new AtlasCliError(
         "command_not_implemented",
