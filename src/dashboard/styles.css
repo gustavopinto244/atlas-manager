@@ -67,6 +67,16 @@ button:disabled {
 section[hidden] {
   display: none;
 }
+.schedule-timeline {
+  width: 100%;
+  border-collapse: collapse;
+}
+.schedule-timeline th,
+.schedule-timeline td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid #40516b;
+}
 .mutation {
   margin: 0.5rem 0;
 }

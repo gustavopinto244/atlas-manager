@@ -1,4 +1,5 @@
 import { initializeDashboardNavigation } from "./navigation.js";
+import { renderScheduleTimeline } from "./schedule-view.js";
 
 initializeDashboardNavigation(document);
 
@@ -112,8 +113,7 @@ function renderAudit(value: unknown): void {
 
 function renderAvailability(value: unknown): void {
   if (availability === null) return;
-  availability.textContent = "";
-  addText(availability, value);
+  renderScheduleTimeline(document, availability, value);
 }
 
 function renderBackups(value: unknown, runsValue: unknown): void {
