@@ -50,27 +50,27 @@ function renderOverview(value: unknown): void {
   appendOverviewCard(
     grid,
     "Services",
-    `${String(services.registered ?? 0)} registered`,
+    `${displayValue(services.registered, "0")} registered`,
   );
   appendOverviewCard(
     grid,
     "Power safety",
-    `${String(powerSafety.backend ?? "unavailable")} · effects ${String(powerSafety.effects ?? "unavailable")}`,
+    `${displayValue(powerSafety.backend, "unavailable")} · effects ${displayValue(powerSafety.effects, "unavailable")}`,
   );
   appendOverviewCard(
     grid,
     "Machine",
-    `expectation ${String(machinePlan.expectation ?? "unavailable")}`,
+    `expectation ${displayValue(machinePlan.expectation, "unavailable")}`,
   );
   appendOverviewCard(
     grid,
     "Backups",
-    `${String(backups.activeRuns ?? 0)} active · ${String(backups.interruptedRuns ?? 0)} interrupted`,
+    `${displayValue(backups.activeRuns, "0")} active · ${displayValue(backups.interruptedRuns, "0")} interrupted`,
   );
   appendOverviewCard(
     grid,
     "Observed at",
-    String(record.observedAt ?? "unavailable"),
+    displayValue(record.observedAt, "unavailable"),
   );
   root.append(grid);
 }
@@ -96,6 +96,14 @@ function readRecord(value: unknown): Readonly<Record<string, unknown>> {
     : {};
 }
 
+function displayValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+    ? String(value)
+    : fallback;
+}
+
 function renderInfrastructure(value: unknown): void {
   if (infrastructure === null) return;
   infrastructure.replaceChildren();
@@ -105,11 +113,11 @@ function renderInfrastructure(value: unknown): void {
   const record = readRecord(value);
   const routeCatalog = readRecord(record.routeCatalog);
   const lines = [
-    `Route catalog: ${String(routeCatalog.routeCount ?? "unavailable")} routes · reconciled ${String(routeCatalog.reconciled ?? "unknown")}`,
-    `Loopback binding: ${String(record.loopbackBinding ?? "unknown")}`,
-    `CORS disabled: ${String(record.corsDisabled ?? "unknown")}`,
-    `Trust proxy disabled: ${String(record.trustProxyDisabled ?? "unknown")}`,
-    `Audit available: ${String(record.auditAvailable ?? "unknown")}`,
+    `Route catalog: ${displayValue(routeCatalog.routeCount, "unavailable")} routes · reconciled ${displayValue(routeCatalog.reconciled, "unknown")}`,
+    `Loopback binding: ${displayValue(record.loopbackBinding, "unknown")}`,
+    `CORS disabled: ${displayValue(record.corsDisabled, "unknown")}`,
+    `Trust proxy disabled: ${displayValue(record.trustProxyDisabled, "unknown")}`,
+    `Audit available: ${displayValue(record.auditAvailable, "unknown")}`,
   ];
   const list = document.createElement("ul");
   for (const line of lines) {
@@ -206,7 +214,7 @@ function renderServices(value: unknown): void {
       )
         .then(async (response) => {
           if (!response.ok) throw new Error("logs_failed");
-          const value = await response.json();
+          const value: unknown = await response.json();
           let output = article.querySelector<HTMLElement>(".service-logs");
           if (output === null) {
             output = document.createElement("pre");

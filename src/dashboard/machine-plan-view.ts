@@ -122,9 +122,7 @@ function readPlan(value: unknown): Readonly<{
 }
 
 function readTransition(value: unknown): Transition {
-  return typeof value === "object" && value !== null
-    ? (value as Transition)
-    : {};
+  return typeof value === "object" && value !== null ? value : {};
 }
 
 function readString(value: unknown, fallback: string): string {
