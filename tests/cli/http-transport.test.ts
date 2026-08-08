@@ -58,6 +58,26 @@ describe("Atlas HTTP CLI transport", () => {
     ).toThrow("must not contain credentials");
   });
 
+  it("includes the protected security posture in doctor checks", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => response(200, { status: "ok" }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute("doctor", [], new AbortController().signal),
+    ).resolves.toMatchObject({
+      status: "pass",
+      checks: [
+        { name: "atlas_health_live", status: "pass" },
+        { name: "atlas_health_server", status: "pass" },
+        { name: "administrative_overview", status: "pass" },
+        { name: "administrative_security_posture", status: "pass" },
+      ],
+    });
+    expect(fetchImplementation).toHaveBeenCalledTimes(4);
+  });
+
   it("reads the protected machine plan through the overview endpoint", async () => {
     const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
       response(200, {

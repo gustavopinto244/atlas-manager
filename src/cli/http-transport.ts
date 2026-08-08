@@ -188,6 +188,7 @@ async function readDoctor(
     ["atlas_health_live", "/health/live"],
     ["atlas_health_server", "/health/server"],
     ["administrative_overview", "/admin/overview"],
+    ["administrative_security_posture", "/admin/security/status"],
   ] as const) {
     try {
       await readEndpoint(baseUrl, fetchImplementation, path, signal);

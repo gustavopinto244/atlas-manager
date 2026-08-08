@@ -48,9 +48,9 @@ default CLI transport does not forge Cloudflare Access assertions and reports
 `authentication_required` in a partial `atlas status` result.
 
 `atlas doctor` is read-only and never invokes a repair action. Its current
-checks cover `/health/live`, `/health/server` and administrative overview
-reachability; a failed administrative check is reported individually rather
-than hidden behind a generic failure.
+checks cover `/health/live`, `/health/server`, administrative overview and the
+protected security posture endpoint; a failed administrative check is reported
+individually rather than hidden behind a generic failure.
 
 ## Security boundary
 

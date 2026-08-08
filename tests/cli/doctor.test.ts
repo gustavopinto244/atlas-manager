@@ -8,6 +8,7 @@ describe("atlas doctor", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response("{}", { status: 200 }))
       .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 403 }))
       .mockResolvedValueOnce(new Response("{}", { status: 403 }));
     const transport = createAtlasHttpTransport({ fetchImplementation });
 
@@ -21,6 +22,11 @@ describe("atlas doctor", () => {
         { name: "atlas_health_server", status: "pass" },
         {
           name: "administrative_overview",
+          status: "fail",
+          code: "administrative_access_denied",
+        },
+        {
+          name: "administrative_security_posture",
           status: "fail",
           code: "administrative_access_denied",
         },
