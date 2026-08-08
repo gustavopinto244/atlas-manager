@@ -89,6 +89,13 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "machine plan":
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        "/admin/overview",
+        signal,
+      );
     default:
       throw new AtlasCliError(
         "command_not_implemented",

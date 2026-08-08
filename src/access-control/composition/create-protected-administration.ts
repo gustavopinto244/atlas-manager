@@ -753,6 +753,8 @@ export function createProtectedAdministration(
             machineScheduler: "disabled",
             helper: "unused",
           }),
+          machinePlan:
+            power === undefined ? null : power.getMachinePowerPlan.execute(),
           backups: Object.freeze({
             registeredTargets: backupTargets.length,
             enabledTargets: backupTargets.filter(

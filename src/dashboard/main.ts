@@ -111,6 +111,28 @@ function renderAudit(value: unknown): void {
   addText(audit, value);
 }
 
+function renderMachinePlan(value: unknown): void {
+  const section = document.querySelector<HTMLElement>(
+    'main > section[aria-labelledby="safety-heading"]',
+  );
+  if (section === null) return;
+  let plan = section.querySelector<HTMLElement>("#machine-plan");
+  if (plan === null) {
+    plan = document.createElement("pre");
+    plan.id = "machine-plan";
+    section.append(plan);
+  }
+  const machinePlan =
+    typeof value === "object" && value !== null
+      ? (value as { machinePlan?: unknown }).machinePlan
+      : undefined;
+  plan.textContent = JSON.stringify(
+    machinePlan ?? { status: "unavailable" },
+    null,
+    2,
+  );
+}
+
 function renderAvailability(value: unknown): void {
   if (availability === null) return;
   renderScheduleTimeline(document, availability, value);
@@ -334,6 +356,7 @@ async function refresh(): Promise<void> {
     ),
   );
   if (root !== null) root.textContent = JSON.stringify(overview, null, 2);
+  renderMachinePlan(overview);
   renderServices(serviceList);
   renderAvailability(policies);
   renderAudit({ history, integrity, retention, exports });

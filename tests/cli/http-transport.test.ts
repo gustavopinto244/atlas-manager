@@ -57,4 +57,29 @@ describe("Atlas HTTP CLI transport", () => {
       createAtlasHttpTransport({ baseUrl: "http://user:pass@localhost" }),
     ).toThrow("must not contain credentials");
   });
+
+  it("reads the protected machine plan through the overview endpoint", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      response(200, {
+        machinePlan: {
+          mode: "simulation",
+          nextTransition: null,
+        },
+      }),
+    );
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute("machine plan", [], new AbortController().signal),
+    ).resolves.toEqual({
+      machinePlan: {
+        mode: "simulation",
+        nextTransition: null,
+      },
+    });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:3000/admin/overview"),
+      expect.objectContaining({ headers: { accept: "application/json" } }),
+    );
+  });
 });

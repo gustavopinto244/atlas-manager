@@ -35,6 +35,7 @@ atlas backups list
 atlas backups runs
 atlas events
 atlas events --tail
+atlas machine plan
 ```
 
 The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a
