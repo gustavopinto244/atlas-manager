@@ -26,6 +26,7 @@ logs/
 
 # Local development session notes
 docs/development-session.md
+/yay-bin/
 
 # Runtime files
 *.pid
