@@ -89,8 +89,9 @@ policy. The primary domain may continue serving non-administrative endpoints.
 
 ## Applications and services on Atlas
 
-Operational inspection confirmed the components below. PM2 is not installed on
-Atlas at this time.
+The deployment architecture keeps Atlas Manager and the routed application
+loopback-only. Registered services may use the existing PM2, Docker or Compose
+adapters when configured.
 
 | Application/service | Managed by                        | Purpose                                  |
 | ------------------- | --------------------------------- | ---------------------------------------- |
@@ -117,3 +118,23 @@ changing administrative features or registered services.
 - [Architecture](docs/architecture.md)
 - [Architecture decisions](docs/adr/)
 - [Service lifecycle](docs/operations/atlas-manager-service-lifecycle.md)
+- [Operator CLI](docs/cli.md)
+- [Operator runbook](docs/operator-runbook.md)
+- [Scheduling](docs/scheduling.md)
+- [Dashboard](docs/dashboard.md)
+- [Capability matrix](docs/capabilities.md)
+
+## How Atlas Manager Works
+
+Requests enter through the protected HTTP adapter or the typed CLI transport,
+then flow through an application use case, domain invariants and an
+infrastructure adapter. The adapter reaches the external runtime, state stores
+record durable state, and event history records administrative mutations.
+
+Service control uses the registered-service application use case and a PM2,
+Docker or Compose adapter. Scheduling evaluates the shared availability
+policy, claims an occurrence, reconciles the adapter and advances its cursor.
+Backup execution and backup scheduling follow the same application/domain/
+adapter separation. Administrative requests additionally pass Cloudflare
+Access authentication, RBAC, request admission, mutation gates and audit.
+Machine scheduling remains mock-first and power effects remain gated.
