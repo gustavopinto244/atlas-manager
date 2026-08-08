@@ -34,6 +34,27 @@ export function renderMachinePlan(
   parent.append(table);
 }
 
+export function renderMachineSchedule(
+  document: Document,
+  parent: HTMLElement,
+  value: unknown,
+): void {
+  parent.replaceChildren();
+  const schedule = readSchedule(value);
+  const summary = document.createElement("p");
+  summary.textContent = `Mode: ${schedule.mode}${schedule.timezone === null ? "" : ` · Timezone: ${schedule.timezone}`}`;
+  parent.append(summary);
+  if (schedule.windows.length === 0) return;
+
+  const list = document.createElement("ul");
+  for (const window of schedule.windows) {
+    const item = document.createElement("li");
+    item.textContent = `${window.dayOfWeek}: ${window.start} → ${window.end}`;
+    list.append(item);
+  }
+  parent.append(list);
+}
+
 function appendTransition(
   document: Document,
   body: HTMLTableSectionElement,
@@ -90,5 +111,49 @@ function unavailablePlan(): Readonly<{
     expectation: "unavailable",
     nextShutdown: {},
     nextWake: {},
+  };
+}
+
+function readSchedule(value: unknown): Readonly<{
+  mode: string;
+  timezone: string | null;
+  windows: readonly Readonly<{
+    dayOfWeek: string;
+    start: string;
+    end: string;
+  }>[];
+}> {
+  if (typeof value !== "object" || value === null) {
+    return { mode: "unavailable", timezone: null, windows: [] };
+  }
+  const record = value as Record<string, unknown>;
+  const weeklySchedule = record.weeklySchedule;
+  const rawWindows =
+    typeof weeklySchedule === "object" && weeklySchedule !== null
+      ? (weeklySchedule as Record<string, unknown>).windows
+      : undefined;
+  const windows = Array.isArray(rawWindows)
+    ? rawWindows.flatMap((entry) => {
+        if (typeof entry !== "object" || entry === null) return [];
+        const window = entry as Record<string, unknown>;
+        if (
+          typeof window.dayOfWeek !== "string" ||
+          typeof window.start !== "string" ||
+          typeof window.end !== "string"
+        )
+          return [];
+        return [
+          {
+            dayOfWeek: window.dayOfWeek,
+            start: window.start,
+            end: window.end,
+          },
+        ];
+      })
+    : [];
+  return {
+    mode: readString(record.mode, "unavailable"),
+    timezone: typeof record.timezone === "string" ? record.timezone : null,
+    windows,
   };
 }

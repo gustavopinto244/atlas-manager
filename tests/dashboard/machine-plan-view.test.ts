@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { renderMachinePlan } from "../../src/dashboard/machine-plan-view.js";
+import {
+  renderMachinePlan,
+  renderMachineSchedule,
+} from "../../src/dashboard/machine-plan-view.js";
 
 class FakeElement {
   public className = "";
@@ -64,5 +67,20 @@ describe("machine plan view", () => {
 
     expect(parent.textContent).toContain("Expected state: unavailable");
     expect(parent.textContent).toContain("not planned");
+  });
+
+  it("renders the validated weekly machine schedule", () => {
+    const parent = new FakeElement();
+
+    renderMachineSchedule(fakeDocument(), parent as unknown as HTMLElement, {
+      mode: "scheduled",
+      timezone: "America/Sao_Paulo",
+      weeklySchedule: {
+        windows: [{ dayOfWeek: "monday", start: "08:00", end: "18:00" }],
+      },
+    });
+
+    expect(parent.textContent).toContain("Mode: scheduled");
+    expect(parent.textContent).toContain("monday: 08:00 → 18:00");
   });
 });
