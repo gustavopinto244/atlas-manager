@@ -3,6 +3,16 @@ type Transition = Readonly<{
   scheduledFor?: unknown;
 }>;
 
+const MACHINE_WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
 export function renderMachinePlan(
   document: Document,
   parent: HTMLElement,
@@ -46,13 +56,34 @@ export function renderMachineSchedule(
   parent.append(summary);
   if (schedule.windows.length === 0) return;
 
-  const list = document.createElement("ul");
-  for (const window of schedule.windows) {
-    const item = document.createElement("li");
-    item.textContent = `${window.dayOfWeek}: ${window.start} → ${window.end}`;
-    list.append(item);
+  const table = document.createElement("table");
+  table.className = "schedule-timeline machine-schedule";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const label of ["Day", "Operating windows"] as const) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    headRow.append(cell);
   }
-  parent.append(list);
+  head.append(headRow);
+  table.append(head);
+  const body = document.createElement("tbody");
+  for (const weekday of MACHINE_WEEKDAYS) {
+    const row = document.createElement("tr");
+    const day = document.createElement("th");
+    day.scope = "row";
+    day.textContent = weekday;
+    const windows = document.createElement("td");
+    const values = schedule.windows
+      .filter((window) => window.dayOfWeek === weekday)
+      .map((window) => `${window.start} → ${window.end}`);
+    windows.textContent = values.length === 0 ? "Offline" : values.join(", ");
+    row.append(day, windows);
+    body.append(row);
+  }
+  table.append(body);
+  parent.append(table);
 }
 
 function appendTransition(

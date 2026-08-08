@@ -81,6 +81,7 @@ describe("machine plan view", () => {
     });
 
     expect(parent.textContent).toContain("Mode: scheduled");
-    expect(parent.textContent).toContain("monday: 08:00 → 18:00");
+    expect(parent.textContent).toContain("monday");
+    expect(parent.textContent).toContain("08:00 → 18:00");
   });
 });
