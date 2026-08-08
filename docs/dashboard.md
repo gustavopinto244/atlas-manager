@@ -21,7 +21,9 @@ exact backend confirmation token. The result is reread after the operation.
 
 The Schedules page renders the current availability response as a weekly
 timeline. It uses the server-provided weekday, time and timezone values. It
-does not validate or persist a new base policy in the browser.
+does not validate or persist a new base policy in the browser. The Logs action
+performs a protected read and renders the returned payload as text without
+interpreting it as markup.
 
 ## State and errors
 
