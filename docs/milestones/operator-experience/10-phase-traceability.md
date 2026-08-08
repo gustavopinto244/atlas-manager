@@ -43,11 +43,11 @@ document that owns it. It is a coverage index, not evidence of implementation.
 
 ## Unresolved decisions that block implementation slices
 
-| Decision                                                                           | Blocks                                 | Required artifact                              |
-| ---------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------- |
-| Correct end-to-end Cloudflare assertion flow and remove current read bypass        | all dashboard/API work                 | security repair tests and deployment rehearsal |
-| Local/remote CLI identity model                                                    | mutating CLI commands                  | follow-up ADR                                  |
-| Service policy persistence and precedence                                          | schedule mutation/API/editor           | store contract and tests                       |
-| Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                                  |
-| Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice      |
-| Final route additions and explicit route count                                     | API contract/release gates             | route proposal and updated contract snapshot   |
+| Decision                                                                           | Blocks                                 | Required artifact                                                         |
+| ---------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
+| Correct end-to-end Cloudflare assertion flow and remove current read bypass        | all dashboard/API work                 | security repair tests and deployment rehearsal                            |
+| Local/remote CLI identity model                                                    | mutating CLI commands                  | ADR-028; authenticated transport implementation and security tests remain |
+| Service policy persistence and precedence                                          | schedule mutation/API/editor           | store contract and tests                                                  |
+| Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                                                             |
+| Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice                                 |
+| Final route additions and explicit route count                                     | API contract/release gates             | route proposal and updated contract snapshot                              |
