@@ -131,6 +131,37 @@ export class RegisteredService {
   }
 }
 
+export function withRegisteredServiceAvailabilityPolicy(
+  service: RegisteredService,
+  availabilityPolicy: ServiceAvailabilityPolicy,
+): RegisteredService {
+  return RegisteredService.create({
+    id: service.id,
+    displayName: service.displayName,
+    managementAdapter: service.managementAdapter,
+    externalResourceId: service.externalResourceId,
+    supportedOperations: service.supportedOperations,
+    availabilityPolicy: serializeAvailabilityPolicy(availabilityPolicy),
+    ...(service.managementConfiguration === null
+      ? {}
+      : { managementConfiguration: service.managementConfiguration }),
+    dependencies: service.dependencies,
+    readinessPolicy: service.readinessPolicy,
+  });
+}
+
+function serializeAvailabilityPolicy(
+  policy: ServiceAvailabilityPolicy,
+): Record<string, unknown> {
+  if (policy.mode !== "scheduled") return { mode: policy.mode };
+
+  return {
+    mode: policy.mode,
+    timezone: policy.timezone,
+    windows: policy.schedule.windows,
+  };
+}
+
 function validateAndGetManagementConfiguration(
   adapter: ServiceManagementAdapter,
   config: unknown,
