@@ -60,7 +60,7 @@ describe("atlas CLI entrypoint", () => {
     const errors = stream();
 
     await expect(
-      runAtlasCli(["doctor"], undefined, output, errors),
+      runAtlasCli(["machine", "plan"], undefined, output, errors),
     ).resolves.toBe(2);
     expect(await content(errors)).toContain("command_not_implemented");
   });
