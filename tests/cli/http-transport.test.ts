@@ -114,4 +114,21 @@ describe("Atlas HTTP CLI transport", () => {
       machineScheduler: "disabled",
     });
   });
+
+  it("projects the validated machine schedule from the protected overview", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response(200, { machineSchedule: { mode: "always_on" } }),
+      );
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute(
+        "machine schedule show",
+        [],
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ mode: "always_on" });
+  });
 });

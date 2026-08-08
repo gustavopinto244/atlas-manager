@@ -29,7 +29,10 @@ import {
   MockWakeAlarmState,
   type MockWakeAlarmStateConfiguration,
 } from "../infrastructure/mock-wake-alarm-state.js";
-import { createMachineOperatingPolicy } from "../domain/machine-operating-policy.js";
+import {
+  createMachineOperatingPolicy,
+  type MachineOperatingPolicy,
+} from "../domain/machine-operating-policy.js";
 import { InMemoryMachineShutdownOccurrenceClaimStore } from "../infrastructure/in-memory-machine-shutdown-occurrence-claim-store.js";
 import { RunMachinePowerSchedulerTick } from "../application/run-machine-power-scheduler-tick.js";
 import type { MachinePowerSchedulerCursorStore } from "../application/ports/machine-power-scheduler-cursor-store.js";
@@ -85,6 +88,7 @@ import { AdministrativeEventHistoryMachineShutdownReadinessReader } from "../inf
 import { ScheduledPolicyMachineShutdownConfirmationReader } from "../infrastructure/scheduled-policy-machine-shutdown-confirmation-reader.js";
 
 export interface PowerManagementCapabilities {
+  readonly machineOperatingPolicy: MachineOperatingPolicy;
   readonly getRtcInformation: GetRtcInformation;
   readonly getNextWakeAlarm: GetNextWakeAlarm;
   readonly scheduleWakeAlarm: ScheduleWakeAlarm;
@@ -274,6 +278,7 @@ export function createPowerManagement(
   );
 
   const capabilities = {
+    machineOperatingPolicy,
     getRtcInformation: new GetRtcInformation(clock, rtcInformationReader),
     getNextWakeAlarm: new GetNextWakeAlarm(clock, wakeAlarmReader),
     scheduleWakeAlarm: new ScheduleWakeAlarm(clock, wakeAlarmController, audit),

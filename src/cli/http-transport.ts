@@ -105,6 +105,13 @@ async function executeHttpCommand(
         "powerSafety",
         signal,
       );
+    case "machine schedule show":
+      return readOverviewField(
+        baseUrl,
+        fetchImplementation,
+        "machineSchedule",
+        signal,
+      );
     default:
       throw new AtlasCliError(
         "command_not_implemented",
@@ -116,7 +123,7 @@ async function executeHttpCommand(
 async function readOverviewField(
   baseUrl: URL,
   fetchImplementation: typeof fetch,
-  field: "backups" | "machinePlan" | "powerSafety",
+  field: "backups" | "machinePlan" | "powerSafety" | "machineSchedule",
   signal: AbortSignal,
 ): Promise<unknown> {
   const overview = await readEndpoint(

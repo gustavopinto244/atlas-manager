@@ -38,6 +38,7 @@ atlas events
 atlas events --tail
 atlas machine status
 atlas machine plan
+atlas machine schedule show
 ```
 
 The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a

@@ -755,6 +755,8 @@ export function createProtectedAdministration(
           }),
           machinePlan:
             power === undefined ? null : power.getMachinePowerPlan.execute(),
+          machineSchedule:
+            power === undefined ? null : power.machineOperatingPolicy,
           backups: Object.freeze({
             registeredTargets: backupTargets.length,
             enabledTargets: backupTargets.filter(

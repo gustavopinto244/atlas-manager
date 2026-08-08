@@ -114,7 +114,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["machine", "schedule", "show"],
     summary: "Show the machine schedule",
-    implemented: false,
+    implemented: true,
   },
 ]);
 
