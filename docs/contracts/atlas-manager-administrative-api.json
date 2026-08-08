@@ -2,11 +2,10 @@
   "schemaVersion": 1,
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
-  "routeCount": 41,
-  "catalogSha256": "3971df6e1a67ebbba21298a7191ae71d1936faf78374e0d7dbbabc4826ce2574",
+  "routeCount": 40,
+  "catalogSha256": "e805c295828781d10ec840a8dd250f4434f88a00dd6c76d4c7d775cba653d34f",
   "routeIds": [
     "dashboard.read",
-    "dashboard.read.root",
     "dashboard.asset.read",
     "event_history.read",
     "power.wake.read",

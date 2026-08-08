@@ -2,6 +2,7 @@ import { parseStrictJson } from "./strict-json.js";
 import { parseEnvironment } from "./environment.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../service-management/infrastructure/environment-registered-service-catalog.js";
 import { parseAdministrativePublicOrigin } from "../http/administrative-public-origin.js";
+import { createAdministrativePrincipal } from "../access-control/domain/administrative-principal.js";
 
 export interface MockAdministrativeInput {
   readonly schemaVersion: 1;
@@ -52,6 +53,7 @@ export function parseMockAdministrativeInput(
       !Array.isArray(assignment.roles)
     )
       throw new Error("administrative_input_invalid");
+    createAdministrativePrincipal({ principalId: assignment.principalId });
     return Object.freeze({
       principalId: assignment.principalId,
       roles: Object.freeze(
@@ -63,6 +65,11 @@ export function parseMockAdministrativeInput(
       ),
     });
   });
+  if (
+    new Set(roleAssignments.map((assignment) => assignment.principalId))
+      .size !== roleAssignments.length
+  )
+    throw new Error("administrative_input_invalid");
   if (
     !roleAssignments.some((assignment) =>
       assignment.roles.includes("administrator"),

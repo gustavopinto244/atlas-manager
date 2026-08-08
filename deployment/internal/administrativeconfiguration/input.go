@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	InputName        = "atlas-manager.mock-admin.input.json"
+	InputName        = "administrative-runtime.input.json"
 	ExampleInputName = "atlas-manager.mock-admin.input.example.json"
 	ProfileName      = "mock-administrative"
 	MaxInputBytes    = 65_536
@@ -109,7 +109,7 @@ func ValidateInput(data []byte) (Input, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
 	}
-	if input.SchemaVersion != 1 || input.CloudflareTeam == "" || input.CloudflareTeam != strings.TrimSpace(input.CloudflareTeam) || len(input.CloudflareTeam) > 63 || !validTeam(input.CloudflareTeam) || input.CloudflareAudience == "" || input.CloudflareAudience != strings.TrimSpace(input.CloudflareAudience) || len(input.CloudflareAudience) > 256 || strings.ContainsAny(input.CloudflareAudience, "\" ,\t\r\n") || !validPublicOrigin(input.PublicOrigin) || len(input.RoleAssignments) == 0 || len(input.RoleAssignments) > 32 || len(input.RegisteredServices) == 0 || len(input.BackupTargets) == 0 {
+	if input.SchemaVersion != 1 || input.CloudflareTeam == "" || input.CloudflareTeam != strings.TrimSpace(input.CloudflareTeam) || len(input.CloudflareTeam) > 63 || !validTeam(input.CloudflareTeam) || input.CloudflareAudience == "" || input.CloudflareAudience != strings.TrimSpace(input.CloudflareAudience) || len(input.CloudflareAudience) > 256 || strings.ContainsAny(input.CloudflareAudience, "\" ,\t\r\n") || !validPublicOrigin(input.PublicOrigin) || len(input.RoleAssignments) == 0 || len(input.RoleAssignments) > 32 || len(input.RegisteredServices) == 0 {
 		return Input{}, fmt.Errorf("administrative_input_invalid")
 	}
 	var topLevel map[string]json.RawMessage
@@ -463,5 +463,6 @@ func validUUID(value string) bool {
 			return false
 		}
 	}
-	return value[14] == '4' && (value[19] == '8' || value[19] == '9' || value[19] == 'a' || value[19] == 'b')
+	version := value[14]
+	return version >= '1' && version <= '5' && (value[19] == '8' || value[19] == '9' || value[19] == 'a' || value[19] == 'b')
 }

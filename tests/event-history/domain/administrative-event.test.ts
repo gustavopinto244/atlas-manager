@@ -79,6 +79,15 @@ describe("administrative event domain", () => {
     expect(
       createAdministrativeEventSource({
         kind: "administrative",
+        actorId: "administrator:caf45cc3-4312-5d41-8603-cc0102346a1f",
+      }),
+    ).toEqual({
+      kind: "administrative",
+      actorId: "administrator:caf45cc3-4312-5d41-8603-cc0102346a1f",
+    });
+    expect(
+      createAdministrativeEventSource({
+        kind: "administrative",
         actorId: "unauthenticated",
       }),
     ).toEqual({ kind: "administrative", actorId: "unauthenticated" });

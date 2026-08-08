@@ -30,7 +30,7 @@ export class FilesystemBackupArtifactStore implements BackupArtifactStore {
     const artifacts: ManagedBackupArtifact[] = [];
     for (const entry of entries.sort(bytewise)) {
       if (
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
           entry,
         )
       ) {
@@ -82,7 +82,7 @@ export class FilesystemBackupArtifactStore implements BackupArtifactStore {
 
   public async removeManaged(targetId: string, runId: string): Promise<void> {
     if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
         runId,
       )
     )

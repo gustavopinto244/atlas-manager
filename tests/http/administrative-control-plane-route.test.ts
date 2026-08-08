@@ -95,6 +95,43 @@ function serviceDependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("administrative control-plane routes", () => {
+  it("serves the dashboard only from the dedicated administrative authority", async () => {
+    const clock = base().clock;
+    const app = createApp({
+      ...base(),
+      administrativePublicOrigin: parseAdministrativePublicOrigin(
+        "https://admin.gustavopinto.dev.br",
+      ),
+      administrativeDashboard: {
+        admission: new FixedAdministrativeRequestAdmission(clock),
+        createProtectedAdministration: vi.fn(() => ({
+          getAdministrativeDashboard: { execute: vi.fn(async () => ({})) },
+        })),
+      },
+    });
+    const dashboard = await request(app)
+      .get("/")
+      .set("host", "admin.gustavopinto.dev.br");
+    expect(dashboard.status).toBe(200);
+    expect(
+      (await request(app).get("/").set("host", "gustavopinto.dev.br")).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .get("/admin")
+          .set("host", "admin.gustavopinto.dev.br")
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(app)
+          .get("/assets/styles.css")
+          .set("host", "admin.gustavopinto.dev.br")
+      ).status,
+    ).toBe(200);
+  });
+
   it("remain absent when the service surface is disabled", async () => {
     const response = await request(createApp({ ...base() })).get(
       "/admin/services",
@@ -249,12 +286,14 @@ describe("administrative control-plane routes", () => {
       powerSafety: { backend: string };
     };
     expect(overviewBody.powerSafety.backend).toBe("mock");
-    const dashboard = await request(app).get("/admin");
+    const dashboard = await request(app).get("/");
     expect(dashboard.status).toBe(200);
     expect(dashboard.headers["content-security-policy"]).toContain(
       "default-src 'none'",
     );
     expect(dashboard.text).toContain("Power safety");
+    const asset = await request(app).get("/assets/styles.css");
+    expect(asset.status).toBe(200);
   });
 
   it("rejects cross-site and malformed Fetch Metadata before route execution", async () => {

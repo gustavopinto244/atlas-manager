@@ -14,7 +14,7 @@ export function createErrorHandler(
     void _next;
 
     if (error instanceof HttpError) {
-      if (request.path.startsWith("/admin")) {
+      if (isAdministrativePath(request.path)) {
         setAdministrativeSecurityHeaders(response);
         logger.error(
           {
@@ -41,7 +41,7 @@ export function createErrorHandler(
         event: "http_request_failed",
         method: request.method,
         path: request.path,
-        ...(request.path.startsWith("/admin")
+        ...(isAdministrativePath(request.path)
           ? { correlationId: response.getHeader("X-Atlas-Request-ID") }
           : {}),
         errorType: error instanceof Error ? error.name : "UnknownError",
@@ -56,4 +56,10 @@ export function createErrorHandler(
       },
     });
   };
+}
+
+function isAdministrativePath(path: string): boolean {
+  return (
+    path.startsWith("/admin") || path === "/" || path.startsWith("/assets/")
+  );
 }

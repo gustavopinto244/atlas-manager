@@ -111,13 +111,20 @@ export function createApp({
     app.disable("etag");
     app.disable("x-powered-by");
   }
-  if (administrativePublicOrigin !== undefined)
-    app.use(
-      "/admin",
-      createAdministrativeSecurityEnvelope({
-        publicOrigin: administrativePublicOrigin,
-      }),
-    );
+  if (administrativePublicOrigin !== undefined) {
+    const envelope = createAdministrativeSecurityEnvelope({
+      publicOrigin: administrativePublicOrigin,
+    });
+    app.use((request, response, next) => {
+      if (
+        request.path === "/" ||
+        request.path.startsWith("/assets/") ||
+        request.path.startsWith("/admin")
+      )
+        return envelope(request, response, next);
+      next();
+    });
+  }
   if (administrativeEventHistory !== undefined) {
     registerAdministrativeEventHistoryRoute(app, administrativeEventHistory);
   }

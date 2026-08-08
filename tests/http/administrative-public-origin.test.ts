@@ -6,11 +6,13 @@ import {
 
 describe("administrative public origin", () => {
   it("accepts only canonical HTTPS origins", () => {
-    const origin = parseAdministrativePublicOrigin("https://atlas.example.com");
-    expect(origin.origin).toBe("https://atlas.example.com");
-    expect(administrativeAuthorityMatches("atlas.example.com", origin)).toBe(
-      true,
+    const origin = parseAdministrativePublicOrigin(
+      "https://admin.gustavopinto.dev.br",
     );
+    expect(origin.origin).toBe("https://admin.gustavopinto.dev.br");
+    expect(
+      administrativeAuthorityMatches("admin.gustavopinto.dev.br", origin),
+    ).toBe(true);
   });
 
   it.each([
@@ -23,7 +25,9 @@ describe("administrative public origin", () => {
     "atlas.example.com,evil.example",
     "atlas.example.com\nX-Injected: value",
   ])("rejects non-authority host syntax: %s", (host) => {
-    const origin = parseAdministrativePublicOrigin("https://atlas.example.com");
+    const origin = parseAdministrativePublicOrigin(
+      "https://admin.gustavopinto.dev.br",
+    );
     expect(administrativeAuthorityMatches(host, origin)).toBe(false);
   });
 

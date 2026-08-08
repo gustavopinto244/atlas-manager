@@ -31,9 +31,9 @@ describe("administrative route security catalog registration", () => {
       },
     );
 
-    expect(() =>
-      reconcileAdministrativeRouteRegistrations(app, ["dashboard.read.root"]),
-    ).toThrow("administrative_route_policy_invalid");
+    expect(() => reconcileAdministrativeRouteRegistrations(app, [])).toThrow(
+      "administrative_route_policy_invalid",
+    );
   });
 
   it("fails closed when an administrative route bypasses the registration helper", () => {
