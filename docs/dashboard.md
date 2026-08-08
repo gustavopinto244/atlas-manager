@@ -8,14 +8,17 @@ administrative API; it does not contain domain or authorization rules.
 
 The navigation shell exposes Overview, Services, Schedules, Machine, Backups,
 Events, Infrastructure and Settings. Overview, Services, Schedules, Backups
-and Events are backed by current API payloads. Machine, Infrastructure and
-Settings currently provide explicit placeholders until their read APIs are
-delivered.
+and Infrastructure are backed by current API payloads. Settings remains an
+explicit placeholder until its read API is delivered.
 
 Overview presents cards for registered services, power safety, machine
 expectation, backup activity and observation time. These cards are projections
 of the protected overview response; the dashboard does not derive operational
 state independently.
+
+Infrastructure is read-only and shows the protected security posture, route
+catalog reconciliation and host-boundary flags. It does not offer a repair
+button.
 
 ## Services and schedules
 

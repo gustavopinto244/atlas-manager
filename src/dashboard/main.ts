@@ -13,6 +13,9 @@ const services = document.querySelector<HTMLElement>("#services");
 const availability = document.querySelector<HTMLElement>("#availability");
 const audit = document.querySelector<HTMLElement>("#audit");
 const backups = document.querySelector<HTMLElement>("#backups");
+const infrastructure = document.querySelector<HTMLElement>(
+  "#infrastructure-placeholder",
+);
 
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
@@ -91,6 +94,30 @@ function readRecord(value: unknown): Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function renderInfrastructure(value: unknown): void {
+  if (infrastructure === null) return;
+  infrastructure.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = "Infrastructure";
+  infrastructure.append(heading);
+  const record = readRecord(value);
+  const routeCatalog = readRecord(record.routeCatalog);
+  const lines = [
+    `Route catalog: ${String(routeCatalog.routeCount ?? "unavailable")} routes · reconciled ${String(routeCatalog.reconciled ?? "unknown")}`,
+    `Loopback binding: ${String(record.loopbackBinding ?? "unknown")}`,
+    `CORS disabled: ${String(record.corsDisabled ?? "unknown")}`,
+    `Trust proxy disabled: ${String(record.trustProxyDisabled ?? "unknown")}`,
+    `Audit available: ${String(record.auditAvailable ?? "unknown")}`,
+  ];
+  const list = document.createElement("ul");
+  for (const line of lines) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.append(item);
+  }
+  infrastructure.append(list);
 }
 
 function renderServices(value: unknown): void {
@@ -447,6 +474,7 @@ async function refresh(): Promise<void> {
     exports,
     backupTargets,
     backupRuns,
+    securityPosture,
   ] = await Promise.all([
     readJson("/admin/overview"),
     readJson("/admin/services"),
@@ -460,6 +488,7 @@ async function refresh(): Promise<void> {
     readJson("/admin/event-history/exports").catch(() => ({ exports: [] })),
     readJson("/admin/backups/targets").catch(() => ({ targets: [] })),
     readJson("/admin/backups/runs?limit=20").catch(() => ({ runs: [] })),
+    readJson("/admin/security/status").catch(() => ({ status: "unavailable" })),
   ]);
   const serviceValues =
     typeof serviceList === "object" &&
@@ -493,6 +522,7 @@ async function refresh(): Promise<void> {
   renderAvailability(schedules);
   renderAudit({ history, integrity, retention, exports });
   renderBackups(backupTargets, backupRuns);
+  renderInfrastructure(securityPosture);
 }
 
 function createPreviewWindow(): Readonly<{
