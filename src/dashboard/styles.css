@@ -9,6 +9,28 @@ main {
   margin: auto;
   padding: 1rem;
 }
+.dashboard-navigation {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.75rem 0;
+  background: #10141c;
+}
+.dashboard-navigation a {
+  color: #dbeafe;
+  border: 1px solid #40516b;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  text-decoration: none;
+}
+.dashboard-navigation a.active,
+.dashboard-navigation a:hover {
+  background: #263b5a;
+  border-color: #75bfff;
+}
 section,
 article {
   background: #1b2330;
@@ -41,6 +63,9 @@ button {
 button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+section[hidden] {
+  display: none;
 }
 .mutation {
   margin: 0.5rem 0;

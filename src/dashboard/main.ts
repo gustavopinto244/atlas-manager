@@ -1,3 +1,7 @@
+import { initializeDashboardNavigation } from "./navigation.js";
+
+initializeDashboardNavigation(document);
+
 const root = document.querySelector<HTMLElement>("#app");
 const services = document.querySelector<HTMLElement>("#services");
 const availability = document.querySelector<HTMLElement>("#availability");
