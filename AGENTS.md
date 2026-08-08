@@ -151,12 +151,48 @@ Examples:
 - `docs: document service scheduling`
 - `chore: configure linting`
 
+### Mandatory Git flow
+
+Before starting a new change:
+
+1. Check the working tree.
+2. Switch to `main`.
+3. Run `git pull origin main`.
+4. Create a new branch for the requested work.
+5. Perform all work on that branch.
+
+Never begin a new implementation directly on an old branch without first
+checking the repository state and following this flow.
+
+### Authorized Git commands
+
+The agent may normally use `git pull`, `git switch`, `git checkout`, and
+`git add` when following the mandatory branch flow above. `git commit` and
+`git push` each require explicit user authorization for the requested action;
+do not commit or push merely because implementation and validation are complete.
+
+Merging into `main`, force-pushing, creating tags, and creating releases remain
+outside this flow and must not be done automatically.
+
+### SSH access to Atlas
+
+The agent may use the `atlas` SSH alias to inspect the physical Atlas host and
+perform Atlas Manager work that is part of the requested task:
+
+```bash
+ssh atlas
+ssh atlas '<command>'
+```
+
+Treat this as access to the real physical host. Apply special caution to
+operations with physical effects, including power, shutdown, wake alarms, RTC,
+or other potentially destructive actions.
+
 ## Working rules for Codex
 
 Before modifying files:
 
-1. Confirm that the current branch is a short-lived branch created for the
-   requested Issue. Never modify files directly on `main`.
+1. Follow the mandatory Git flow. Never modify files directly on `main`.
 2. If uncommitted Issue changes are found on `main`, move them to a dedicated
    branch before continuing and leave `main` unchanged.
 3. Inspect the relevant files.
@@ -178,8 +214,6 @@ During implementation:
 
 Codex must not:
 
-- commit;
-- push;
 - merge branches;
 - open or close Pull Requests;
 - change dependencies without permission;
