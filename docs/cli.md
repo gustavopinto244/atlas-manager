@@ -30,6 +30,10 @@ atlas services list
 atlas services status <service-id>
 atlas services schedule show <service-id>
 atlas services schedule preview <service-id>
+atlas backups list
+atlas backups runs
+atlas events
+atlas events --tail
 ```
 
 The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a

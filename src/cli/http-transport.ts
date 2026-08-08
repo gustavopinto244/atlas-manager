@@ -57,6 +57,29 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "backups list":
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        "/admin/backups/targets",
+        signal,
+      );
+    case "backups runs":
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        "/admin/backups/runs?limit=50",
+        signal,
+      );
+    case "events": {
+      const limit = args.includes("--tail") ? 100 : 20;
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        `/admin/event-history?limit=${limit}`,
+        signal,
+      );
+    }
     default:
       throw new AtlasCliError(
         "command_not_implemented",

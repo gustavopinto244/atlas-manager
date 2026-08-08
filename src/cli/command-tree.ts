@@ -59,7 +59,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["backups", "list"],
     summary: "List backup targets",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["backups", "status"],
@@ -69,7 +69,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["backups", "runs"],
     summary: "List backup runs",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["infra", "status"],
@@ -99,7 +99,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["events"],
     summary: "Read administrative event history",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["machine", "status"],
