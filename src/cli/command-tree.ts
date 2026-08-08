@@ -44,7 +44,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["services", "logs"],
     summary: "Read service logs",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "schedule", "show"],

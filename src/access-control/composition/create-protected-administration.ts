@@ -68,6 +68,9 @@ export interface ProtectedAdministrationCapabilities {
   readonly getRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
+  readonly getRegisteredServiceLogs: Readonly<{
+    execute(serviceId: string, tailLines?: number): Promise<unknown>;
+  }>;
   readonly startRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
@@ -300,6 +303,15 @@ export function createProtectedAdministration(
   const getRegisteredService = Object.freeze({
     execute: (serviceId: string) =>
       runner.run("read_registered_service", () => readService(serviceId)),
+  });
+  const getRegisteredServiceLogs = Object.freeze({
+    execute: (serviceId: string, tailLines?: number) =>
+      runner.run("read_registered_service_logs", () =>
+        requireServices().getRegisteredServiceLogs.execute(
+          serviceId,
+          tailLines,
+        ),
+      ),
   });
   const runServiceMutation = (
     operation:
@@ -805,6 +817,7 @@ export function createProtectedAdministration(
     getAdministrativeSecurityPosture,
     getRegisteredServices,
     getRegisteredService,
+    getRegisteredServiceLogs,
     startRegisteredService,
     stopRegisteredService,
     restartRegisteredService,

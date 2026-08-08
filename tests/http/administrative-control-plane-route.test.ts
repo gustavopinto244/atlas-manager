@@ -63,6 +63,15 @@ function serviceDependencies(overrides: Record<string, unknown> = {}) {
         effectiveAvailability: "available",
       })),
     },
+    getRegisteredServiceLogs: {
+      execute: vi.fn(async () => ({
+        serviceId: service.id,
+        collectedAt: "2026-01-01T00:00:00.000Z",
+        stdoutLines: ["ready"],
+        stderrLines: [],
+        truncated: false,
+      })),
+    },
     startRegisteredService: {
       execute: vi.fn(async () => ({
         targetServiceId: service.id,
@@ -196,6 +205,25 @@ describe("administrative control-plane routes", () => {
       dependencies.values.startRegisteredService.execute,
     ).toHaveBeenCalledWith("atlas-api");
     expect(JSON.stringify(valid.body)).not.toContain("confirm_");
+  });
+
+  it("reads registered service logs through the protected service surface", async () => {
+    const dependencies = serviceDependencies();
+    const response = await request(
+      createApp({ ...base(), administrativeServices: dependencies }),
+    ).get("/admin/services/atlas-api/logs");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      serviceId: "atlas-api",
+      collectedAt: "2026-01-01T00:00:00.000Z",
+      stdoutLines: ["ready"],
+      stderrLines: [],
+      truncated: false,
+    });
+    expect(
+      dependencies.values.getRegisteredServiceLogs.execute,
+    ).toHaveBeenCalledWith("atlas-api");
   });
 
   it("supports availability reads and strict update/removal bodies", async () => {

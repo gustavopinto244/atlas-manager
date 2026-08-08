@@ -47,6 +47,15 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "services logs": {
+      const serviceId = requireArgument(args, "service id");
+      return readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        `/admin/services/${encodeURIComponent(serviceId)}/logs`,
+        signal,
+      );
+    }
     case "services schedule show":
     case "services schedule preview": {
       const serviceId = requireArgument(args, "service id");

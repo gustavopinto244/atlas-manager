@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
-  "routeCount": 40,
-  "catalogSha256": "e805c295828781d10ec840a8dd250f4434f88a00dd6c76d4c7d775cba653d34f",
+  "routeCount": 41,
+  "catalogSha256": "689d82b2dd56ef8f09f20d3a7739faf03fe63baa1f80ae09cc7986e049b67850",
   "routeIds": [
     "dashboard.read",
     "dashboard.asset.read",
@@ -15,6 +15,7 @@
     "power.shutdown.execute",
     "services.list",
     "services.read",
+    "services.logs.read",
     "services.start",
     "services.stop",
     "services.restart",

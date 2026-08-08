@@ -28,6 +28,7 @@ atlas status
 atlas doctor
 atlas services list
 atlas services status <service-id>
+atlas services logs <service-id>
 atlas services schedule show <service-id>
 atlas services schedule preview <service-id>
 atlas backups list
