@@ -19,6 +19,22 @@ The command tree is intentionally visible before each command is implemented.
 Unimplemented commands return `command_not_implemented` and a non-zero exit
 code; they never claim success.
 
+## Available read-only commands
+
+```text
+atlas health
+atlas health --json
+atlas status
+atlas services list
+atlas services status <service-id>
+```
+
+The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a
+different HTTP endpoint. Public health responses are read directly. Protected
+administrative responses require an already authenticated transport; the
+default CLI transport does not forge Cloudflare Access assertions and reports
+`authentication_required` in a partial `atlas status` result.
+
 ## Security boundary
 
 The CLI must not forge Cloudflare Access assertions or bypass administrative

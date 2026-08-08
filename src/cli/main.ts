@@ -5,6 +5,7 @@ import { commandPath, findCommand } from "./command-tree.js";
 import { AtlasCliError, exitCodeForCliError } from "./errors.js";
 import type { AtlasCliTransport, CliResult } from "./contracts.js";
 import { helpFor } from "./help.js";
+import { createAtlasHttpTransport } from "./http-transport.js";
 import { parseCliArguments } from "./parser.js";
 
 export async function runAtlasCli(
@@ -24,17 +25,18 @@ export async function runAtlasCli(
     if (command === undefined) {
       throw new AtlasCliError("unknown_command", "Unknown command");
     }
-    if (!command.implemented || transport === undefined) {
+    if (!command.implemented && transport === undefined) {
       throw new AtlasCliError(
         "command_not_implemented",
         `Command not implemented yet: ${commandPath(parsed.command)}`,
       );
     }
+    const effectiveTransport = transport ?? createAtlasHttpTransport();
     const controller = new AbortController();
     const onInterrupt = (): void => controller.abort();
     process.once("SIGINT", onInterrupt);
     try {
-      const data = await transport.execute(
+      const data = await effectiveTransport.execute(
         commandPath(parsed.command),
         parsed.commandArguments,
         controller.signal,

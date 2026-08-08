@@ -5,11 +5,11 @@ export type AtlasCommand = Readonly<{
 }>;
 
 export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
-  { path: ["status"], summary: "Show the operator status", implemented: false },
+  { path: ["status"], summary: "Show the operator status", implemented: true },
   {
     path: ["health"],
     summary: "Read Atlas health endpoints",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["doctor"],
@@ -19,12 +19,12 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["services", "list"],
     summary: "List registered services",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "status"],
     summary: "Read a service status",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "start"],
