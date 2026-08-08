@@ -36,6 +36,7 @@ atlas backups status
 atlas backups runs
 atlas events
 atlas events --tail
+atlas machine status
 atlas machine plan
 ```
 

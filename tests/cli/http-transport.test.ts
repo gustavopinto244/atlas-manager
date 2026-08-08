@@ -93,4 +93,25 @@ describe("Atlas HTTP CLI transport", () => {
       transport.execute("backups status", [], new AbortController().signal),
     ).resolves.toEqual({ schedulerState: "available" });
   });
+
+  it("projects the safe machine status from the protected overview", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      response(200, {
+        powerSafety: {
+          backend: "mock",
+          effects: "disabled",
+          machineScheduler: "disabled",
+        },
+      }),
+    );
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute("machine status", [], new AbortController().signal),
+    ).resolves.toEqual({
+      backend: "mock",
+      effects: "disabled",
+      machineScheduler: "disabled",
+    });
+  });
 });

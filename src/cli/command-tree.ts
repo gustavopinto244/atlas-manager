@@ -104,7 +104,7 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["machine", "status"],
     summary: "Show machine power policy status",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["machine", "plan"],
