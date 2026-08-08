@@ -1,51 +1,50 @@
 # Atlas Manager
 
-## O que é
+## What it is
 
-Atlas Manager é uma aplicação auto-hospedada para monitorar, administrar e
-automatizar o servidor de homelab Atlas. Ela reúne informações de saúde do
-host e operações administrativas controladas para os serviços cadastrados.
+Atlas Manager is a self-hosted application for monitoring, managing, and
+automating the Atlas homelab server. It brings together host health information
+and controlled administrative operations for registered services.
 
-## Como funciona
+## How it works
 
-O Atlas Manager é executado no host Atlas como o serviço de sistema
-`atlas-manager.service`. A aplicação expõe uma interface HTTP/API e recebe sua
-configuração de um arquivo próprio. O processo principal não executa como root;
-quando uma função privilegiada for aplicável, ela permanece separada do
-processo principal por uma fronteira operacional específica.
+Atlas Manager runs on the Atlas host as the `atlas-manager.service` system
+service. It exposes an HTTP/API interface and has its own configuration file.
+The main process does not run as root; where applicable, privileged functions
+remain separated from the main process through a dedicated operational boundary.
 
-## Como usar
+## How to use it
 
-Os comandos abaixo são para a instalação no host Atlas. Execute-os no próprio
-host ou em uma sessão SSH autorizada.
+The commands below operate the installed application on the Atlas host. Run
+them directly on the host or through an authorized SSH session.
 
-### Status do Atlas Manager
+### Atlas Manager status
 
 ```bash
 systemctl status atlas-manager.service --no-pager
 ```
 
-Para verificar se o serviço está habilitado para iniciar com o sistema e se
-está ativo neste momento:
+To check whether the service starts with the system and whether it is currently
+active:
 
 ```bash
 systemctl is-enabled atlas-manager.service
 systemctl is-active atlas-manager.service
 ```
 
-### Iniciar
+### Start
 
 ```bash
 sudo systemctl start atlas-manager.service
 ```
 
-### Parar
+### Stop
 
 ```bash
 sudo systemctl stop atlas-manager.service
 ```
 
-### Reiniciar
+### Restart
 
 ```bash
 sudo systemctl restart atlas-manager.service
@@ -57,62 +56,63 @@ sudo systemctl restart atlas-manager.service
 journalctl -u atlas-manager.service
 ```
 
-Para acompanhar novos registros:
+To follow new log entries:
 
 ```bash
 journalctl -fu atlas-manager.service
 ```
 
-### Health check
+### Health checks
 
-O serviço HTTP disponibiliza dois checks locais:
+The HTTP service provides two local checks:
 
 ```bash
 curl --fail http://127.0.0.1:3000/health/live
 curl --fail http://127.0.0.1:3000/health/server
 ```
 
-`/health/live` confirma que o processo HTTP está respondendo. `/health/server`
-retorna as métricas de saúde do host coletadas pela aplicação.
+`/health/live` confirms that the HTTP process is responding. `/health/server`
+returns host health metrics collected by the application.
 
-### Interface / acesso HTTP
+### HTTP interface and access
 
-O listener padrão usa `127.0.0.1:3000`. No Atlas, os health checks podem ser
-acessados localmente nos endereços acima. As rotas administrativas e o painel,
-quando habilitados na configuração da instalação, ficam sob `/admin`.
+The default listener uses `127.0.0.1:3000`. On Atlas, the health checks are
+available locally at the addresses above. Administrative routes and the
+dashboard, when enabled in the installed configuration, are available under
+`/admin`.
 
-No Vega, o serviço pode ser acessado em
-[`https://gustavopinto.dev.br`](https://gustavopinto.dev.br). O acesso passa
-pelo Cloudflare Tunnel e pelo Nginx do Atlas, que encaminha as requisições para
-o listener local do Atlas Manager.
+From Vega, the service is available at
+[`https://gustavopinto.dev.br`](https://gustavopinto.dev.br). Access goes
+through Cloudflare Tunnel and the Atlas Nginx reverse proxy, which forwards
+requests to the local Atlas Manager listener.
 
-## Aplicações e serviços no host Atlas
+## Applications and services on Atlas
 
-A inspeção operacional confirmou os componentes abaixo. PM2 não está instalado
-no Atlas neste momento.
+Operational inspection confirmed the components below. PM2 is not installed on
+Atlas at this time.
 
-| Aplicação/serviço | Gerenciado por                    | Função                                      |
-| ----------------- | --------------------------------- | ------------------------------------------- |
-| Atlas Manager     | systemd (`atlas-manager.service`) | Aplicação principal e API HTTP              |
-| Nginx             | systemd (`nginx.service`)         | Proxy reverso local para o Atlas Manager    |
-| Cloudflare Tunnel | systemd (`cloudflared.service`)   | Acesso do Vega ao endpoint público do Atlas |
+| Application/service | Managed by                        | Purpose                                  |
+| ------------------- | --------------------------------- | ---------------------------------------- |
+| Atlas Manager       | systemd (`atlas-manager.service`) | Main application and HTTP API            |
+| Nginx               | systemd (`nginx.service`)         | Local reverse proxy for Atlas Manager    |
+| Cloudflare Tunnel   | systemd (`cloudflared.service`)   | Vega access to the Atlas public endpoint |
 
-## Configuração
+## Configuration
 
-O unit do systemd lê a configuração em:
+The systemd unit reads its configuration from:
 
 ```text
 /etc/atlas-manager/atlas-manager.env
 ```
 
-Os valores mais comuns são `HOST`, `PORT` e `LOG_LEVEL`. A instalação padrão
-usa `HOST=127.0.0.1` e `PORT=3000`. Revise o arquivo de configuração antes de
-alterar recursos administrativos ou serviços cadastrados.
+Common settings are `HOST`, `PORT`, and `LOG_LEVEL`. The standard installation
+uses `HOST=127.0.0.1` and `PORT=3000`. Review the configuration file before
+changing administrative features or registered services.
 
-## Documentação adicional
+## Additional documentation
 
-- [Visão do produto](docs/product-vision.md)
-- [Requisitos](docs/requirements.md)
-- [Arquitetura](docs/architecture.md)
-- [Decisões de arquitetura](docs/adr/)
-- [Ciclo de vida do serviço](docs/operations/atlas-manager-service-lifecycle.md)
+- [Product vision](docs/product-vision.md)
+- [Requirements](docs/requirements.md)
+- [Architecture](docs/architecture.md)
+- [Architecture decisions](docs/adr/)
+- [Service lifecycle](docs/operations/atlas-manager-service-lifecycle.md)

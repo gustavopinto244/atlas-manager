@@ -166,8 +166,10 @@ checking the repository state and following this flow.
 
 ### Authorized Git commands
 
-The agent may normally use `git pull`, `git switch`, `git checkout`, `git add`,
-`git commit`, and `git push` when following the mandatory branch flow above.
+The agent may normally use `git pull`, `git switch`, `git checkout`, and
+`git add` when following the mandatory branch flow above. `git commit` and
+`git push` each require explicit user authorization for the requested action;
+do not commit or push merely because implementation and validation are complete.
 
 Merging into `main`, force-pushing, creating tags, and creating releases remain
 outside this flow and must not be done automatically.
