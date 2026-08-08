@@ -12,6 +12,11 @@ and Events are backed by current API payloads. Machine, Infrastructure and
 Settings currently provide explicit placeholders until their read APIs are
 delivered.
 
+Overview presents cards for registered services, power safety, machine
+expectation, backup activity and observation time. These cards are projections
+of the protected overview response; the dashboard does not derive operational
+state independently.
+
 ## Services and schedules
 
 Services render their registered adapter, current status, availability and

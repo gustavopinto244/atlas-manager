@@ -31,6 +31,68 @@ function addText(parent: HTMLElement, value: unknown): void {
   );
 }
 
+function renderOverview(value: unknown): void {
+  if (root === null) return;
+  root.replaceChildren();
+  const record =
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+  const grid = document.createElement("div");
+  grid.className = "overview-grid";
+  const services = readRecord(record.services);
+  const powerSafety = readRecord(record.powerSafety);
+  const machinePlan = readRecord(record.machinePlan);
+  const backups = readRecord(record.backups);
+  appendOverviewCard(
+    grid,
+    "Services",
+    `${String(services.registered ?? 0)} registered`,
+  );
+  appendOverviewCard(
+    grid,
+    "Power safety",
+    `${String(powerSafety.backend ?? "unavailable")} · effects ${String(powerSafety.effects ?? "unavailable")}`,
+  );
+  appendOverviewCard(
+    grid,
+    "Machine",
+    `expectation ${String(machinePlan.expectation ?? "unavailable")}`,
+  );
+  appendOverviewCard(
+    grid,
+    "Backups",
+    `${String(backups.activeRuns ?? 0)} active · ${String(backups.interruptedRuns ?? 0)} interrupted`,
+  );
+  appendOverviewCard(
+    grid,
+    "Observed at",
+    String(record.observedAt ?? "unavailable"),
+  );
+  root.append(grid);
+}
+
+function appendOverviewCard(
+  parent: HTMLElement,
+  headingText: string,
+  valueText: string,
+): void {
+  const article = document.createElement("article");
+  article.className = "overview-card";
+  const heading = document.createElement("h3");
+  heading.textContent = headingText;
+  const value = document.createElement("p");
+  value.textContent = valueText;
+  article.append(heading, value);
+  parent.append(article);
+}
+
+function readRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function renderServices(value: unknown): void {
   if (services === null) return;
   services.replaceChildren();
@@ -425,7 +487,7 @@ async function refresh(): Promise<void> {
     ...(typeof policy === "object" && policy !== null ? policy : {}),
     preview: previews[index],
   }));
-  if (root !== null) root.textContent = JSON.stringify(overview, null, 2);
+  renderOverview(overview);
   renderMachinePlan(overview);
   renderServices(serviceList);
   renderAvailability(schedules);
