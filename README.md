@@ -81,16 +81,21 @@ O listener padrão usa `127.0.0.1:3000`. No Atlas, os health checks podem ser
 acessados localmente nos endereços acima. As rotas administrativas e o painel,
 quando habilitados na configuração da instalação, ficam sob `/admin`.
 
+No Vega, o serviço pode ser acessado em
+[`https://gustavopinto.dev.br`](https://gustavopinto.dev.br). O acesso passa
+pelo Cloudflare Tunnel e pelo Nginx do Atlas, que encaminha as requisições para
+o listener local do Atlas Manager.
+
 ## Aplicações e serviços no host Atlas
 
-A instalação do Atlas Manager é composta pelo serviço abaixo. O inventário de
-outros processos do host deve ser verificado operacionalmente antes de ser
-documentado, pois este repositório não configura PM2, Nginx ou aplicações de
-terceiros como parte do serviço.
+A inspeção operacional confirmou os componentes abaixo. PM2 não está instalado
+no Atlas neste momento.
 
-| Aplicação/serviço | Gerenciado por                    | Função                         |
-| ----------------- | --------------------------------- | ------------------------------ |
-| Atlas Manager     | systemd (`atlas-manager.service`) | Aplicação principal e API HTTP |
+| Aplicação/serviço | Gerenciado por                    | Função                                      |
+| ----------------- | --------------------------------- | ------------------------------------------- |
+| Atlas Manager     | systemd (`atlas-manager.service`) | Aplicação principal e API HTTP              |
+| Nginx             | systemd (`nginx.service`)         | Proxy reverso local para o Atlas Manager    |
+| Cloudflare Tunnel | systemd (`cloudflared.service`)   | Acesso do Vega ao endpoint público do Atlas |
 
 ## Configuração
 
