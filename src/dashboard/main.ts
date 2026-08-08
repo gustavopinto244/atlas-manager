@@ -4,6 +4,7 @@ import {
   renderMachineSchedule as renderMachineScheduleView,
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
+import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
 
 initializeDashboardNavigation(document);
 
@@ -189,6 +190,8 @@ function renderAvailability(value: unknown): void {
     addText(heading, serviceId ?? "Unknown service");
     article.append(heading);
     renderScheduleTimeline(document, article, entry);
+    if (typeof serviceId === "string")
+      renderWeeklyScheduleEditor(document, article, serviceId, entry, refresh);
     availability.append(article);
   }
 }

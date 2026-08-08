@@ -25,6 +25,12 @@ does not validate or persist a new base policy in the browser. The Logs action
 performs a protected read and renders the returned payload as text without
 interpreting it as markup.
 
+Each service timeline also includes the reusable weekly schedule editor. It
+supports mode, timezone and weekday windows, performs basic client-side
+validation, and submits the authoritative policy to the protected API. The
+backend remains responsible for complete validation, authorization, mutation
+admission and audit.
+
 ## State and errors
 
 Each API read uses same-origin credentials and rejects redirects. A failed
