@@ -4,6 +4,9 @@
   "description": "Self-hosted management and automation platform for the Atlas homelab server.",
   "private": true,
   "type": "module",
+  "bin": {
+    "atlas": "dist/cli/main.js"
+  },
   "engines": {
     "node": ">=24 <25"
   },
