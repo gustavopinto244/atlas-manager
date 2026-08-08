@@ -1,4 +1,5 @@
 import { isCanonicalTimestamp } from "../../power-management/domain/canonical-timestamp.js";
+import { isCanonicalAdministrativePrincipalId } from "../../access-control/domain/administrative-principal.js";
 
 export const ADMINISTRATIVE_EVENT_SOURCES = Object.freeze([
   "administrative",
@@ -307,8 +308,9 @@ function createSource(input: unknown): AdministrativeEventSource {
   const actorId = record["actorId"];
   const verifiedAdministrator =
     typeof actorId === "string" &&
-    /^administrator:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
-      actorId,
+    actorId.startsWith("administrator:") &&
+    isCanonicalAdministrativePrincipalId(
+      actorId.slice("administrator:".length),
     );
   if (
     (kind !== "administrative" && kind !== "automated" && kind !== "system") ||
@@ -956,7 +958,7 @@ function ownKeys(record: Record<string, unknown>): string[] {
 function isAttemptId(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
       value,
     )
   );

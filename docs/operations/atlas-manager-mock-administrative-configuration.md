@@ -1,9 +1,25 @@
 # Mock-administrative runtime configuration
 
-The bundle contains the example sibling input
-`atlas-manager.mock-admin.input.example.json`. An operator may provide the
-real sibling file `atlas-manager.mock-admin.input.json`; it is never bundled,
-copied to source control, or accepted from a caller-selected path.
+The immutable bundle contains the example input
+`atlas-manager.mock-admin.input.example.json`. The operator must install the
+real input at the fixed root-managed path
+`/etc/atlas-manager/administrative-runtime.input.json`. The real input is
+never placed inside the bundle, and the tool accepts no caller-selected path.
+
+The file must be a regular root-owned file with mode `0600`. Its
+`cloudflareTeamName` is the Cloudflare team domain, `cloudflareAudience` is the
+Access application AUD, and each `principalId` must match the JWT `sub`
+exactly. Canonical lowercase UUID v4 and v5 identifiers are supported.
+
+The administrative origin is `https://admin.gustavopinto.dev.br` without an
+`/admin` path. The public flow is:
+
+```text
+Internet → Cloudflare Access → Cloudflare Tunnel → Nginx loopback → Atlas Manager 127.0.0.1:3000
+```
+
+The dedicated hostname must have its own Cloudflare Access application and
+policy.
 
 The Go tool `atlas-manager-administrative-runtime-configuration` supports only
 `inspect`, `validate-input`, `install-disabled`, `verify-installed`, and

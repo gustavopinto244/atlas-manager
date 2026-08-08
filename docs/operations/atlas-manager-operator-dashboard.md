@@ -1,7 +1,9 @@
 # Atlas Manager operator dashboard
 
-The dashboard is served at `/admin` and `/admin/` only when
-`ADMINISTRATIVE_DASHBOARD_ENABLED=true`. It is protected by the same
+The canonical dashboard is served at
+`https://admin.gustavopinto.dev.br/` only when
+`ADMINISTRATIVE_DASHBOARD_ENABLED=true`. Its APIs remain under `/admin/*` and
+assets under `/assets/*`. It is protected by the same
 Cloudflare Access and application authorization boundary as the APIs. Static
 files are served from a closed inventory; unknown assets and traversal are
 rejected.

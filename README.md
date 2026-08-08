@@ -77,14 +77,15 @@ returns host health metrics collected by the application.
 ### HTTP interface and access
 
 The default listener uses `127.0.0.1:3000`. On Atlas, the health checks are
-available locally at the addresses above. Administrative routes and the
-dashboard, when enabled in the installed configuration, are available under
-`/admin`.
+available locally at the addresses above. Administrative APIs remain under
+`/admin/*`. The canonical dashboard, when enabled in the installed
+configuration, is `https://admin.gustavopinto.dev.br/`; its assets are under
+`/assets/*`.
 
-From Vega, the service is available at
-[`https://gustavopinto.dev.br`](https://gustavopinto.dev.br). Access goes
-through Cloudflare Tunnel and the Atlas Nginx reverse proxy, which forwards
-requests to the local Atlas Manager listener.
+From the Internet, the administrative flow is Cloudflare Access → Cloudflare
+Tunnel → Nginx loopback → Atlas Manager `127.0.0.1:3000`. The dedicated
+administrative hostname must use its own Cloudflare Access application and
+policy. The primary domain may continue serving non-administrative endpoints.
 
 ## Applications and services on Atlas
 

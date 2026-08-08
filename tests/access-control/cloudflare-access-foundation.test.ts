@@ -17,7 +17,7 @@ import { createCloudflareAccessAssertionReaderFromHeaders } from "../../src/http
 import { createCloudflareAccessAdministrativeAuthentication } from "../../src/access-control/composition/create-cloudflare-access-administrative-authentication.js";
 import { parseEnvironment } from "../../src/config/environment.js";
 
-const PRINCIPAL_ID = "00000000-0000-4000-8000-000000000001";
+const PRINCIPAL_ID = "caf45cc3-4312-5d41-8603-cc0102346a1f";
 const NOW = new Date("2026-07-31T12:00:00.000Z");
 
 describe("Cloudflare Access configuration", () => {

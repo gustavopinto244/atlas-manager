@@ -50,7 +50,7 @@ type Paths struct {
 func ProductionPaths(bundleRoot string) Paths {
 	deployment := installer.ProductionPaths()
 	return Paths{
-		BundleRoot: bundleRoot, Input: filepath.Join(bundleRoot, InputName),
+		BundleRoot: bundleRoot, Input: filepath.Join("/etc/atlas-manager", InputName),
 		Environment: "/etc/atlas-manager/atlas-manager.env", ConfigDir: "/etc/atlas-manager",
 		StateDirectory:      "/var/lib/atlas-manager-administrative-runtime-configuration",
 		StateFile:           "/var/lib/atlas-manager-administrative-runtime-configuration/state.json",
@@ -555,6 +555,9 @@ func sourceCommit(root string) string {
 	return value.SourceCommit
 }
 func (configuration Configuration) readInput() (Input, error) {
+	if err := validateMetadata(configuration.paths.Input, 0o600, 0, configuration.deps.ApplyOwnership); err != nil {
+		return Input{}, fmt.Errorf("administrative_input_invalid")
+	}
 	data, err := os.ReadFile(configuration.paths.Input)
 	if err != nil {
 		return Input{}, fmt.Errorf("administrative_input_invalid")

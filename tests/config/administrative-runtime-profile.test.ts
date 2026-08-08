@@ -8,10 +8,10 @@ const input = JSON.stringify({
   schemaVersion: 1,
   cloudflareTeamName: "example-team",
   cloudflareAudience: "example-audience",
-  publicOrigin: "https://atlas.example.com",
+  publicOrigin: "https://admin.gustavopinto.dev.br",
   roleAssignments: [
     {
-      principalId: "00000000-0000-4000-8000-000000000001",
+      principalId: "caf45cc3-4312-5d41-8603-cc0102346a1f",
       roles: ["administrator"],
     },
   ],

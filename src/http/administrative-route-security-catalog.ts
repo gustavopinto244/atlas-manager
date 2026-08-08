@@ -170,15 +170,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
     read(
       "dashboard.read",
       "GET",
-      "/admin",
-      "ADMINISTRATIVE_DASHBOARD_ENABLED",
-      "read_administrative_dashboard",
-      "html",
-    ),
-    read(
-      "dashboard.read.root",
-      "GET",
-      "/admin/",
+      "/",
       "ADMINISTRATIVE_DASHBOARD_ENABLED",
       "read_administrative_dashboard",
       "html",
@@ -186,7 +178,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
     read(
       "dashboard.asset.read",
       "GET",
-      "/admin/assets/:asset",
+      "/assets/:asset",
       "ADMINISTRATIVE_DASHBOARD_ENABLED",
       "read_administrative_dashboard",
       "asset",
@@ -621,7 +613,13 @@ export function reconcileAdministrativeRouteRegistrations(
     const route = (layer as { route?: unknown }).route;
     if (typeof route !== "object" || route === null) continue;
     const path = (route as { path?: unknown }).path;
-    if (typeof path !== "string" || !path.startsWith("/admin")) continue;
+    if (
+      typeof path !== "string" ||
+      (!path.startsWith("/admin") &&
+        path !== "/" &&
+        !path.startsWith("/assets/"))
+    )
+      continue;
     if (routeDescriptors.get(route) === undefined)
       throw new Error("administrative_route_policy_invalid");
   }
