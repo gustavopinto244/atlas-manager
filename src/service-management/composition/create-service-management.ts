@@ -14,6 +14,7 @@ import {
 import { PlanRegisteredServiceAvailabilityReconciliation } from "../application/plan-registered-service-availability-reconciliation.js";
 import type { Clock } from "../application/ports/clock.js";
 import type { ServiceAvailabilityOverrideStore } from "../application/ports/service-availability-override-store.js";
+import type { ServiceAvailabilityPolicyStore } from "../application/ports/service-availability-policy-store.js";
 import type { ServiceAvailabilityReconciliationOccurrenceClaimStore } from "../application/ports/service-availability-reconciliation-occurrence-claim-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerCursorStore } from "../application/ports/service-availability-reconciliation-scheduler-cursor-store.js";
 import type { ServiceAvailabilityReconciliationSchedulerTimer } from "../application/ports/service-availability-reconciliation-scheduler-timer.js";
@@ -38,6 +39,8 @@ import type { DockerComposeProjectLogExecutor } from "../infrastructure/docker-c
 import type { DockerContainerLogExecutor } from "../infrastructure/docker-compose-executors.js";
 import { createRegisteredServiceCatalogFromEnvironment } from "../infrastructure/environment-registered-service-catalog.js";
 import { InMemoryServiceAvailabilityOverrideStore } from "../infrastructure/in-memory-service-availability-override-store.js";
+import { InMemoryServiceAvailabilityPolicyStore } from "../infrastructure/in-memory-service-availability-policy-store.js";
+import { PolicyAwareRegisteredServiceCatalog } from "../infrastructure/policy-aware-registered-service-catalog.js";
 import { InMemoryServiceAvailabilityReconciliationOccurrenceClaimStore } from "../infrastructure/in-memory-service-availability-reconciliation-occurrence-claim-store.js";
 import { InMemoryServiceAvailabilityReconciliationSchedulerCursorStore } from "../infrastructure/in-memory-service-availability-reconciliation-scheduler-cursor-store.js";
 import { MockServiceController } from "../infrastructure/mock-service-controller.js";
@@ -85,6 +88,7 @@ import type { ServiceReadinessReader } from "../application/ports/service-readin
 
 import type { ServiceController } from "../application/ports/service-controller.js";
 import { GetRegisteredServiceAvailabilityForInterval } from "../application/get-registered-service-availability-for-interval.js";
+import { UpdateRegisteredServiceAvailabilityPolicy } from "../application/update-registered-service-availability-policy.js";
 import {
   OrchestrateRegisteredServicesStop,
   type OrchestrateRegisteredServicesStopPort,
@@ -97,6 +101,7 @@ export interface ServiceManagementCapabilities {
   readonly orchestrateRegisteredServiceControl: OrchestrateRegisteredServiceControlPort;
   readonly getRegisteredServiceLogs: GetRegisteredServiceLogs;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
+  readonly updateRegisteredServiceAvailabilityPolicy: UpdateRegisteredServiceAvailabilityPolicy;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly getRegisteredServiceAvailabilityForInterval: GetRegisteredServiceAvailabilityForInterval;
@@ -115,6 +120,7 @@ export interface ServiceManagementCapabilities {
 export interface ServiceManagementCompositionOverrides {
   readonly clock?: Clock;
   readonly serviceAvailabilityOverrideStore?: ServiceAvailabilityOverrideStore;
+  readonly serviceAvailabilityPolicyStore?: ServiceAvailabilityPolicyStore;
   readonly serviceAvailabilityReconciliationOccurrenceClaimStore?: ServiceAvailabilityReconciliationOccurrenceClaimStore;
   readonly serviceAvailabilityReconciliationSchedulerCursorStore?: ServiceAvailabilityReconciliationSchedulerCursorStore;
   readonly serviceAvailabilityReconciliationSchedulerTimer?: ServiceAvailabilityReconciliationSchedulerTimer;
@@ -139,7 +145,15 @@ export function createServiceManagement(
   environment: Readonly<Record<string, string | undefined>>,
   overrides?: ServiceManagementCompositionOverrides,
 ): ServiceManagementCapabilities {
-  const catalog = createRegisteredServiceCatalogFromEnvironment(environment);
+  const sourceCatalog =
+    createRegisteredServiceCatalogFromEnvironment(environment);
+  const policyStore =
+    overrides?.serviceAvailabilityPolicyStore ??
+    new InMemoryServiceAvailabilityPolicyStore();
+  const catalog = new PolicyAwareRegisteredServiceCatalog(
+    sourceCatalog,
+    policyStore,
+  );
   const clock = overrides?.clock ?? createSystemClock();
   const overrideStore =
     overrides?.serviceAvailabilityOverrideStore ??
@@ -371,6 +385,8 @@ export function createServiceManagement(
         overrideStore,
         clock,
       ),
+    updateRegisteredServiceAvailabilityPolicy:
+      new UpdateRegisteredServiceAvailabilityPolicy(catalog, policyStore),
     cancelRegisteredServiceAvailabilityOverride:
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
     getRegisteredServiceEffectiveAvailability,
