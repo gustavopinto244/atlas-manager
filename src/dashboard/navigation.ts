@@ -13,12 +13,12 @@ export type DashboardPage = (typeof DASHBOARD_PAGES)[number][0];
 
 const SECTION_BY_PAGE: Readonly<Record<DashboardPage, readonly string[]>> =
   Object.freeze({
-    overview: ["app"],
-    services: ["services"],
-    schedules: ["availability"],
+    overview: ["overview-heading"],
+    services: ["services-heading"],
+    schedules: ["availability-heading"],
     machine: ["safety-heading"],
-    backups: ["backups"],
-    events: ["audit", "event-history"],
+    backups: ["backup-heading"],
+    events: ["audit-heading"],
     infrastructure: ["infrastructure-placeholder"],
     settings: ["settings-placeholder"],
   });
@@ -64,7 +64,7 @@ export function showDashboardPage(
   for (const section of document.querySelectorAll<HTMLElement>(
     "main > section",
   )) {
-    const id = section.querySelector("[id]")?.id ?? section.id;
+    const id = section.getAttribute("aria-labelledby") ?? section.id;
     section.hidden = !visible.has(id);
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>(
