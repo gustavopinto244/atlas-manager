@@ -401,8 +401,12 @@ describe("administrative control-plane routes", () => {
       "default-src 'none'",
     );
     expect(dashboard.text).toContain("Power safety");
+    expect(dashboard.text).toContain("power-controls");
     const asset = await request(app).get("/assets/styles.css");
     expect(asset.status).toBe(200);
+    const appAsset = await request(app).get("/assets/app.js");
+    expect(appAsset.text).toContain("Execute prepared mock shutdown");
+    expect(appAsset.text).toContain("/admin/power/shutdown/executions");
   });
 
   it("reports enabled mock power controls from the administrative profile", async () => {

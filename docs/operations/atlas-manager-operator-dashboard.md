@@ -22,8 +22,9 @@ Power safety remains mock-first. The dashboard displays the configured backend,
 effects, scheduler, and helper state. When the authenticated administrative
 profile enables them, it exposes mock wake-alarm scheduling/cancellation and
 shutdown preparation controls through the existing protected routes. The
-dashboard never enables physical effects or the machine-power scheduler, and
-shutdown execution remains a separately gated operation.
+dashboard never enables physical effects or the machine-power scheduler.
+Shutdown execution is offered only after a preparation response, with the
+prepared occurrence displayed and a second explicit confirmation.
 
 Physical deployment, Cloudflare Tunnel/DNS configuration, helper installation,
 and real power-effect certification remain separately approved gates.

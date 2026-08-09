@@ -18,6 +18,14 @@ const infrastructure = document.querySelector<HTMLElement>(
 );
 const powerControls = document.querySelector<HTMLElement>("#power-controls");
 
+let preparedShutdownOccurrence:
+  | Readonly<{
+      operation: "shutdown";
+      scheduledFor: string;
+      wakeScheduledFor: string;
+    }>
+  | undefined;
+
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -108,7 +116,11 @@ function renderPowerControls(
   }
 
   if (wakeEnabled) renderWakeAlarmControls(powerControls);
-  if (shutdownEnabled) renderShutdownPreparationControl(powerControls);
+  if (shutdownEnabled) {
+    renderShutdownPreparationControl(powerControls);
+    if (preparedShutdownOccurrence !== undefined)
+      renderShutdownExecutionControl(powerControls, preparedShutdownOccurrence);
+  }
 }
 
 function renderWakeAlarmControls(parent: HTMLElement): void {
@@ -167,9 +179,73 @@ function renderShutdownPreparationControl(parent: HTMLElement): void {
         confirmation: "confirm_shutdown_preparation",
       },
       button,
+      (value) => {
+        const occurrence = readShutdownOccurrence(value);
+        if (occurrence !== undefined) preparedShutdownOccurrence = occurrence;
+      },
     );
   });
   parent.append(form);
+}
+
+function renderShutdownExecutionControl(
+  parent: HTMLElement,
+  occurrence: Readonly<{
+    operation: "shutdown";
+    scheduledFor: string;
+    wakeScheduledFor: string;
+  }>,
+): void {
+  const section = document.createElement("div");
+  const summary = document.createElement("p");
+  summary.textContent = `Prepared mock shutdown: ${occurrence.scheduledFor} → wake ${occurrence.wakeScheduledFor}`;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Execute prepared mock shutdown";
+  button.addEventListener("click", () => {
+    if (
+      !window.confirm(
+        `Execute the prepared mock shutdown at ${occurrence.scheduledFor}?`,
+      )
+    )
+      return;
+    void powerRequest(
+      "/admin/power/shutdown/executions",
+      "POST",
+      {
+        ...occurrence,
+        confirmation: "confirm_shutdown_execution",
+      },
+      button,
+      () => {
+        preparedShutdownOccurrence = undefined;
+      },
+    );
+  });
+  section.append(summary, button);
+  parent.append(section);
+}
+
+function readShutdownOccurrence(value: unknown):
+  | Readonly<{
+      operation: "shutdown";
+      scheduledFor: string;
+      wakeScheduledFor: string;
+    }>
+  | undefined {
+  const record = readRecord(value);
+  const occurrence = readRecord(record.occurrence);
+  if (
+    occurrence.operation !== "shutdown" ||
+    typeof occurrence.scheduledFor !== "string" ||
+    typeof occurrence.wakeScheduledFor !== "string"
+  )
+    return undefined;
+  return {
+    operation: "shutdown",
+    scheduledFor: occurrence.scheduledFor,
+    wakeScheduledFor: occurrence.wakeScheduledFor,
+  };
 }
 
 async function powerRequest(
@@ -177,7 +253,8 @@ async function powerRequest(
   method: "PUT" | "DELETE" | "POST",
   body: unknown,
   button: HTMLButtonElement,
-): Promise<void> {
+  onSuccess?: (value: unknown) => void,
+): Promise<unknown> {
   button.disabled = true;
   try {
     const response = await fetch(path, {
@@ -192,11 +269,15 @@ async function powerRequest(
       redirect: "error",
     });
     if (!response.ok) throw new Error("power_operation_failed");
+    const result = (await response.json()) as unknown;
+    onSuccess?.(result);
     if (status !== null) status.textContent = "Mock power state updated.";
     await refresh();
+    return result;
   } catch {
     if (status !== null)
       status.textContent = "Mock power state could not be updated.";
+    return undefined;
   } finally {
     button.disabled = false;
   }
