@@ -6,6 +6,70 @@ to fail.
 
 ## Closed findings
 
+### P1 — enabled power probes did not satisfy request contracts
+
+- **Root cause:** lifecycle verification sent bodyless `PUT`/`POST` requests,
+  while the handlers validate media type and body before constructing the
+  protected capability.
+- **Impact:** correctly enabled mock power surfaces could return `400`/`415`
+  instead of the required authentication envelope and block activation with
+  `administrative_route_policy_invalid`.
+- **Fix:** `5c6119c` makes route-aware probes send canonical future mock occurrences and
+  exact stage confirmations without an Access assertion. They reach `401`/`403`
+  before every use case and retain loopback as the physical destination.
+- **Tests:** the Go transport test now asserts method, body, content type,
+  authority and physical destination for every enabled route.
+
+### P1 — wake cancellation catalog advertised a JSON body
+
+- **Root cause:** `power.wake.delete` reused the wake scheduling request policy.
+- **Impact:** the catalog and review evidence contradicted the bodyless handler.
+- **Fix:** `7c8eae6` changes the descriptor to the zero-byte `NO_BODY` policy.
+- **Tests:** the catalog suite pins body `none` and zero maximum bytes.
+
+### P1 — lifecycle hardening removed the legacy profile variant
+
+- **Root cause:** keys previously treated as optional evolution surfaces became
+  unconditionally required while the backward-compatibility test was replaced.
+- **Impact:** an installed legacy administrative profile could fall through to
+  ordinary runtime verification and be rejected as exposing administrative
+  routes.
+- **Fix:** `5c6119c` accepts current and legacy schemas structurally; optional keys
+  must be canonical when present. Any partial/malformed environment carrying
+  administrative markers fails closed rather than using the ordinary verifier.
+- **Tests:** legacy omission, invalid optional value and partial-profile marker
+  coverage in `lifecycle_profile_test.go`.
+
+### P2 — dashboard conflated mutation and refresh failures
+
+- **Root cause:** mutation and post-success refresh shared one `try/catch`.
+- **Impact:** a committed mutation could be reported as failed and invite an
+  unsafe retry.
+- **Fix:** `7c8eae6` distinguishes mutation failure from “saved, refresh failed; recheck”.
+- **Tests:** successful mutation with rejected refresh is pinned explicitly.
+
+### P2 — prepared shutdown state survived capability changes
+
+- **Root cause:** the controller retained the prepared occurrence when shutdown
+  was disabled, including completion of an older in-flight request.
+- **Impact:** re-enabling the surface could display stale preparation state.
+- **Fix:** in `7c8eae6`, disabling clears state and a render generation prevents late responses
+  from restoring it.
+- **Tests:** disable/re-enable and in-flight completion regressions.
+
+### P2 — dashboard accepted non-canonical shutdown responses
+
+- **Root cause:** response timestamps were checked with permissive `Date.parse`.
+- **Impact:** the UI could retain an occurrence the execution domain rejects.
+- **Fix:** `7c8eae6` requires exact keys and the shared canonical timestamp predicate.
+- **Tests:** non-canonical preparation response is rejected without refresh.
+
+### P3 — final health retry waited after its last attempt
+
+- **Root cause:** every retryable failure created a delay, including attempt 20.
+- **Impact:** terminal startup failure reporting was delayed by 250 ms.
+- **Fix:** in `5c6119c`, the final retryable failure returns without creating another timer.
+
 ### P1 — unstructured lifecycle profile classification
 
 - **Root cause:** `isAdministrativeProfile` accepted markers with

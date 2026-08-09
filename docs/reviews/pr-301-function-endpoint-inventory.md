@@ -4,7 +4,8 @@
 
 - Review base: `c538212159e39ce1f979da14af067ded55f4fc7c`
 - Reviewed merge: `9cad7dd78ccd93d09a27c2e3c6cf64028b6ae766`
-- Effective review HEAD: `360a0ae8a9da4781d56cbd2cf6551ea1d47944c4`
+- Review follow-up base: `ad9629794ff1bbde72d61e30200b125deed8b75a`
+- Corrective implementation HEAD: `7c8eae6` (documentation commit follows)
 - Review branch: `agent/review-pr-301-administrative-power-dashboard`
 
 `origin/main` has advanced after the specified merge. This review preserves the
@@ -41,11 +42,11 @@ callees, persistence, and verdict, are in
 
 ### Go
 
-| File                                                       | Functions/types added or changed in the PR range                                                                                                                                          |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deployment/internal/administrativeconfiguration/input.go` | `Input`, `ExampleInputBytes`, `ValidateInput`, `validPublicOrigin`, `PublicOriginAuthority`, `Environment`, `environmentWithoutPublicOrigin`, `applyPowerSurfaceFlags`, `addPublicOrigin` |
-| `deployment/internal/runtimeverification/verification.go`  | `Dependencies`, `Verify`, `VerifyAdministrative`, `verifyHealth`, `verifyHealthOnce`, `verifyAbsent`, `verifyAbsentWithHost`, `verifyProtected`, `verifyIdentity`                         |
-| `deployment/internal/servicelifecycle/lifecycle.go`        | `New`, `administrativeHost`, `validateConfiguration`, `isAdministrativeProfile`, `hasLineValue`                                                                                           |
+| File                                                       | Functions/types added or changed in the PR range                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deployment/internal/administrativeconfiguration/input.go` | `Input`, `ExampleInputBytes`, `ValidateInput`, `validPublicOrigin`, `PublicOriginAuthority`, `Environment`, `environmentWithoutPublicOrigin`, `applyPowerSurfaceFlags`, `addPublicOrigin`                                                                                        |
+| `deployment/internal/runtimeverification/verification.go`  | `Dependencies`, `Verify`, `VerifyAdministrative`, `verifyAdministrativeRoute`, `administrativeProbeBody`, `verifyHealth`, `isRetryableHealthFailure`, `verifyHealthOnce`, `verifyAbsent`, `verifyAbsentWithHost`, `verifyProtected`, `verifyProtectedWithBody`, `verifyIdentity` |
+| `deployment/internal/servicelifecycle/lifecycle.go`        | `New`, `administrativeHost`, `validateConfiguration`, `isAdministrativeProfile`, `parseAdministrativeProfile`, `parseEnvironment`, `validEnvironmentKey`, `parseBoolean`, `hasEnvironmentKey`, `looksAdministrativeProfile`                                                      |
 
 ### TypeScript
 
