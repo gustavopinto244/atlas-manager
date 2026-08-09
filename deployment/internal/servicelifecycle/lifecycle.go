@@ -336,10 +336,13 @@ func (service Service) validateConfiguration() error {
 
 func isAdministrativeProfile(data []byte) bool {
 	value := string(data)
-	for _, required := range []string{"POWER_MANAGEMENT_BACKEND=mock\n", "MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n", "MACHINE_POWER_SCHEDULER_ENABLED=false\n", "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\n", "ADMINISTRATIVE_DASHBOARD_ENABLED=true\n", "ADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\n", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n", "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n", "ADMINISTRATIVE_PUBLIC_ORIGIN=https://", "ADMINISTRATIVE_ROLE_ASSIGNMENTS="} {
+	for _, required := range []string{"POWER_MANAGEMENT_BACKEND=mock\n", "MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n", "MACHINE_POWER_SCHEDULER_ENABLED=false\n", "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\n", "ADMINISTRATIVE_DASHBOARD_ENABLED=true\n", "ADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\n", "ADMINISTRATIVE_PUBLIC_ORIGIN=https://", "ADMINISTRATIVE_ROLE_ASSIGNMENTS="} {
 		if !strings.Contains(value, required) {
 			return false
 		}
+	}
+	if !hasLineValue(value, "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED", "true", "false") || !hasLineValue(value, "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED", "true", "false") {
+		return false
 	}
 	for _, required := range []string{"BACKUP_SCHEDULER_ENABLED=false\n", "REGISTERED_SERVICES_JSON=", "REGISTERED_BACKUP_TARGETS_JSON="} {
 		if !strings.Contains(value, required) {
@@ -347,6 +350,15 @@ func isAdministrativeProfile(data []byte) bool {
 		}
 	}
 	return true
+}
+
+func hasLineValue(environment, key string, values ...string) bool {
+	for _, value := range values {
+		if strings.Contains(environment, key+"="+value+"\n") {
+			return true
+		}
+	}
+	return false
 }
 
 func hashConfiguration(data []byte) string {

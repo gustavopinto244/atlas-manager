@@ -122,6 +122,36 @@ func TestEnvironmentKeepsPowerSurfacesDisabled(t *testing.T) {
 	}
 }
 
+func TestEnvironmentCanExposeMockPowerSurfacesWithoutEnablingEffects(t *testing.T) {
+	data := strings.Replace(
+		string(ExampleInputBytes()),
+		`"publicOrigin":"https://atlas.example.com",`,
+		`"publicOrigin":"https://atlas.example.com","wakeAlarmHttpEnabled":true,"shutdownHttpEnabled":true,`,
+		1,
+	)
+	input, err := ValidateInput([]byte(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := Environment(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"POWER_MANAGEMENT_BACKEND=mock\n",
+		"MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n",
+		"MACHINE_POWER_SCHEDULER_ENABLED=false\n",
+		"ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true\n",
+		"ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=true\n",
+		"MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-machine-power/occurrence-claims.jsonl\n",
+		"MACHINE_POWER_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-machine-power/scheduler-cursor.json\n",
+	} {
+		if !contains(environment, required) {
+			t.Fatalf("profile missing %q", required)
+		}
+	}
+}
+
 func TestStateRejectsIncompleteGenerationEvidence(t *testing.T) {
 	base := State{
 		SchemaVersion:       1,

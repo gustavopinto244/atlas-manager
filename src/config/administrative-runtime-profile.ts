@@ -9,6 +9,8 @@ export interface MockAdministrativeInput {
   readonly cloudflareTeamName: string;
   readonly cloudflareAudience: string;
   readonly publicOrigin: string;
+  readonly wakeAlarmHttpEnabled?: boolean;
+  readonly shutdownHttpEnabled?: boolean;
   readonly roleAssignments: readonly Readonly<{
     readonly principalId: string;
     readonly roles: readonly string[];
@@ -32,11 +34,16 @@ export function parseMockAdministrativeInput(
   const parsed = parseStrictJson(value);
   if (
     !isRecord(parsed) ||
-    Reflect.ownKeys(parsed).length !== 9 ||
+    (Reflect.ownKeys(parsed).length !== 9 &&
+      Reflect.ownKeys(parsed).length !== 11) ||
     parsed.schemaVersion !== 1 ||
     typeof parsed.cloudflareTeamName !== "string" ||
     typeof parsed.cloudflareAudience !== "string" ||
     typeof parsed.publicOrigin !== "string" ||
+    (parsed.wakeAlarmHttpEnabled !== undefined &&
+      typeof parsed.wakeAlarmHttpEnabled !== "boolean") ||
+    (parsed.shutdownHttpEnabled !== undefined &&
+      typeof parsed.shutdownHttpEnabled !== "boolean") ||
     !Array.isArray(parsed.roleAssignments) ||
     !Array.isArray(parsed.registeredServices) ||
     typeof parsed.backupSchedulerEnabled !== "boolean" ||
@@ -92,6 +99,8 @@ export function parseMockAdministrativeInput(
     cloudflareTeamName: parsed.cloudflareTeamName,
     cloudflareAudience: parsed.cloudflareAudience,
     publicOrigin: parsed.publicOrigin,
+    wakeAlarmHttpEnabled: parsed.wakeAlarmHttpEnabled === true,
+    shutdownHttpEnabled: parsed.shutdownHttpEnabled === true,
     roleAssignments: Object.freeze(roleAssignments),
     registeredServices: Object.freeze(parsed.registeredServices),
     backupSchedulerEnabled: parsed.backupSchedulerEnabled,
@@ -125,8 +134,12 @@ export function createMockAdministrativeEnvironment(
     ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED: "true",
     ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED: "true",
     ADMINISTRATIVE_DASHBOARD_ENABLED: "true",
-    ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "false",
-    ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "false",
+    ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: input.wakeAlarmHttpEnabled
+      ? "true"
+      : "false",
+    ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: input.shutdownHttpEnabled
+      ? "true"
+      : "false",
     SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
       "/var/lib/atlas-manager-service-availability/scheduler-cursor.json",
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
@@ -165,6 +178,14 @@ export function createMockAdministrativeEnvironment(
             "/var/lib/atlas-manager-backups/scheduler-cursor.json",
           BACKUP_OCCURRENCE_CLAIM_FILE:
             "/var/lib/atlas-manager-backups/occurrence-claims.jsonl",
+        }
+      : {}),
+    ...(input.shutdownHttpEnabled
+      ? {
+          MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+            "/var/lib/atlas-manager-machine-power/occurrence-claims.jsonl",
+          MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+            "/var/lib/atlas-manager-machine-power/scheduler-cursor.json",
         }
       : {}),
   });

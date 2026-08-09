@@ -28,6 +28,11 @@ func TestAdministrativeProfileMarkersAcceptCurrentAndLegacyOptionalSurfaces(t *t
 	if !isAdministrativeProfile([]byte(legacyOptional)) {
 		t.Fatal("legacy optional administrative profile was not recognized")
 	}
+	enabled := strings.ReplaceAll(string(environment), "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true\n")
+	enabled = strings.ReplaceAll(enabled, "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n", "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=true\n")
+	if !isAdministrativeProfile([]byte(enabled)) {
+		t.Fatal("mock power administrative profile was not recognized")
+	}
 }
 
 func TestValidateConfigurationAcceptsPersistedAdministrativeStateContract(t *testing.T) {
