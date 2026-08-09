@@ -152,6 +152,72 @@ describe("Cloudflare Access JWT verification", () => {
     });
   });
 
+  it("accepts Cloudflare JWKS metadata alongside signing keys", async () => {
+    const fixture = await createFixture();
+    const fetch = createJwksFetch(fixture.publicJwk, {
+      public_cert: "certificate",
+      public_certs: ["certificate"],
+    });
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("ready");
+  });
+
+  it("rejects unknown Cloudflare JWKS envelope fields", async () => {
+    const fixture = await createFixture();
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch: createJwksFetch(fixture.publicJwk, { unexpected: true }),
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("unavailable");
+  });
+
+  it("accepts a signed Cloudflare application token without an optional typ header", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+
+    await expect(
+      verifier.verify(
+        createCloudflareAccessJwtAssertion(
+          await fixture.token({ protectedType: null }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({
+      outcome: "authenticated",
+      principal: { principalId: PRINCIPAL_ID },
+    });
+  });
+
+  it("rejects an unexpected protected-header type", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+
+    await expect(
+      verifier.verify(
+        createCloudflareAccessJwtAssertion(
+          await fixture.token({ protectedType: "unexpected" }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({
+      outcome: "unauthenticated",
+      reason: "credentials_invalid",
+    });
+  });
+
   it("rejects a correctly signed service token without a subject", async () => {
     const fixture = await createFixture();
     const fetch = createJwksFetch(fixture.publicJwk);
@@ -243,6 +309,50 @@ describe("Cloudflare Access JWT verification", () => {
     await verifier.verify(assertion, NOW);
     await verifier.verify(assertion, new Date(NOW.getTime() + 1_000));
     expect(fetch.calls).toHaveLength(1);
+  });
+
+  it("coalesces concurrent JWKS refreshes", async () => {
+    const fixture = await createFixture();
+    let resolveFetch: ((response: Response) => void) | undefined;
+    const fetch: CloudflareAccessJwksFetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    const first = provider.checkReadiness(NOW);
+    const second = provider.checkReadiness(NOW);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    resolveFetch?.(
+      new Response(JSON.stringify({ keys: [fixture.publicJwk] }), {
+        status: 200,
+      }),
+    );
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      "ready",
+      "ready",
+    ]);
+  });
+
+  it("applies the failure cooldown after an invalid JWKS response", async () => {
+    const fixture = await createFixture();
+    const fetch: CloudflareAccessJwksFetch = vi.fn(
+      async () => new Response(JSON.stringify({ keys: [] }), { status: 200 }),
+    );
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("unavailable");
+    await expect(
+      provider.checkReadiness(new Date(NOW.getTime() + 1_000)),
+    ).resolves.toBe("unavailable");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("flows a verified subject through the existing access-control port", async () => {
@@ -362,7 +472,10 @@ describe("Cloudflare Access authentication composition", () => {
 type Fixture = {
   configuration: ReturnType<typeof createCloudflareAccessConfiguration>;
   publicJwk: Record<string, unknown>;
-  token: (overrides?: { sub?: string }) => Promise<string>;
+  token: (overrides?: {
+    sub?: string;
+    protectedType?: string | null;
+  }) => Promise<string>;
 };
 
 async function createFixture(kid = "K1"): Promise<Fixture> {
@@ -382,8 +495,9 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
   return {
     configuration,
     publicJwk,
-    token: async (overrides = {}) =>
-      new SignJWT({
+    token: async (overrides = {}) => {
+      const protectedType = overrides.protectedType;
+      return new SignJWT({
         aud: configuration.audience,
         exp: Math.floor(NOW.getTime() / 1_000) + 300,
         iat: Math.floor(NOW.getTime() / 1_000),
@@ -391,12 +505,20 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
         sub: overrides.sub ?? PRINCIPAL_ID,
         type: "app",
       })
-        .setProtectedHeader({ alg: "RS256", kid, typ: "JWT" })
-        .sign(privateKey),
+        .setProtectedHeader({
+          alg: "RS256",
+          kid,
+          ...(protectedType === null ? {} : { typ: protectedType ?? "JWT" }),
+        })
+        .sign(privateKey);
+    },
   };
 }
 
-function createJwksFetch(publicJwk: Record<string, unknown>) {
+function createJwksFetch(
+  publicJwk: Record<string, unknown>,
+  metadata: Record<string, unknown> = {},
+) {
   const calls: string[] = [];
   let lastInit: unknown;
   const fetch: CloudflareAccessJwksFetch & {
@@ -406,7 +528,7 @@ function createJwksFetch(publicJwk: Record<string, unknown>) {
     async (input: string, init: Readonly<Record<string, unknown>>) => {
       calls.push(input);
       lastInit = init;
-      return new Response(JSON.stringify({ keys: [publicJwk] }), {
+      return new Response(JSON.stringify({ keys: [publicJwk], ...metadata }), {
         status: 200,
       });
     },

@@ -41,7 +41,7 @@ const commit =
   }).trim();
 if (!/^[0-9a-f]{40}$/u.test(commit)) throw new Error("source_commit_invalid");
 
-if (packageJson.version !== "1.0.0-rc.8")
+if (!/^\d+\.\d+\.\d+-rc\.\d+$/u.test(packageJson.version))
   throw new Error("release_version_invalid");
 if (contract.releaseVersion !== packageJson.version)
   throw new Error("release_contract_version_invalid");
@@ -75,7 +75,7 @@ if (
 )
   throw new Error("release_evidence_dashboard_digest_invalid");
 const forbidden =
-  /PLACEHOLDER|TBD|ci-generated|reproducible_in_ci|not_run|environment_unavailable|rc\.1/u;
+  /PLACEHOLDER|TBD|ci-generated|reproducible_in_ci|not_run|environment_unavailable|\brc\.1(?:\.\d+)?\b/u;
 for (const relative of [
   "docs/contracts/atlas-manager-administrative-api.json",
   "docs/release/atlas-manager-production-dependencies.json",

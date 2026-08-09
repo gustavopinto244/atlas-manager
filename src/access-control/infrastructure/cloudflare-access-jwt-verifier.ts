@@ -65,7 +65,6 @@ export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVe
         currentDate: verificationTime,
         issuer: this.#configuration.issuer,
         requiredClaims: ["iss", "aud", "sub", "exp", "iat", "type"],
-        typ: "JWT",
         clockTolerance: CLOCK_TOLERANCE_SECONDS,
       });
       const principal = createAdministrativePrincipal({
@@ -156,12 +155,12 @@ function validateProtectedHeader(
   input: Record<string, unknown>,
 ): asserts input is Record<string, unknown> & {
   alg: "RS256";
-  typ: "JWT";
+  typ?: "JWT";
   kid: string;
 } {
   if (
     input["alg"] !== "RS256" ||
-    input["typ"] !== "JWT" ||
+    (input["typ"] !== undefined && input["typ"] !== "JWT") ||
     typeof input["kid"] !== "string" ||
     input["kid"].length < 1 ||
     input["kid"].length > 128 ||

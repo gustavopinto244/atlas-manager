@@ -11,6 +11,7 @@ import { createCloudflareAccessConfiguration } from "../../src/access-control/do
 import { InMemoryAdministrativeRoleAssignmentReader } from "../../src/access-control/infrastructure/in-memory-administrative-role-assignment-reader.js";
 import { createEventHistory } from "../../src/event-history/composition/create-event-history.js";
 import { FixedAdministrativeRequestAdmission } from "../../src/http/administrative-request-admission.js";
+import { parseAdministrativePublicOrigin } from "../../src/http/administrative-public-origin.js";
 import { createApp } from "../../src/http/create-app.js";
 import { createPowerManagement } from "../../src/power-management/composition/create-power-management.js";
 import { createServiceManagement } from "../../src/service-management/composition/create-service-management.js";
@@ -125,6 +126,9 @@ async function fixture(roles: readonly string[] = ["administrator"]) {
   const app = createApp({
     logger: { error: vi.fn() },
     getServerHealth: { execute: vi.fn(async () => health()) },
+    administrativePublicOrigin: parseAdministrativePublicOrigin(
+      "https://atlas.example.com",
+    ),
     administrativeDashboard: {
       admission,
       createProtectedAdministration: (reader) => ({
@@ -138,7 +142,7 @@ async function fixture(roles: readonly string[] = ["administrator"]) {
         getOperationsOverview: createProtected(reader).getOperationsOverview,
       }),
       getServerHealth: { execute: vi.fn(async () => health()) },
-      applicationVersion: "1.0.0-rc.8",
+      applicationVersion: "1.0.0-rc.10",
     },
   });
   return { app, tokenFor };
@@ -150,7 +154,9 @@ describe("administrative dashboard authentication integration", () => {
     const invalid = "invalid";
     for (const assertion of [undefined, invalid]) {
       for (const path of ["/", "/admin/overview", "/assets/app.js"]) {
-        const requestBuilder = request(value.app).get(path);
+        const requestBuilder = request(value.app)
+          .get(path)
+          .set("host", "atlas.example.com");
         if (assertion !== undefined)
           requestBuilder.set("Cf-Access-Jwt-Assertion", assertion);
         const response = await requestBuilder;
@@ -168,9 +174,46 @@ describe("administrative dashboard authentication integration", () => {
     for (const path of ["/", "/admin/overview", "/assets/app.js"]) {
       const response = await request(value.app)
         .get(path)
+        .set("host", "atlas.example.com")
         .set("Cf-Access-Jwt-Assertion", token);
       expect(response.status, path).toBe(200);
     }
+  });
+
+  it("accepts only the authenticated Cloudflare Access return navigation as cross-site", async () => {
+    const value = await fixture();
+    const token = await value.tokenFor(PRINCIPAL_ID);
+    const dashboardReturn = await request(value.app)
+      .get("/")
+      .set("host", "atlas.example.com")
+      .set("Cf-Access-Jwt-Assertion", token)
+      .set("Sec-Fetch-Site", "cross-site")
+      .set("Sec-Fetch-Mode", "navigate")
+      .set("Sec-Fetch-Dest", "document");
+    expect(dashboardReturn.status).toBe(200);
+
+    const unauthenticatedReturn = await request(value.app)
+      .get("/")
+      .set("host", "atlas.example.com")
+      .set("Sec-Fetch-Site", "cross-site")
+      .set("Sec-Fetch-Mode", "navigate")
+      .set("Sec-Fetch-Dest", "document");
+    expect(unauthenticatedReturn.status).toBe(401);
+    expect(responseErrorCode(unauthenticatedReturn)).toBe(
+      "administrative_authentication_required",
+    );
+
+    const crossSiteApi = await request(value.app)
+      .get("/admin/overview")
+      .set("host", "atlas.example.com")
+      .set("Cf-Access-Jwt-Assertion", token)
+      .set("Sec-Fetch-Site", "cross-site")
+      .set("Sec-Fetch-Mode", "cors")
+      .set("Sec-Fetch-Dest", "empty");
+    expect(crossSiteApi.status).toBe(403);
+    expect(responseErrorCode(crossSiteApi)).toBe(
+      "administrative_browser_context_rejected",
+    );
   });
 
   it("denies a valid assertion for an unknown principal", async () => {
@@ -178,6 +221,7 @@ describe("administrative dashboard authentication integration", () => {
     const token = await value.tokenFor(UNKNOWN_PRINCIPAL_ID);
     const response = await request(value.app)
       .get("/admin/overview")
+      .set("host", "atlas.example.com")
       .set("Cf-Access-Jwt-Assertion", token);
 
     expect(response.status).toBe(403);
