@@ -23,6 +23,14 @@ export function renderMachinePlan(
   const summary = document.createElement("p");
   summary.textContent = `Expected state: ${plan.expectation} · Evaluated: ${plan.evaluatedAt}`;
   parent.append(summary);
+  const next = findNextTransition(plan);
+  const nextSummary = document.createElement("p");
+  nextSummary.setAttribute("role", "status");
+  nextSummary.textContent =
+    next === null
+      ? "Next transition: not planned"
+      : `Next transition: ${next.label} at ${next.scheduledFor}`;
+  parent.append(nextSummary);
 
   const table = document.createElement("table");
   table.className = "machine-plan";
@@ -54,7 +62,25 @@ export function renderMachineSchedule(
   const summary = document.createElement("p");
   summary.textContent = `Mode: ${schedule.mode}${schedule.timezone === null ? "" : ` · Timezone: ${schedule.timezone}`}`;
   parent.append(summary);
-  if (schedule.windows.length === 0) return;
+  if (schedule.mode === "always_on") {
+    const detail = document.createElement("p");
+    detail.textContent = "Operating window: all day (00:00 → 24:00).";
+    parent.append(detail);
+    return;
+  }
+  if (schedule.mode === "manual") {
+    const detail = document.createElement("p");
+    detail.textContent =
+      "Automatic machine transitions are disabled; operator control is required.";
+    parent.append(detail);
+    return;
+  }
+  if (schedule.windows.length === 0) {
+    const detail = document.createElement("p");
+    detail.textContent = "No operating windows are configured.";
+    parent.append(detail);
+    return;
+  }
 
   const table = document.createElement("table");
   table.className = "schedule-timeline machine-schedule";
@@ -103,6 +129,31 @@ function appendTransition(
     row.append(cell);
   }
   body.append(row);
+}
+
+function findNextTransition(
+  plan: Readonly<{
+    nextShutdown: Transition;
+    nextWake: Transition;
+  }>,
+): Readonly<{ label: string; scheduledFor: string }> | null {
+  const candidates = [
+    { label: "shutdown", transition: plan.nextShutdown },
+    { label: "wake", transition: plan.nextWake },
+  ].flatMap(({ label, transition }) => {
+    const scheduledFor = transition.scheduledFor;
+    if (
+      typeof scheduledFor !== "string" ||
+      Number.isNaN(Date.parse(scheduledFor))
+    )
+      return [];
+    return [{ label, scheduledFor, timestamp: Date.parse(scheduledFor) }];
+  });
+  candidates.sort((left, right) => left.timestamp - right.timestamp);
+  const next = candidates[0];
+  return next === undefined
+    ? null
+    : { label: next.label, scheduledFor: next.scheduledFor };
 }
 
 function readPlan(value: unknown): Readonly<{

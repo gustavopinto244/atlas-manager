@@ -16,6 +16,10 @@ class FakeElement {
     this.children.push(...children);
   }
 
+  public setAttribute(): void {
+    // The view uses attributes for accessibility semantics.
+  }
+
   public replaceChildren(...children: FakeElement[]): void {
     this.children = children;
     this.ownText = "";
@@ -56,6 +60,9 @@ describe("machine plan view", () => {
     expect(parent.textContent).toContain("Expected state: operating");
     expect(parent.textContent).toContain("Next shutdown");
     expect(parent.textContent).toContain("2026-08-08T23:00:00.000Z");
+    expect(parent.textContent).toContain(
+      "Next transition: shutdown at 2026-08-08T23:00:00.000Z",
+    );
   });
 
   it("renders an unavailable state without trusting malformed data", () => {
@@ -67,6 +74,7 @@ describe("machine plan view", () => {
 
     expect(parent.textContent).toContain("Expected state: unavailable");
     expect(parent.textContent).toContain("not planned");
+    expect(parent.textContent).toContain("Next transition: not planned");
   });
 
   it("renders the validated weekly machine schedule", () => {
@@ -83,5 +91,19 @@ describe("machine plan view", () => {
     expect(parent.textContent).toContain("Mode: scheduled");
     expect(parent.textContent).toContain("monday");
     expect(parent.textContent).toContain("08:00 → 18:00");
+  });
+
+  it("explains non-scheduled machine modes explicitly", () => {
+    const alwaysOn = new FakeElement();
+    renderMachineSchedule(fakeDocument(), alwaysOn as unknown as HTMLElement, {
+      mode: "always_on",
+    });
+    expect(alwaysOn.textContent).toContain("all day");
+
+    const manual = new FakeElement();
+    renderMachineSchedule(fakeDocument(), manual as unknown as HTMLElement, {
+      mode: "manual",
+    });
+    expect(manual.textContent).toContain("operator control is required");
   });
 });
