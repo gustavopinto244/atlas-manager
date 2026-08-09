@@ -5,7 +5,7 @@
 The PR-range functions and directly reachable private helpers were traced from
 input through validation, protected use case, persistence/audit and output.
 `FIXED` identifies the follow-up review commits; all other entries retain their
-contract.  Dashboard functions use DOM nodes and `textContent`; no changed path
+contract. Dashboard functions use DOM nodes and `textContent`; no changed path
 uses `innerHTML`, dynamic scripts or request-derived URL schemes.
 
 ## Go administrative profile and lifecycle

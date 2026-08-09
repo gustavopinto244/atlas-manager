@@ -1,6 +1,6 @@
 # PR #301 — findings and remediation
 
-This register records findings from the executable-code audit.  Severity is
+This register records findings from the executable-code audit. Severity is
 assigned by the review definitions, not by whether an existing test happened
 to fail.
 
@@ -83,11 +83,11 @@ to fail.
 
 - Legacy static dashboard asset constants remain only as fallback material;
   runtime `app.js`, stylesheet, event-history asset, backup asset, and package
-  snapshot are served from their authoritative sources.  This is P3 cleanup,
+  snapshot are served from their authoritative sources. This is P3 cleanup,
   not a security boundary, and was not refactored during the focused review.
 - The administrative verifier proves enabled routes through their authenticated
   error envelope and the runtime/catalog reconciler separately proves that
-  routes are registered.  It deliberately does not attempt authenticated
+  routes are registered. It deliberately does not attempt authenticated
   power mutation during a lifecycle probe.
 
 ## Safety invariant
