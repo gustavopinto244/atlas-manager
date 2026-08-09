@@ -221,7 +221,8 @@ describe("dashboard power controls", () => {
     );
     const input = parent.findAttribute("aria-label", "Mock wake time");
     expect(input).toBeDefined();
-    if (input !== undefined) input.value = "2026-08-10T08:00";
+    const localWakeTime = "2026-08-10T08:00";
+    if (input !== undefined) input.value = localWakeTime;
     const schedule = parent.findText("Schedule mock wake");
     expect(schedule).toBeDefined();
     const form = parent.children.find((child) => child.tagName === "form");
@@ -229,7 +230,7 @@ describe("dashboard power controls", () => {
     await controller.settle();
 
     expect(mutate).toHaveBeenCalledWith("/admin/power/wake-alarm", "PUT", {
-      scheduledFor: "2026-08-10T11:00:00.000Z",
+      scheduledFor: new Date(localWakeTime).toISOString(),
     });
     expect(statuses.at(-1)).toMatch(/^Busy:/u);
     expect(refresh).not.toHaveBeenCalled();
