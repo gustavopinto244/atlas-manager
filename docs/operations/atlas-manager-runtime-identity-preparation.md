@@ -121,9 +121,9 @@ service lifecycle tools may be used. They preserve these committed identities
 through service deactivation and configuration removal; neither tool enrolls
 the account textually in the helper group or enables Linux power effects.
 
-## rc.7 operator sequence
+## rc.8 operator sequence
 
-For the active `1.0.0-rc.7` candidate, inspect the commit-bound bundle, run
+For the active `1.0.0-rc.8` candidate, inspect the commit-bound bundle, run
 read-only host qualification, run read-only runtime identity inspection, and
 review account-tool and trusted-layout readiness before the explicitly
 authorized `prepare-disabled` operation. Then run `inspect`, `verify-managed`,

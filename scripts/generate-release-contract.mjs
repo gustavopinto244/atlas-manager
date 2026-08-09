@@ -55,7 +55,7 @@ const dashboardAssetsSha256 = process.env.DASHBOARD_ASSETS_SHA256;
 const documentationFiles = [
   "CHANGELOG.md",
   "SECURITY.md",
-  "docs/release/atlas-manager-1.0.0-rc.7.md",
+  "docs/release/atlas-manager-1.0.0-rc.8.md",
   "docs/release/atlas-manager-v1-security-review.md",
   "docs/release/atlas-manager-v1-operational-readiness.md",
   "docs/release/atlas-manager-v1-requirements-traceability.md",
