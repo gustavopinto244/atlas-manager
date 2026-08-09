@@ -41,8 +41,8 @@ overrides. The dashboard must not send weekly policy fields to that endpoint.
 
 ## Consequences
 
-The deployment configuration must eventually provide a dedicated persistence
-path, for example `SERVICE_AVAILABILITY_POLICY_FILE`. Existing deployments
-without that path continue to use the environment catalog as the base source
-until the runtime wiring slice is deployed. The API and dashboard wiring must
-land only after the persistent store and production composition are complete.
+The deployment configuration must provide a dedicated persistence path through
+`SERVICE_AVAILABILITY_POLICY_FILE` before the schedule mutation resource is
+enabled. Deployments without that path keep the environment catalog as their
+base source and do not expose schedule mutations; this prevents an apparently
+successful in-memory edit from being lost on restart.

@@ -143,7 +143,8 @@ export function createAdministrativeRuntime(
     ...(config.administrativeServiceAvailabilityHttpEnabled
       ? ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]
       : []),
-    ...(config.administrativeServiceAvailabilityHttpEnabled
+    ...(config.administrativeServiceAvailabilityHttpEnabled &&
+    config.serviceAvailabilityPolicyFilePath !== undefined
       ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
@@ -287,7 +288,8 @@ export function createAdministrativeRuntime(
           }),
         }
       : {}),
-    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false) &&
+    config.serviceAvailabilityPolicyFilePath !== undefined
       ? {
           availability: Object.freeze({
             admission,

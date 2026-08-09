@@ -11,9 +11,12 @@ scheduled policy has an IANA timezone and validated weekly windows. A window
 must have a valid weekday and `start < end`; the domain rejects malformed or
 overlapping policy input.
 
-The current runtime persists availability overrides separately from the base
-registered-service policy. Overrides are evaluated by the application layer
-and consumed by the reconciliation scheduler.
+The runtime persists availability overrides separately from the base
+registered-service policy. Base policy mutations use the protected
+`/admin/services/:serviceId/schedule` resource and a dedicated policy store;
+the `/availability` mutation remains reserved for temporary overrides.
+Both are evaluated by the application layer and consumed by the same
+reconciliation scheduler.
 
 ## Reconciliation flow
 
@@ -30,10 +33,10 @@ occurrence and applies dependency-aware stop orchestration.
 
 ## Preview and dashboard
 
-`atlas services schedule show <service-id>` and `preview` expose the existing
-protected availability response. The dashboard renders the same response as a
-weekly timeline. A writable weekly editor requires a backend policy store and
-application use case; it must not be implemented as browser-only state.
+`atlas services schedule show <service-id>` reads the protected base-policy
+resource, while `preview` evaluates an explicit interval through the shared
+domain. The dashboard renders the same policy as a weekly timeline and writes
+through the protected schedule resource. The browser does not own policy state.
 
 ## Machine policy safety
 
