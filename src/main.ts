@@ -273,7 +273,7 @@ function start(): void {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
             getServerHealth,
-            applicationVersion: "1.0.0-rc.7",
+            applicationVersion: "1.0.0-rc.8",
             ...(backupManagement === undefined ? {} : { backupManagement }),
           })
         : undefined;

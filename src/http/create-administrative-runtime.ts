@@ -360,7 +360,7 @@ export function createAdministrativeRuntime(
               execute: () => Promise.resolve({ status: "ok" }),
             },
             applicationVersion:
-              compositionDependencies.applicationVersion ?? "1.0.0-rc.7",
+              compositionDependencies.applicationVersion ?? "1.0.0-rc.8",
             administration: Object.freeze({
               wakeAlarmEnabled: config.administrativeWakeAlarmHttpEnabled,
               shutdownEnabled: config.administrativeShutdownHttpEnabled,

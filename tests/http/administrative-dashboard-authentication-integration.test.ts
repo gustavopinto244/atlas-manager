@@ -138,7 +138,7 @@ async function fixture(roles: readonly string[] = ["administrator"]) {
         getOperationsOverview: createProtected(reader).getOperationsOverview,
       }),
       getServerHealth: { execute: vi.fn(async () => health()) },
-      applicationVersion: "1.0.0-rc.7",
+      applicationVersion: "1.0.0-rc.8",
     },
   });
   return { app, tokenFor };

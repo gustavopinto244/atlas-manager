@@ -1,8 +1,16 @@
 # Agent handoff
 
-## Latest active work — rc.7 lastlog build-capability correction
+## Latest active work — rc.8 immutable upgrade identity
 
-The active candidate is `1.0.0-rc.7` on branch
+The active candidate is `1.0.0-rc.8`. It gives the Advanced Manager readiness
+source a release identity distinct from the qualified `1.0.0-rc.7` generation
+already installed on Atlas. Rc.8 must be qualified from its final commit with
+independent Candidate A/B bundles before the documented side-by-side upgrade.
+No installed rc.7 directory may be removed or overwritten to admit rc.8.
+
+## Historical rc.7 lastlog build-capability correction
+
+The candidate was `1.0.0-rc.7` on branch
 `fix/runtime-identity-lastlog-build-capability`. It is based on the tested rc.6
 source commit `06191cb7f65eee3a6f3e080d04a77d8354cfe325`, but the rc.7 correction
 has not yet been committed or physically qualified.

@@ -19,7 +19,7 @@ deliver a safe, reinstallable package for server and operator-client use.
 | ----------------------- | --------------------------------------------------------------------------------- |
 | Branch                  | `main`                                                                            |
 | Planning baseline       | `9c8aee92af2777803431a6618d0325b92257e8b8`                                        |
-| Version                 | `1.0.0-rc.7`                                                                      |
+| Version                 | `1.0.0-rc.8`                                                                      |
 | Administrative routes   | 45, closed catalog                                                                |
 | Dashboard navigation    | Overview, Services, Schedules, Machine, Backups, Events, Infrastructure, Settings |
 | CLI                     | TypeScript/Node `atlas`, read-oriented subset implemented                         |

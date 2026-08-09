@@ -30,7 +30,7 @@ its preexisting-`lastlog` policy, strict `GROUPS=` parser, and absence-based
 rollback model; `1.0.0-rc.5` is historical and was blocked during physical
 identity preparation by trusted-layout false positives; `1.0.0-rc.6` is
 historical after the physical host exposed a lastlog build-capability false
-positive, and `1.0.0-rc.7` is the active software-only candidate. `rc.1` remains
+positive, `1.0.0-rc.7` is the installed predecessor, and `1.0.0-rc.8` is the active software-only candidate. `rc.1` remains
 superseded because its release evidence was not reproducible.
 
 ## Boundaries
@@ -41,7 +41,7 @@ same-origin protection, the route catalog, the API contract, and release
 qualification. The `1.0.0-rc.4` software candidate was not proof of physical Atlas
 deployment, real RTC or shutdown effects, helper activation, or a stable
 physical release; `1.0.0-rc.5` and `1.0.0-rc.6` are likewise historical and not physically
-qualified; `1.0.0-rc.7` is not physically qualified yet. The earlier `rc.2` and `rc.3` candidates remain historical
+qualified; `1.0.0-rc.8` is not physically qualified yet. The earlier `rc.2` and `rc.3` candidates remain historical
 and are superseded for new qualification by the runtime-identity corrections;
 `rc.1` was superseded by audit remediation.
 

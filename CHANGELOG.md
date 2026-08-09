@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0-rc.8
+
+- assigns a new immutable release identity to the Advanced Manager readiness
+  source after the Atlas host was already running a different `1.0.0-rc.7`
+  generation;
+- prevents deployment procedures from overwriting the managed
+  `/opt/atlas-manager/releases/1.0.0-rc.7` directory or weakening the
+  installer rollback contract;
+- requires fresh commit-bound candidates, reproducibility evidence, host
+  preflight, and side-by-side upgrade qualification before deployment.
+
 ## 1.0.0-rc.7
 
 - canonicalizes bundle directories and regular files to `0755` or `0644`,
