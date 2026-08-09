@@ -17,6 +17,14 @@ main {
 .overview-card {
   margin: 0;
 }
+.overview-card a {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+.overview-card a:hover {
+  color: #bfdbfe;
+}
 .dashboard-navigation {
   display: flex;
   gap: 0.5rem;

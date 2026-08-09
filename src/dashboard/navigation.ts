@@ -25,7 +25,7 @@ const SECTION_BY_PAGE: Readonly<Record<DashboardPage, readonly string[]>> =
 
 export function initializeDashboardNavigation(
   document: Document,
-  initialPage: DashboardPage = "overview",
+  initialPage?: DashboardPage,
 ): void {
   const main = document.querySelector("main");
   if (main === null) return;
@@ -53,7 +53,16 @@ export function initializeDashboardNavigation(
     "Settings",
     "Settings remain server-owned and protected by the administrative API.",
   );
-  showDashboardPage(document, initialPage);
+  showDashboardPage(
+    document,
+    initialPage ?? dashboardPageFromHash(document.defaultView?.location.hash),
+  );
+  document.defaultView?.addEventListener("hashchange", () => {
+    showDashboardPage(
+      document,
+      dashboardPageFromHash(document.defaultView?.location.hash),
+    );
+  });
 }
 
 export function showDashboardPage(
@@ -92,4 +101,11 @@ function ensurePlaceholderSection(
   paragraph.textContent = description;
   section.append(heading, paragraph);
   document.querySelector("main")?.append(section);
+}
+
+function dashboardPageFromHash(value: string | undefined): DashboardPage {
+  const candidate = value?.replace(/^#/, "");
+  return DASHBOARD_PAGES.some(([page]) => page === candidate)
+    ? (candidate as DashboardPage)
+    : "overview";
 }

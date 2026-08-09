@@ -51,34 +51,42 @@ function renderOverview(value: unknown): void {
     grid,
     "Services",
     `${displayValue(services.registered, "0")} registered`,
+    "services",
   );
   appendOverviewCard(
     grid,
     "Power safety",
     `${displayValue(powerSafety.backend, "unavailable")} · effects ${displayValue(powerSafety.effects, "unavailable")}`,
+    "machine",
   );
   appendOverviewCard(
     grid,
     "Machine",
     `expectation ${displayValue(machinePlan.expectation, "unavailable")}`,
+    "machine",
   );
   appendOverviewCard(
     grid,
     "Backups",
     `${displayValue(backups.activeRuns, "0")} active · ${displayValue(backups.interruptedRuns, "0")} interrupted`,
+    "backups",
   );
   appendOverviewCard(
     grid,
     "Observed at",
     displayValue(record.observedAt, "unavailable"),
+    "infrastructure",
   );
-  root.append(grid);
+  const metadata = document.createElement("p");
+  metadata.textContent = `Version: ${displayValue(record.applicationVersion, "unavailable")} · source: ${displayValue(record.sourceCommit, "unavailable")}`;
+  root.append(grid, metadata);
 }
 
 function appendOverviewCard(
   parent: HTMLElement,
   headingText: string,
   valueText: string,
+  page: string,
 ): void {
   const article = document.createElement("article");
   article.className = "overview-card";
@@ -86,7 +94,10 @@ function appendOverviewCard(
   heading.textContent = headingText;
   const value = document.createElement("p");
   value.textContent = valueText;
-  article.append(heading, value);
+  const link = document.createElement("a");
+  link.href = `#${page}`;
+  link.append(heading, value);
+  article.append(link);
   parent.append(article);
 }
 
@@ -126,6 +137,19 @@ function renderInfrastructure(value: unknown): void {
     list.append(item);
   }
   infrastructure.append(list);
+  const activationFlags = readRecord(record.activationFlags);
+  const flagsHeading = document.createElement("h3");
+  flagsHeading.textContent = "Administrative feature flags";
+  infrastructure.append(flagsHeading);
+  const flags = document.createElement("ul");
+  for (const flag of Object.keys(activationFlags).sort()) {
+    const item = document.createElement("li");
+    item.textContent = `${flag}: ${activationFlags[flag] === true ? "enabled" : "disabled"}`;
+    flags.append(item);
+  }
+  if (flags.childElementCount === 0)
+    addText(flags, "Feature flag state unavailable.");
+  infrastructure.append(flags);
 }
 
 function renderServices(value: unknown): void {
