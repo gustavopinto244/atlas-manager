@@ -17,8 +17,8 @@ deliver a safe, reinstallable package for server and operator-client use.
 
 | Item                    | Observed value                                                                    |
 | ----------------------- | --------------------------------------------------------------------------------- |
-| Branch                  | `feat/operator-experience-cli`                                                    |
-| Planning baseline       | `3723aeb0130a5a42bf0e2142f33f0626d775d940`                                        |
+| Branch                  | `main`                                                                            |
+| Planning baseline       | `9c8aee92af2777803431a6618d0325b92257e8b8`                                        |
 | Version                 | `1.0.0-rc.7`                                                                      |
 | Administrative routes   | 45, closed catalog                                                                |
 | Dashboard navigation    | Overview, Services, Schedules, Machine, Backups, Events, Infrastructure, Settings |
@@ -41,6 +41,8 @@ acceptance must be collected read-only in the execution phase.
    server deployment package from the portable operator client.
 4. [Execution and qualification roadmap](04-execution-roadmap.md) provides
    phased delivery, tests, release gates and definition of done.
+5. [Execution report](05-execution-report.md) binds the implementation slices
+   and their deliberate security boundaries.
 
 ## Governing decisions
 
