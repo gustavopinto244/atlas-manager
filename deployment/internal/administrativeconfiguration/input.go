@@ -192,6 +192,19 @@ func validPublicOrigin(value string) bool {
 	return hostname == strings.ToLower(hostname) && strings.TrimSpace(value) == value
 }
 
+// PublicOriginAuthority returns the authority used by internal administrative
+// probes while keeping their socket destination on loopback.
+func PublicOriginAuthority(origin string) (string, error) {
+	if !validPublicOrigin(origin) {
+		return "", fmt.Errorf("administrative_public_origin_invalid")
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return "", fmt.Errorf("administrative_public_origin_invalid")
+	}
+	return parsed.Host, nil
+}
+
 func validBackupTarget(data []byte) (string, string, bool) {
 	var target map[string]json.RawMessage
 	if json.Unmarshal(data, &target) != nil {

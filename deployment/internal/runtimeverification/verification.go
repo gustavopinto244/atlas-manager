@@ -40,12 +40,13 @@ var administrativeRoutes = []administrativeRoute{
 }
 
 type Dependencies struct {
-	BaseURL       string
-	HTTPClient    *http.Client
-	CheckIdentity func(int) error
-	Process       func(int) (runtimeidentity.Process, error)
-	PasswdPath    string
-	GroupPath     string
+	BaseURL            string
+	AdministrativeHost string
+	HTTPClient         *http.Client
+	CheckIdentity      func(int) error
+	Process            func(int) (runtimeidentity.Process, error)
+	PasswdPath         string
+	GroupPath          string
 }
 
 func NewDependencies() Dependencies {
@@ -79,6 +80,39 @@ func Verify(ctx context.Context, pid int, dependencies Dependencies) error {
 		if err := verifyProcessIdentity(pid, dependencies); err != nil {
 			return fmt.Errorf("runtime_identity_invalid")
 		}
+	}
+	return nil
+}
+
+// VerifyAdministrative validates the administrative profile while preserving
+// loopback as the physical destination and using the configured public origin
+// only as the HTTP Host authority.
+func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencies) error {
+	if dependencies.BaseURL == "" {
+		dependencies.BaseURL = LoopbackURL
+	}
+	if dependencies.HTTPClient == nil {
+		dependencies.HTTPClient = NewDependencies().HTTPClient
+	}
+	if dependencies.AdministrativeHost == "" {
+		return fmt.Errorf("administrative_host_missing")
+	}
+	if err := verifyHealth(ctx, dependencies.HTTPClient, dependencies.BaseURL, HealthLivePath, true); err != nil {
+		return fmt.Errorf("service_health_failed")
+	}
+	if err := verifyHealth(ctx, dependencies.HTTPClient, dependencies.BaseURL, HealthServerPath, false); err != nil {
+		return fmt.Errorf("service_health_failed")
+	}
+	if err := verifyProtected(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, http.MethodGet, "/admin/event-history"); err != nil {
+		return fmt.Errorf("administrative_route_policy_invalid")
+	}
+	for _, route := range administrativeRoutes[1:] {
+		if err := verifyAbsentWithHost(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route.method, route.path); err != nil {
+			return fmt.Errorf("administrative_route_policy_invalid")
+		}
+	}
+	if err := verifyIdentity(pid, dependencies); err != nil {
+		return fmt.Errorf("runtime_identity_invalid")
 	}
 	return nil
 }
@@ -120,9 +154,16 @@ func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string
 }
 
 func verifyAbsent(ctx context.Context, client *http.Client, baseURL, method, path string) error {
+	return verifyAbsentWithHost(ctx, client, baseURL, "", method, path)
+}
+
+func verifyAbsentWithHost(ctx context.Context, client *http.Client, baseURL, host, method, path string) error {
 	request, err := http.NewRequestWithContext(ctx, method, baseURL+path, nil)
 	if err != nil {
 		return err
+	}
+	if host != "" {
+		request.Host = host
 	}
 	response, err := client.Do(request)
 	if err != nil {
@@ -131,6 +172,45 @@ func verifyAbsent(ctx context.Context, client *http.Client, baseURL, method, pat
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("route_present")
+	}
+	return nil
+}
+
+func verifyProtected(ctx context.Context, client *http.Client, baseURL, host, method, path string) error {
+	request, err := http.NewRequestWithContext(ctx, method, baseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	request.Host = host
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
+	if err != nil || len(body) > MaxResponseBytes {
+		return fmt.Errorf("administrative_protection_invalid")
+	}
+	if response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden {
+		return fmt.Errorf("administrative_protection_invalid")
+	}
+	var value struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &value) != nil || (value.Error.Code != "administrative_authentication_required" && value.Error.Code != "administrative_authorization_denied") {
+		return fmt.Errorf("administrative_protection_invalid")
+	}
+	return nil
+}
+
+func verifyIdentity(pid int, dependencies Dependencies) error {
+	if dependencies.CheckIdentity != nil {
+		return dependencies.CheckIdentity(pid)
+	}
+	if dependencies.Process != nil {
+		return verifyProcessIdentity(pid, dependencies)
 	}
 	return nil
 }

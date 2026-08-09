@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -158,10 +159,31 @@ func New(paths Paths, deps Dependencies) Service {
 	}
 	if deps.Health == nil {
 		deps.Health = func(ctx context.Context, pid int) error {
-			return runtimeverification.Verify(ctx, pid, runtimeverification.NewDependencies())
+			dependencies := runtimeverification.NewDependencies()
+			if data, err := os.ReadFile(paths.ConfigEnvironment); err == nil && isAdministrativeProfile(data) {
+				if host, err := administrativeHost(data); err == nil {
+					dependencies.AdministrativeHost = host
+					return runtimeverification.VerifyAdministrative(ctx, pid, dependencies)
+				}
+			}
+			return runtimeverification.Verify(ctx, pid, dependencies)
 		}
 	}
 	return Service{paths: paths, deps: deps}
+}
+
+func administrativeHost(data []byte) (string, error) {
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "ADMINISTRATIVE_PUBLIC_ORIGIN=") {
+			origin := strings.TrimPrefix(line, "ADMINISTRATIVE_PUBLIC_ORIGIN=")
+			parsed, err := url.Parse(origin)
+			if err != nil || parsed.Host == "" {
+				return "", fmt.Errorf("administrative_public_origin_invalid")
+			}
+			return administrativeconfiguration.PublicOriginAuthority(origin)
+		}
+	}
+	return "", fmt.Errorf("administrative_public_origin_missing")
 }
 
 func (service Service) Run(ctx context.Context, action Action, confirmation string) (Report, error) {
