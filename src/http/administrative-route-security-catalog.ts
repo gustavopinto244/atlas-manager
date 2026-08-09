@@ -221,7 +221,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED",
       "cancel_wake_alarm",
       "power_operation",
-      WAKE_ALARM_JSON_BODY,
+      NO_BODY,
     ),
     mutation(
       "power.shutdown.prepare",

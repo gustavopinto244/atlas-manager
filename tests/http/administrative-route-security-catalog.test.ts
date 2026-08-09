@@ -18,8 +18,15 @@ describe("administrative route security catalog registration", () => {
     const shutdown = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
       (descriptor) => descriptor.routeId === "power.shutdown.prepare",
     );
+    const wakeDelete = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
+      (descriptor) => descriptor.routeId === "power.wake.delete",
+    );
 
     expect(wake?.requestPolicy.maxBodyBytes).toBe(512);
+    expect(wakeDelete?.requestPolicy).toMatchObject({
+      body: "none",
+      maxBodyBytes: 0,
+    });
     expect(shutdown?.requestPolicy.maxBodyBytes).toBe(1_024);
   });
 

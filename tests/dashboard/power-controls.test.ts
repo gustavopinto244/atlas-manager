@@ -94,11 +94,11 @@ function fakeDocument(): Document {
 function createController(
   transport: PowerControlsTransport,
   statuses: string[] = [],
+  refresh = vi.fn(async () => undefined),
 ): Readonly<{
   controller: PowerControlsController;
   refresh: ReturnType<typeof vi.fn>;
 }> {
-  const refresh = vi.fn(async () => undefined);
   return {
     controller: new PowerControlsController({
       document: fakeDocument(),
@@ -331,5 +331,160 @@ describe("dashboard power controls", () => {
       { ...occurrence, confirmation: "confirm_shutdown_execution" },
     );
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a successful mutation separately from a failed refresh", async () => {
+    const statuses: string[] = [];
+    const refresh = vi.fn(async () => {
+      throw new Error("refresh unavailable");
+    });
+    const { controller } = createController(
+      {
+        read: vi.fn(async () => ({ wakeAlarm: { state: "not_scheduled" } })),
+        mutate: vi.fn(async () => ({ result: "scheduled" })),
+      },
+      statuses,
+      refresh,
+    );
+    const parent = new FakeElement("section");
+    await controller.render(
+      parent as unknown as HTMLElement,
+      { wakeAlarmEnabled: true },
+      safety,
+    );
+    parent.children
+      .find((child) => child.tagName === "form")
+      ?.dispatch("submit");
+    await controller.settle();
+
+    expect(statuses.at(-1)).toBe(
+      "Saved, but refresh failed: recheck authoritative mock power state.",
+    );
+  });
+
+  it("clears a prepared shutdown when the capability is disabled", async () => {
+    const occurrence = {
+      operation: "shutdown",
+      scheduledFor: "2026-08-09T13:00:00.000Z",
+      wakeScheduledFor: "2026-08-09T14:00:00.000Z",
+    } as const;
+    const { controller } = createController({
+      read: vi.fn(async () => ({})),
+      mutate: vi.fn(async () => ({ occurrence })),
+    });
+    const first = new FakeElement("section");
+    await controller.render(
+      first as unknown as HTMLElement,
+      { shutdownEnabled: true },
+      safety,
+    );
+    const confirmation = first.findAttribute(
+      "aria-label",
+      "Confirm mock shutdown preparation",
+    );
+    if (confirmation !== undefined) confirmation.checked = true;
+    first.children
+      .find((child) => child.tagName === "form")
+      ?.dispatch("submit");
+    await controller.settle();
+
+    await controller.render(
+      new FakeElement("section") as unknown as HTMLElement,
+      { shutdownEnabled: false },
+      safety,
+    );
+    const enabledAgain = new FakeElement("section");
+    await controller.render(
+      enabledAgain as unknown as HTMLElement,
+      { shutdownEnabled: true },
+      safety,
+    );
+    expect(enabledAgain.textContent).not.toContain("Prepared mock shutdown:");
+  });
+
+  it("discards an in-flight preparation completed after capability disable", async () => {
+    const occurrence = {
+      operation: "shutdown",
+      scheduledFor: "2026-08-09T13:00:00.000Z",
+      wakeScheduledFor: "2026-08-09T14:00:00.000Z",
+    } as const;
+    let resolveMutation: ((value: unknown) => void) | undefined;
+    const mutate = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          resolveMutation = resolve;
+        }),
+    );
+    const refresh = vi.fn(async () => undefined);
+    const { controller } = createController(
+      { read: vi.fn(async () => ({})), mutate },
+      [],
+      refresh,
+    );
+    const first = new FakeElement("section");
+    await controller.render(
+      first as unknown as HTMLElement,
+      { shutdownEnabled: true },
+      safety,
+    );
+    const confirmation = first.findAttribute(
+      "aria-label",
+      "Confirm mock shutdown preparation",
+    );
+    if (confirmation !== undefined) confirmation.checked = true;
+    first.children
+      .find((child) => child.tagName === "form")
+      ?.dispatch("submit");
+
+    await controller.render(
+      new FakeElement("section") as unknown as HTMLElement,
+      { shutdownEnabled: false },
+      safety,
+    );
+    resolveMutation?.({ occurrence });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+
+    const enabledAgain = new FakeElement("section");
+    await controller.render(
+      enabledAgain as unknown as HTMLElement,
+      { shutdownEnabled: true },
+      safety,
+    );
+    expect(enabledAgain.textContent).not.toContain("Prepared mock shutdown:");
+  });
+
+  it("rejects non-canonical shutdown occurrence timestamps", async () => {
+    const statuses: string[] = [];
+    const { controller, refresh } = createController(
+      {
+        read: vi.fn(async () => ({})),
+        mutate: vi.fn(async () => ({
+          occurrence: {
+            operation: "shutdown",
+            scheduledFor: "2026-08-09T13:00:00Z",
+            wakeScheduledFor: "2026-08-09T14:00:00Z",
+          },
+        })),
+      },
+      statuses,
+    );
+    const parent = new FakeElement("section");
+    await controller.render(
+      parent as unknown as HTMLElement,
+      { shutdownEnabled: true },
+      safety,
+    );
+    const confirmation = parent.findAttribute(
+      "aria-label",
+      "Confirm mock shutdown preparation",
+    );
+    if (confirmation !== undefined) confirmation.checked = true;
+    parent.children
+      .find((child) => child.tagName === "form")
+      ?.dispatch("submit");
+    await controller.settle();
+
+    expect(statuses.at(-1)).toMatch(/^Invalid response:/u);
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

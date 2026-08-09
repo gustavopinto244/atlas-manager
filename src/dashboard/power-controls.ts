@@ -2,6 +2,7 @@ import {
   MACHINE_SHUTDOWN_EXECUTION_CONFIRMATION,
   MACHINE_SHUTDOWN_PREPARATION_CONFIRMATION,
 } from "../power-management/domain/machine-shutdown-confirmation.js";
+import { isCanonicalTimestamp } from "../power-management/domain/canonical-timestamp.js";
 
 type PowerMutationMethod = "PUT" | "DELETE" | "POST";
 
@@ -47,6 +48,8 @@ export class PowerControlsController {
   readonly #now: () => Date;
   #preparedShutdownOccurrence: ShutdownOccurrence | undefined;
   #pending: Promise<void> = Promise.resolve();
+  #renderGeneration = 0;
+  #shutdownEnabled = false;
 
   public constructor(dependencies: PowerControlsDependencies) {
     this.#document = dependencies.document;
@@ -61,6 +64,7 @@ export class PowerControlsController {
     administration: Readonly<Record<string, unknown>>,
     powerSafety: Readonly<Record<string, unknown>>,
   ): Promise<void> {
+    this.#renderGeneration += 1;
     parent.replaceChildren();
     const heading = this.#document.createElement("h3");
     heading.textContent = "Mock power controls";
@@ -70,6 +74,8 @@ export class PowerControlsController {
 
     const wakeEnabled = administration.wakeAlarmEnabled === true;
     const shutdownEnabled = administration.shutdownEnabled === true;
+    this.#shutdownEnabled = shutdownEnabled;
+    if (!shutdownEnabled) this.#preparedShutdownOccurrence = undefined;
     if (!wakeEnabled && !shutdownEnabled) {
       const disabled = this.#document.createElement("p");
       disabled.textContent =
@@ -187,6 +193,7 @@ export class PowerControlsController {
       const wakeScheduledFor = new Date(
         scheduledFor.getTime() + 60 * 60 * 1000,
       );
+      const renderGeneration = this.#renderGeneration;
       this.#pending = this.#runMutation(
         "/admin/power/shutdown/preparations",
         "POST",
@@ -201,7 +208,11 @@ export class PowerControlsController {
           const occurrence = readShutdownOccurrence(value);
           if (occurrence === undefined)
             throw new PowerControlsRequestError("invalid_response");
-          this.#preparedShutdownOccurrence = occurrence;
+          if (
+            this.#shutdownEnabled &&
+            renderGeneration === this.#renderGeneration
+          )
+            this.#preparedShutdownOccurrence = occurrence;
         },
       );
     });
@@ -269,10 +280,18 @@ export class PowerControlsController {
     try {
       const result = await this.#transport.mutate(path, method, body);
       onSuccess?.(result);
-      this.#setStatus("Saved: authoritative mock power state updated.");
-      await this.#refresh();
     } catch (error) {
       this.#setStatus(mutationFailureText(error));
+      button.disabled = false;
+      return;
+    }
+    this.#setStatus("Saved: authoritative mock power state updated.");
+    try {
+      await this.#refresh();
+    } catch {
+      this.#setStatus(
+        "Saved, but refresh failed: recheck authoritative mock power state.",
+      );
     } finally {
       button.disabled = false;
     }
@@ -283,11 +302,7 @@ function formatWakeAlarm(value: unknown): string {
   const alarm = readRecord(readRecord(value).wakeAlarm);
   if (alarm.state === "not_scheduled")
     return "Current wake alarm: not_scheduled";
-  if (
-    alarm.state === "scheduled" &&
-    typeof alarm.scheduledFor === "string" &&
-    Number.isFinite(Date.parse(alarm.scheduledFor))
-  )
+  if (alarm.state === "scheduled" && isCanonicalTimestamp(alarm.scheduledFor))
     return `Current wake alarm: scheduled at ${alarm.scheduledFor}`;
   throw new PowerControlsRequestError("invalid_response");
 }
@@ -321,11 +336,14 @@ function readShutdownOccurrence(
 ): ShutdownOccurrence | undefined {
   const occurrence = readRecord(readRecord(value).occurrence);
   if (
+    !hasOnlyKeys(occurrence, [
+      "operation",
+      "scheduledFor",
+      "wakeScheduledFor",
+    ]) ||
     occurrence.operation !== "shutdown" ||
-    typeof occurrence.scheduledFor !== "string" ||
-    typeof occurrence.wakeScheduledFor !== "string" ||
-    !Number.isFinite(Date.parse(occurrence.scheduledFor)) ||
-    !Number.isFinite(Date.parse(occurrence.wakeScheduledFor)) ||
+    !isCanonicalTimestamp(occurrence.scheduledFor) ||
+    !isCanonicalTimestamp(occurrence.wakeScheduledFor) ||
     Date.parse(occurrence.scheduledFor) >=
       Date.parse(occurrence.wakeScheduledFor)
   )
@@ -335,6 +353,17 @@ function readShutdownOccurrence(
     scheduledFor: occurrence.scheduledFor,
     wakeScheduledFor: occurrence.wakeScheduledFor,
   };
+}
+
+function hasOnlyKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: readonly string[],
+): boolean {
+  const keys = Object.keys(value);
+  return (
+    keys.length === expected.length &&
+    expected.every((key) => keys.includes(key))
+  );
 }
 
 function formatLocalDateTime(value: Date): string {
