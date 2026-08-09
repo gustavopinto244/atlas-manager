@@ -40,6 +40,13 @@ ReadWritePaths=/var/lib/atlas-manager /var/lib/atlas-manager-backups /var/lib/at
 WantedBy=multi-user.target
 `
 
+var legacyContent = strings.NewReplacer(
+	" atlas-manager-machine-power",
+	"",
+	" /var/lib/atlas-manager-machine-power",
+	"",
+).Replace(Content)
+
 func Validate(value string) bool {
 	for _, required := range []string{
 		"User=atlas-manager", "Group=atlas-manager", "SupplementaryGroups=atlas-manager-power",
@@ -57,4 +64,12 @@ func Validate(value string) bool {
 		}
 	}
 	return true
+}
+
+// ValidateManaged accepts the current unit contract and the exact predecessor
+// unit used by the managed upgrade path. Bundle inspection remains strict
+// through Validate; this compatibility applies only while proving the current
+// installation before the candidate unit replaces it.
+func ValidateManaged(value string) bool {
+	return Validate(value) || strings.TrimSpace(value) == strings.TrimSpace(legacyContent)
 }
