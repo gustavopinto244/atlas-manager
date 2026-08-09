@@ -37,7 +37,10 @@ import type { AdministrativeSecurityStatusRouteDependencies } from "./administra
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
 import { GetMachinePowerPlan } from "../power-management/application/get-machine-power-plan.js";
 import type { MachinePowerPlan } from "../power-management/domain/machine-power-plan.js";
-import type { MachineOperatingPolicy } from "../power-management/domain/machine-operating-policy.js";
+import {
+  createMachineOperatingPolicy,
+  type MachineOperatingPolicy,
+} from "../power-management/domain/machine-operating-policy.js";
 import {
   ADMINISTRATIVE_ROUTE_SECURITY_CATALOG,
   expectedAdministrativeRouteIds,
@@ -92,13 +95,31 @@ export function createAdministrativeRuntime(
   });
   const machinePlanReader =
     compositionDependencies.machinePlanReader ??
-    Object.freeze({
-      getMachinePowerPlan: new GetMachinePowerPlan(
-        clock,
-        config.machineOperatingPolicy,
-      ),
-      machineOperatingPolicy: config.machineOperatingPolicy,
-    });
+    (() => {
+      const machineOperatingPolicy =
+        config.machineOperatingPolicy ??
+        createMachineOperatingPolicy({ mode: "always_on" });
+      return Object.freeze({
+        getMachinePowerPlan: new GetMachinePowerPlan(
+          clock,
+          machineOperatingPolicy,
+        ),
+        machineOperatingPolicy,
+      });
+    })();
+  const powerSafetyReader = Object.freeze({
+    execute: () => {
+      const effects = config.machinePowerEffectsActivation?.kind ?? "disabled";
+      return Object.freeze({
+        backend: config.powerManagementBackend ?? "mock",
+        effects,
+        machineScheduler: config.machinePowerSchedulerEnabled
+          ? "enabled"
+          : "disabled",
+        helper: effects === "linux_helper" ? "configured" : "unused",
+      });
+    },
+  });
   const eventHistory =
     compositionDependencies.eventHistory ??
     (directoryPath === undefined
@@ -219,6 +240,7 @@ export function createAdministrativeRuntime(
       accessControl,
       ...(powerManagement === undefined ? {} : { powerManagement }),
       machinePlanReader,
+      powerSafetyReader,
       eventHistory,
       clock,
       ...(serviceManagement === undefined ? {} : { serviceManagement }),

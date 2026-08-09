@@ -4,9 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  FileServiceAvailabilityPolicyStore,
-} from "../../../src/service-management/infrastructure/file-service-availability-policy-store.js";
+import { FileServiceAvailabilityPolicyStore } from "../../../src/service-management/infrastructure/file-service-availability-policy-store.js";
 import type { FileServiceAvailabilityPolicyStoreError } from "../../../src/service-management/infrastructure/file-service-availability-policy-store.js";
 import { createServiceAvailabilityPolicy } from "../../../src/service-scheduling/domain/service-availability-policy.js";
 

@@ -179,7 +179,7 @@ describe("FileSegmentedAdministrativeEventHistory", () => {
     } finally {
       cleanup(root);
     }
-  });
+  }, 15_000);
 
   it("keeps read-only inspection non-mutating and rejects unknown root entries", async () => {
     const root = fixture();

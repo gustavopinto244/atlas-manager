@@ -287,7 +287,10 @@ function renderAvailability(value: unknown): void {
     addText(heading, serviceId ?? "Unknown service");
     article.append(heading);
     renderScheduleTimeline(document, article, entry);
-    if (typeof serviceId === "string")
+    if (
+      typeof serviceId === "string" &&
+      readRecord(entry).scheduleEditable !== false
+    )
       renderWeeklyScheduleEditor(document, article, serviceId, entry, refresh);
     availability.append(article);
   }
@@ -506,11 +509,17 @@ async function refresh(): Promise<void> {
           .services
       : [];
   const policies = await Promise.all(
-    serviceValues.map((service) =>
-      readJson(
-        `/admin/services/${encodeURIComponent(String(service.id))}/schedule`,
-      ),
-    ),
+    serviceValues.map(async (service) => {
+      const servicePath = encodeURIComponent(String(service.id));
+      const schedule = await readJson(
+        `/admin/services/${servicePath}/schedule`,
+      ).catch(() => null);
+      if (schedule !== null) return { value: schedule, scheduleEditable: true };
+      const availability = await readJson(
+        `/admin/services/${servicePath}/availability`,
+      ).catch(() => null);
+      return { value: availability, scheduleEditable: false };
+    }),
   );
   const previewWindow = createPreviewWindow();
   const previews = await Promise.all(
@@ -520,8 +529,9 @@ async function refresh(): Promise<void> {
       ).catch(() => null),
     ),
   );
-  const schedules = policies.map((policy, index) => ({
-    ...(typeof policy === "object" && policy !== null ? policy : {}),
+  const schedules = policies.map(({ value, scheduleEditable }, index) => ({
+    ...(typeof value === "object" && value !== null ? value : {}),
+    scheduleEditable,
     preview: previews[index],
   }));
   renderOverview(overview);

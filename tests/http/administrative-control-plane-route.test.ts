@@ -291,6 +291,74 @@ describe("administrative control-plane routes", () => {
     ).toBe(200);
   });
 
+  it("supports protected persistent schedule reads and strict mutations", async () => {
+    const schedule = {
+      getRegisteredServiceSchedule: {
+        execute: vi.fn(async () => ({
+          serviceId: service.id,
+          policy: { mode: "always" },
+          observedAt: "2026-01-01T00:00:00.000Z",
+        })),
+      },
+      setRegisteredServiceSchedule: {
+        execute: vi.fn(async (_id: string, policy: unknown) => policy),
+      },
+      removeRegisteredServiceSchedule: {
+        execute: vi.fn(async () => undefined),
+      },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => schedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeServiceSchedule: dependencies,
+    });
+
+    const read = await request(app).get("/admin/services/atlas-api/schedule");
+    expect(read.status).toBe(200);
+    expect(read.body).toEqual({
+      serviceId: "atlas-api",
+      policy: { mode: "always" },
+      observedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const invalid = await request(app)
+      .put("/admin/services/atlas-api/schedule")
+      .set("content-type", "application/json")
+      .send({ confirmation: "wrong", policy: { mode: "always" } });
+    expect(invalid.status).toBe(400);
+    expect(
+      schedule.setRegisteredServiceSchedule.execute,
+    ).not.toHaveBeenCalled();
+
+    const update = await request(app)
+      .put("/admin/services/atlas-api/schedule")
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_registered_service_schedule_update",
+        policy: { mode: "always" },
+      });
+    expect(update.status).toBe(200);
+    expect(schedule.setRegisteredServiceSchedule.execute).toHaveBeenCalledWith(
+      "atlas-api",
+      { mode: "always" },
+    );
+
+    const removal = await request(app)
+      .delete("/admin/services/atlas-api/schedule")
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_registered_service_schedule_removal",
+      });
+    expect(removal.status).toBe(200);
+    expect(
+      schedule.removeRegisteredServiceSchedule.execute,
+    ).toHaveBeenCalledWith("atlas-api");
+  });
+
   it("protects overview and dashboard delivery with the shared headers", async () => {
     const protectedAdministration = {
       getOperationsOverview: {

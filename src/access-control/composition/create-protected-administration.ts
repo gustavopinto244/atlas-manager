@@ -39,6 +39,9 @@ export interface ProtectedAdministrationCompositionInput {
     getMachinePowerPlan: Readonly<{ execute(): MachinePowerPlan }>;
     machineOperatingPolicy: MachineOperatingPolicy;
   }>;
+  readonly powerSafetyReader?: Readonly<{
+    execute(): Readonly<Record<string, unknown>>;
+  }>;
   readonly serviceManagement?: ServiceManagementCapabilities;
   readonly backupManagement?: BackupManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
@@ -825,10 +828,12 @@ export function createProtectedAdministration(
           }),
           availability: Object.freeze(availabilityCounts),
           powerSafety: Object.freeze({
-            backend: "mock",
-            effects: "disabled",
-            machineScheduler: "disabled",
-            helper: "unused",
+            ...(input.powerSafetyReader?.execute() ?? {
+              backend: "mock",
+              effects: "disabled",
+              machineScheduler: "disabled",
+              helper: "unused",
+            }),
           }),
           machinePlan:
             (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??

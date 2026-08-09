@@ -126,19 +126,16 @@ export function renderWeeklyScheduleEditor(
       mode.value === "scheduled"
         ? { mode: "scheduled", timezone: timezone.value, windows }
         : { mode: mode.value };
-    void fetch(
-      `/admin/services/${encodeURIComponent(serviceId)}/schedule`,
-      {
-        method: "PUT",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          confirmation: "confirm_registered_service_schedule_update",
-          policy: policyInput,
-        }),
-        redirect: "error",
-      },
-    )
+    void fetch(`/admin/services/${encodeURIComponent(serviceId)}/schedule`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        confirmation: "confirm_registered_service_schedule_update",
+        policy: policyInput,
+      }),
+      redirect: "error",
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error("schedule_update_failed");
         status.textContent = "Saved.";

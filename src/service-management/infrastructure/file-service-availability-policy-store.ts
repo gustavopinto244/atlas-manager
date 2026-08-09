@@ -81,6 +81,20 @@ export class FileServiceAvailabilityPolicyStore implements ServiceAvailabilityPo
     });
   }
 
+  public findByServiceIds(
+    serviceIds: readonly string[],
+  ): Promise<ReadonlyMap<string, ServiceAvailabilityPolicy>> {
+    return this.#enqueue(async () => {
+      const requested = new Set(serviceIds);
+      const policies = new Map<string, ServiceAvailabilityPolicy>();
+      for (const entry of await this.#read()) {
+        if (requested.has(entry.serviceId))
+          policies.set(entry.serviceId, entry.policy);
+      }
+      return policies;
+    });
+  }
+
   public save(
     serviceId: string,
     policy: ServiceAvailabilityPolicy,

@@ -13,7 +13,17 @@ export class PolicyAwareRegisteredServiceCatalog implements RegisteredServiceCat
 
   public async list(): Promise<readonly RegisteredService[]> {
     const services = await this.source.list();
-    return Promise.all(services.map((service) => this.withPolicy(service)));
+    if (this.policyStore.findByServiceIds === undefined)
+      return Promise.all(services.map((service) => this.withPolicy(service)));
+    const stored = await this.policyStore.findByServiceIds(
+      services.map((service) => service.id),
+    );
+    return services.map((service) => {
+      const policy = stored.get(service.id);
+      return policy === undefined
+        ? service
+        : withRegisteredServiceAvailabilityPolicy(service, policy);
+    });
   }
 
   public async findById(serviceId: string): Promise<RegisteredService | null> {

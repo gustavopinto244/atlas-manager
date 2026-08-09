@@ -219,6 +219,8 @@ describe("createServiceManagement", () => {
       "orchestrateRegisteredServiceControl",
       "getRegisteredServiceLogs",
       "setRegisteredServiceAvailabilityOverride",
+      "updateRegisteredServiceAvailabilityPolicy",
+      "removeRegisteredServiceAvailabilityPolicy",
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
       "getRegisteredServiceAvailabilityForInterval",
