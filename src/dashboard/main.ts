@@ -177,13 +177,29 @@ function renderShutdownPreparationControl(parent: HTMLElement): void {
   const form = document.createElement("form");
   const label = document.createElement("label");
   label.textContent = "Mock shutdown preparation";
+  const confirmationLabel = document.createElement("label");
+  const confirmation = document.createElement("input");
+  confirmation.type = "checkbox";
+  confirmation.required = true;
+  confirmation.setAttribute("aria-label", "Confirm mock shutdown preparation");
+  confirmationLabel.append(
+    confirmation,
+    document.createTextNode("I confirm this mock shutdown preparation."),
+  );
   const button = document.createElement("button");
   button.type = "submit";
+  button.className = "destructive-action";
   button.textContent = "Prepare mock shutdown";
-  form.append(label, button);
+  const feedback = document.createElement("p");
+  feedback.setAttribute("role", "status");
+  form.append(label, confirmationLabel, button, feedback);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!window.confirm("Prepare a mock shutdown occurrence?")) return;
+    if (!confirmation.checked) {
+      feedback.textContent = "Explicit confirmation is required.";
+      return;
+    }
+    feedback.textContent = "";
     const scheduledFor = new Date(Date.now() + 60 * 60 * 1000);
     const wakeScheduledFor = new Date(scheduledFor.getTime() + 60 * 60 * 1000);
     void powerRequest(
@@ -216,16 +232,32 @@ function renderShutdownExecutionControl(
   const section = document.createElement("div");
   const summary = document.createElement("p");
   summary.textContent = `Prepared mock shutdown: ${occurrence.scheduledFor} → wake ${occurrence.wakeScheduledFor}`;
+  const confirmationLabel = document.createElement("label");
+  const confirmation = document.createElement("input");
+  confirmation.type = "checkbox";
+  confirmation.required = true;
+  confirmation.setAttribute(
+    "aria-label",
+    "Confirm prepared mock shutdown execution",
+  );
+  confirmationLabel.append(
+    confirmation,
+    document.createTextNode(
+      "I confirm execution of this prepared mock action.",
+    ),
+  );
   const button = document.createElement("button");
   button.type = "button";
+  button.className = "destructive-action";
   button.textContent = "Execute prepared mock shutdown";
+  const feedback = document.createElement("p");
+  feedback.setAttribute("role", "status");
   button.addEventListener("click", () => {
-    if (
-      !window.confirm(
-        `Execute the prepared mock shutdown at ${occurrence.scheduledFor}?`,
-      )
-    )
+    if (!confirmation.checked) {
+      feedback.textContent = "Explicit confirmation is required.";
       return;
+    }
+    feedback.textContent = "";
     void powerRequest(
       "/admin/power/shutdown/executions",
       "POST",
@@ -239,7 +271,7 @@ function renderShutdownExecutionControl(
       },
     );
   });
-  section.append(summary, button);
+  section.append(summary, confirmationLabel, button, feedback);
   parent.append(section);
 }
 
