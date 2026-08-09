@@ -41,7 +41,7 @@ const commit =
   }).trim();
 if (!/^[0-9a-f]{40}$/u.test(commit)) throw new Error("source_commit_invalid");
 
-if (packageJson.version !== "1.0.0-rc.9")
+if (packageJson.version !== "1.0.0-rc.10")
   throw new Error("release_version_invalid");
 if (contract.releaseVersion !== packageJson.version)
   throw new Error("release_contract_version_invalid");

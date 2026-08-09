@@ -152,6 +152,50 @@ describe("Cloudflare Access JWT verification", () => {
     });
   });
 
+  it("accepts a signed Cloudflare application token without an optional typ header", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+
+    await expect(
+      verifier.verify(
+        createCloudflareAccessJwtAssertion(
+          await fixture.token({ protectedType: null }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({
+      outcome: "authenticated",
+      principal: { principalId: PRINCIPAL_ID },
+    });
+  });
+
+  it("rejects an unexpected protected-header type", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+
+    await expect(
+      verifier.verify(
+        createCloudflareAccessJwtAssertion(
+          await fixture.token({ protectedType: "unexpected" }),
+        ),
+        NOW,
+      ),
+    ).resolves.toEqual({
+      outcome: "unauthenticated",
+      reason: "credentials_invalid",
+    });
+  });
+
   it("rejects a correctly signed service token without a subject", async () => {
     const fixture = await createFixture();
     const fetch = createJwksFetch(fixture.publicJwk);
@@ -362,7 +406,10 @@ describe("Cloudflare Access authentication composition", () => {
 type Fixture = {
   configuration: ReturnType<typeof createCloudflareAccessConfiguration>;
   publicJwk: Record<string, unknown>;
-  token: (overrides?: { sub?: string }) => Promise<string>;
+  token: (overrides?: {
+    sub?: string;
+    protectedType?: string | null;
+  }) => Promise<string>;
 };
 
 async function createFixture(kid = "K1"): Promise<Fixture> {
@@ -382,8 +429,9 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
   return {
     configuration,
     publicJwk,
-    token: async (overrides = {}) =>
-      new SignJWT({
+    token: async (overrides = {}) => {
+      const protectedType = overrides.protectedType;
+      return new SignJWT({
         aud: configuration.audience,
         exp: Math.floor(NOW.getTime() / 1_000) + 300,
         iat: Math.floor(NOW.getTime() / 1_000),
@@ -391,8 +439,13 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
         sub: overrides.sub ?? PRINCIPAL_ID,
         type: "app",
       })
-        .setProtectedHeader({ alg: "RS256", kid, typ: "JWT" })
-        .sign(privateKey),
+        .setProtectedHeader({
+          alg: "RS256",
+          kid,
+          ...(protectedType === null ? {} : { typ: protectedType ?? "JWT" }),
+        })
+        .sign(privateKey);
+    },
   };
 }
 
