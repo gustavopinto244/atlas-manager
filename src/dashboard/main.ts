@@ -124,6 +124,23 @@ function renderPowerControls(
 }
 
 function renderWakeAlarmControls(parent: HTMLElement): void {
+  const current = document.createElement("p");
+  current.setAttribute("role", "status");
+  current.textContent = "Current wake alarm: loading…";
+  parent.append(current);
+  void readJson("/admin/power/wake-alarm")
+    .then((value) => {
+      const alarm = readRecord(readRecord(value).wakeAlarm);
+      const state = displayValue(alarm.state, "unavailable");
+      const scheduledFor =
+        typeof alarm.scheduledFor === "string"
+          ? ` at ${alarm.scheduledFor}`
+          : "";
+      current.textContent = `Current wake alarm: ${state}${scheduledFor}`;
+    })
+    .catch(() => {
+      current.textContent = "Current wake alarm: unavailable";
+    });
   const form = document.createElement("form");
   const label = document.createElement("label");
   label.textContent = "Mock wake time";
