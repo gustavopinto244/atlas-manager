@@ -380,9 +380,9 @@ func environmentWithoutPublicOrigin(input Input) ([]byte, error) {
 		return nil, fmt.Errorf("administrative_input_invalid")
 	}
 	services := bytes.TrimSpace(input.RegisteredServices)
-	schedulerFiles := ""
+	schedulerFiles := "SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-service-availability/scheduler-cursor.json\nSERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl\nSERVICE_AVAILABILITY_OVERRIDE_FILE=/var/lib/atlas-manager-service-availability/overrides.json\n"
 	if input.BackupSchedulerEnabled {
-		schedulerFiles = "BACKUP_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-backups/scheduler-cursor.json\nBACKUP_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-backups/occurrence-claims.jsonl\n"
+		schedulerFiles += "BACKUP_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-backups/scheduler-cursor.json\nBACKUP_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-backups/occurrence-claims.jsonl\n"
 	}
 	if input.EventHistoryOperations.Enabled {
 		retention, err := json.Marshal(input.EventHistoryOperations.Retention)
