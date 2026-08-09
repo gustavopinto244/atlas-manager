@@ -20,6 +20,13 @@ Infrastructure is read-only and shows the protected security posture, route
 catalog reconciliation and host-boundary flags. It does not offer a repair
 button.
 
+Machine shows the authoritative operating policy, next shutdown/wake
+transitions and a simulation preview. The preview identifies the backend,
+effects and scheduler state; when the profile is mock with effects disabled it
+explicitly reports that no physical power effect is armed. Machine modes such
+as always-on and manual are described instead of being inferred from empty
+windows.
+
 ## Services and schedules
 
 Services render their registered adapter, current status, availability and
@@ -43,7 +50,16 @@ admission and audit.
 
 Each API read uses same-origin credentials and rejects redirects. A failed
 request leaves the authoritative state unknown and reports that condition to
-the operator. Mutation buttons are disabled while an operation is in flight.
+the operator. Power controls distinguish loading, unauthorized, busy/conflict,
+failed and malformed-response states. Mutation buttons are disabled while an
+operation is in flight. Power preparation and execution use separate explicit
+checkbox confirmations; execution is not offered until a bounded backend
+response returns a valid prepared occurrence.
+
+The power-control component imports the canonical shutdown confirmation values
+from the power domain. It does not implement shutdown validity, authorization,
+admission or effect activation: those rules remain authoritative in the domain,
+application and HTTP layers.
 
 ## Security and accessibility
 
@@ -56,5 +72,7 @@ than color alone. Responsive rules support narrow screens.
 ## Asset contract
 
 The build generates `index.html`, `app.js`, `styles.css`, `backup.js` and
-`event-history.js`. The generated manifest and bundle verifier require the
-source and packaged bytes to be identical.
+`event-history.js`. `app.js` is bundled as a browser IIFE so internal
+TypeScript component imports cannot escape the five-file asset contract. The
+generated manifest and bundle verifier require the generated and packaged
+bytes to be identical.

@@ -64,6 +64,20 @@ describe("mock administrative runtime profile", () => {
     expect(environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED).toBe("false");
   });
 
+  it("exposes mock power HTTP surfaces without enabling effects", () => {
+    const value = JSON.parse(input) as Record<string, unknown>;
+    value.wakeAlarmHttpEnabled = true;
+    value.shutdownHttpEnabled = true;
+    const parsed = parseMockAdministrativeInput(JSON.stringify(value));
+    const environment = createMockAdministrativeEnvironment(parsed);
+
+    expect(environment.POWER_MANAGEMENT_BACKEND).toBe("mock");
+    expect(environment.MACHINE_POWER_EFFECTS_ACTIVATION).toBe("disabled");
+    expect(environment.MACHINE_POWER_SCHEDULER_ENABLED).toBe("false");
+    expect(environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED).toBe("true");
+    expect(environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED).toBe("true");
+  });
+
   it.each(["unknown", "administrator", "service_operator"])(
     "keeps role validation bounded for %s",
     (role) => {

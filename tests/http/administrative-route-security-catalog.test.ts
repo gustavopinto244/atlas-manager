@@ -1,11 +1,16 @@
 import express from "express";
 import { describe, expect, it } from "vitest";
 import {
+  ADMINISTRATIVE_ROUTE_SECURITY_CATALOG,
   reconcileAdministrativeRouteRegistrations,
   registerAdministrativeRoute,
 } from "../../src/http/administrative-route-security-catalog.js";
 
 describe("administrative route security catalog registration", () => {
+  it("keeps the explicit operator-experience route-count contract", () => {
+    expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(45);
+  });
+
   it("records the descriptor at the point the Express route is registered", () => {
     const app = express();
     registerAdministrativeRoute(

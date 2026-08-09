@@ -16,6 +16,17 @@ async function content(value: PassThrough): Promise<string> {
 }
 
 describe("atlas CLI entrypoint", () => {
+  it("renders the installed package version", async () => {
+    const output = stream();
+    const errors = stream();
+
+    await expect(
+      runAtlasCli(["--version"], undefined, output, errors),
+    ).resolves.toBe(0);
+    await expect(content(output)).resolves.toBe("1.0.0-rc.7\n");
+    await expect(content(errors)).resolves.toBe("");
+  });
+
   it("renders root help", async () => {
     const output = stream();
     const errors = stream();

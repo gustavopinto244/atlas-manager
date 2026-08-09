@@ -31,9 +31,16 @@ The generated environment enables the event-history, service-management,
 availability, overview, and dashboard surfaces. It keeps `HOST=127.0.0.1`,
 `POWER_MANAGEMENT_BACKEND=mock`, `MACHINE_POWER_EFFECTS_ACTIVATION=disabled`,
 `MACHINE_POWER_SCHEDULER_ENABLED=false`, and the always-on machine policy.
-Wake and shutdown HTTP remain disabled. The real environment file is installed
-atomically with root-private managed state and is removable only when its
-bytes and metadata still match the managed profile.
+By default, wake and shutdown HTTP remain disabled. For a safe simulation-only
+profile, the input may additionally contain `wakeAlarmHttpEnabled: true` and
+`shutdownHttpEnabled: true`. The resulting routes use mock adapters; physical
+effects remain disabled and the machine scheduler remains disabled. Shutdown
+simulation also declares separate machine-power cursor and occurrence-claim
+files.
+
+The real environment file is installed atomically with root-private managed
+state and is removable only when its bytes and metadata still match the managed
+profile.
 
 This profile does not create accounts, install a helper, enable a scheduler,
 or activate a power effect. The TypeScript parser remains authoritative for the

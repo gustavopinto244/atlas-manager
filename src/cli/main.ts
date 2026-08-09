@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { commandPath, findCommand } from "./command-tree.js";
@@ -10,12 +11,29 @@ import { helpFor } from "./help.js";
 import { createAtlasHttpTransport } from "./http-transport.js";
 import { parseCliArguments } from "./parser.js";
 
+const packageMetadata = createRequire(import.meta.url)("../../package.json") as
+  Readonly<{ version?: unknown }> | undefined;
+const cliVersion = readCliVersion(packageMetadata?.version);
+
+function readCliVersion(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value)
+  )
+    throw new Error("cli_package_version_invalid");
+  return value;
+}
+
 export async function runAtlasCli(
   argv: readonly string[],
   transport?: AtlasCliTransport,
   output: NodeJS.WritableStream = process.stdout,
   errorOutput: NodeJS.WritableStream = process.stderr,
 ): Promise<number> {
+  if (argv.length === 1 && (argv[0] === "--version" || argv[0] === "-V")) {
+    output.write(`${cliVersion}\n`);
+    return 0;
+  }
   let parsed;
   try {
     parsed = parseCliArguments(argv);

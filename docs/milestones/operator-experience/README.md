@@ -1,25 +1,27 @@
-# Atlas Operator Experience — planning index
+# Atlas Operator Experience — plan and implementation context
 
-Status: planning only
+Status: implementation reconciled through the mock power-control slice
 
-Inventory snapshot: 2026-08-08
+Inventory snapshot: 2026-08-09
 
-Source HEAD: `79235a215f8416eee179c0beb905fa5f3a6c7f9c`
+Implementation baseline: `ebd998d` plus the reviewed commits on the current
+branch
 
-Branch: `fix/administrative-lifecycle-state-contract`
+Branch: `agent/fix-administrative-profile-contract`
 
-This directory is the implementation context for the Atlas Operator Experience
-milestone. It deliberately contains no claim that a planned capability exists.
-The source inventory is authoritative over assumptions in the original
-milestone prompt.
+This directory preserves the original implementation plan and records its
+current source reconciliation. The source inventory and capability matrix are
+authoritative when an older planning statement conflicts with implemented
+code.
 
-## Scope of this planning pass
+## Current use
 
 - Inventory the current source and contracts.
 - Record divergences and architectural gates.
 - Split implementation into reviewable capability tracks.
 - Define expected tests, commits, release qualification and deployment gates.
-- Do not modify application code, runtime configuration, bundles or Atlas.
+- Distinguish completed capabilities from deferred work.
+- Keep runtime, release and Atlas deployment claims outside planning status.
 
 ## Documents
 
@@ -38,20 +40,12 @@ milestone prompt.
 - [Current capability matrix](../../capabilities.md)
 - [Proposed presentation-adapter ADR](../../adr/027-operator-cli-and-dashboard.md)
 
-## Mandatory sequencing
+## Remaining sequencing
 
-1. Reconcile the current authentication exception with the milestone security
-   contract and prove Cloudflare Access assertion delivery end to end.
-2. Accept ADR-027 and a separate local CLI authentication ADR before adding
+1. Accept a separate local CLI authentication ADR before adding
    mutating CLI commands.
-3. Introduce shared application/query contracts before CLI and dashboard UI
-   work.
-4. Deliver CLI and dashboard in vertical slices, updating the capability matrix
-   with each slice.
-5. Add service scheduling persistence and preview before building the weekly
-   editor.
-6. Add machine-plan read/preview APIs before any schedule mutation UI.
-7. Run full qualification, independent Candidate A/B builds and read-only host
+2. Keep new presentation work mapped to shared application/domain contracts.
+3. Run full qualification, independent Candidate A/B builds and read-only host
    qualification before deployment.
 
 ## Invariants
@@ -68,12 +62,12 @@ milestone prompt.
 - Human output is never parsed internally; machine consumers use typed/JSON
   output.
 
-## Definition of ready for implementation
+## Implementation reconciliation gate
 
-- The security divergence in the current HEAD has an accepted resolution.
-- CLI implementation language and local/remote authentication boundaries are
-  accepted in ADRs.
-- Proposed API additions have route IDs, operations, permissions, audit,
-  confirmation and gate policies.
-- Schedule persistence ownership is decided for services and machine policy.
-- Each vertical slice has a test plan and capability-matrix update.
+- Administrative shell, assets and APIs fail closed without a valid Access
+  assertion and authorized principal.
+- The catalog and published contract both contain 45 route descriptors.
+- CLI/dashboard remain presentation adapters.
+- Power browser tests cover disabled, loading, unauthorized, busy, malformed
+  response, confirmation and accepted-occurrence flows.
+- Physical power effects and the machine scheduler remain disabled.

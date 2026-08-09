@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/atlas-manager/atlas-manager/deployment/internal/administrativeconfiguration"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/installer"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
@@ -157,10 +159,31 @@ func New(paths Paths, deps Dependencies) Service {
 	}
 	if deps.Health == nil {
 		deps.Health = func(ctx context.Context, pid int) error {
-			return runtimeverification.Verify(ctx, pid, runtimeverification.NewDependencies())
+			dependencies := runtimeverification.NewDependencies()
+			if data, err := os.ReadFile(paths.ConfigEnvironment); err == nil && isAdministrativeProfile(data) {
+				if host, err := administrativeHost(data); err == nil {
+					dependencies.AdministrativeHost = host
+					return runtimeverification.VerifyAdministrative(ctx, pid, dependencies)
+				}
+			}
+			return runtimeverification.Verify(ctx, pid, dependencies)
 		}
 	}
 	return Service{paths: paths, deps: deps}
+}
+
+func administrativeHost(data []byte) (string, error) {
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "ADMINISTRATIVE_PUBLIC_ORIGIN=") {
+			origin := strings.TrimPrefix(line, "ADMINISTRATIVE_PUBLIC_ORIGIN=")
+			parsed, err := url.Parse(origin)
+			if err != nil || parsed.Host == "" {
+				return "", fmt.Errorf("administrative_public_origin_invalid")
+			}
+			return administrativeconfiguration.PublicOriginAuthority(origin)
+		}
+	}
+	return "", fmt.Errorf("administrative_public_origin_missing")
 }
 
 func (service Service) Run(ctx context.Context, action Action, confirmation string) (Report, error) {
@@ -302,12 +325,7 @@ func (service Service) validateConfiguration() error {
 		if err != nil {
 			return fmt.Errorf("configuration_absent")
 		}
-		var state struct {
-			SchemaVersion       int    `json:"schemaVersion"`
-			Profile             string `json:"profile"`
-			ConfigurationSHA256 string `json:"configurationSha256"`
-			Status              string `json:"status"`
-		}
+		var state administrativeconfiguration.State
 		if err := decodeStrict(stateData, &state); err != nil || state.SchemaVersion != 1 || state.Profile != "mock-administrative" || state.Status != "installed" || state.ConfigurationSHA256 != hashConfiguration(data) {
 			return fmt.Errorf("configuration_modified")
 		}
@@ -318,17 +336,29 @@ func (service Service) validateConfiguration() error {
 
 func isAdministrativeProfile(data []byte) bool {
 	value := string(data)
-	for _, required := range []string{"POWER_MANAGEMENT_BACKEND=mock\n", "MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n", "MACHINE_POWER_SCHEDULER_ENABLED=false\n", "ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\n", "ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY=/var/lib/atlas-manager-event-history\n", "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\n", "ADMINISTRATIVE_DASHBOARD_ENABLED=true\n", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n", "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n", "SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-service-availability/scheduler-cursor.json\n", "SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl\n", "SERVICE_AVAILABILITY_OVERRIDE_FILE=/var/lib/atlas-manager-service-availability/overrides.json\n", "SERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\n"} {
+	for _, required := range []string{"POWER_MANAGEMENT_BACKEND=mock\n", "MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n", "MACHINE_POWER_SCHEDULER_ENABLED=false\n", "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\n", "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\n", "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\n", "ADMINISTRATIVE_DASHBOARD_ENABLED=true\n", "ADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\n", "ADMINISTRATIVE_PUBLIC_ORIGIN=https://", "ADMINISTRATIVE_ROLE_ASSIGNMENTS="} {
 		if !strings.Contains(value, required) {
 			return false
 		}
 	}
-	for _, required := range []string{"ADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\n", "BACKUP_SCHEDULER_ENABLED=false\n", "REGISTERED_BACKUP_TARGETS_JSON="} {
+	if !hasLineValue(value, "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED", "true", "false") || !hasLineValue(value, "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED", "true", "false") {
+		return false
+	}
+	for _, required := range []string{"BACKUP_SCHEDULER_ENABLED=false\n", "REGISTERED_SERVICES_JSON=", "REGISTERED_BACKUP_TARGETS_JSON="} {
 		if !strings.Contains(value, required) {
 			return false
 		}
 	}
 	return true
+}
+
+func hasLineValue(environment, key string, values ...string) bool {
+	for _, value := range values {
+		if strings.Contains(environment, key+"="+value+"\n") {
+			return true
+		}
+	}
+	return false
 }
 
 func hashConfiguration(data []byte) string {

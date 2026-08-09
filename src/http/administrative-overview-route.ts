@@ -25,6 +25,10 @@ export interface AdministrativeOverviewRouteDependencies {
   ) => ProtectedAdministrativeOverview;
   readonly getServerHealth: Readonly<{ execute(): Promise<unknown> }>;
   readonly applicationVersion: string;
+  readonly administration?: Readonly<{
+    wakeAlarmEnabled: boolean;
+    shutdownEnabled: boolean;
+  }>;
 }
 
 export function registerAdministrativeOverviewRoute(
@@ -98,8 +102,8 @@ async function process(
       serviceAvailabilityEnabled: true,
       eventHistoryEnabled: true,
       overviewEnabled: true,
-      wakeAlarmEnabled: false,
-      shutdownEnabled: false,
+      wakeAlarmEnabled: dependencies.administration?.wakeAlarmEnabled ?? false,
+      shutdownEnabled: dependencies.administration?.shutdownEnabled ?? false,
     },
   });
 }

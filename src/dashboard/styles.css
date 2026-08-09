@@ -80,6 +80,10 @@ button:disabled {
   cursor: wait;
   opacity: 0.6;
 }
+.destructive-action {
+  border-color: #f87171;
+  color: #fecaca;
+}
 section[hidden] {
   display: none;
 }

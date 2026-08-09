@@ -401,8 +401,46 @@ describe("administrative control-plane routes", () => {
       "default-src 'none'",
     );
     expect(dashboard.text).toContain("Power safety");
+    expect(dashboard.text).toContain("power-controls");
     const asset = await request(app).get("/assets/styles.css");
     expect(asset.status).toBe(200);
+    const appAsset = await request(app).get("/assets/app.js");
+    expect(appAsset.status).toBe(200);
+    expect(appAsset.headers["content-type"]).toContain(
+      "application/javascript",
+    );
+    expect(appAsset.text).toContain("PowerControlsController");
+  });
+
+  it("reports enabled mock power controls from the administrative profile", async () => {
+    const app = createApp({
+      ...base(),
+      administrativeOverview: {
+        admission: new FixedAdministrativeRequestAdmission(base().clock),
+        createProtectedAdministration: vi.fn(() => ({
+          getOperationsOverview: {
+            execute: vi.fn(async () => ({ powerSafety: { backend: "mock" } })),
+          },
+        })),
+        getServerHealth: base().getServerHealth,
+        applicationVersion: "1.0.0",
+        administration: { wakeAlarmEnabled: true, shutdownEnabled: true },
+      },
+    });
+
+    const response = await request(app).get("/admin/overview");
+
+    expect(response.status).toBe(200);
+    const body = response.body as {
+      administration: {
+        wakeAlarmEnabled: boolean;
+        shutdownEnabled: boolean;
+      };
+    };
+    expect(body.administration).toMatchObject({
+      wakeAlarmEnabled: true,
+      shutdownEnabled: true,
+    });
   });
 
   it("rejects cross-site and malformed Fetch Metadata before route execution", async () => {

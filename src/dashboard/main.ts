@@ -1,7 +1,12 @@
 import { initializeDashboardNavigation } from "./navigation.js";
 import {
+  PowerControlsController,
+  PowerControlsRequestError,
+} from "./power-controls.js";
+import {
   renderMachinePlan as renderMachinePlanView,
   renderMachineSchedule as renderMachineScheduleView,
+  renderMachinePreview as renderMachinePreviewView,
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
@@ -16,13 +21,14 @@ const backups = document.querySelector<HTMLElement>("#backups");
 const infrastructure = document.querySelector<HTMLElement>(
   "#infrastructure-placeholder",
 );
+const powerControls = document.querySelector<HTMLElement>("#power-controls");
 
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
     credentials: "same-origin",
     redirect: "error",
   });
-  if (!response.ok) throw new Error("request_failed");
+  if (!response.ok) throw powerControlsHttpError(response.status);
   return response.json() as Promise<unknown>;
 }
 
@@ -47,6 +53,7 @@ function renderOverview(value: unknown): void {
   const powerSafety = readRecord(record.powerSafety);
   const machinePlan = readRecord(record.machinePlan);
   const backups = readRecord(record.backups);
+  const administration = readRecord(record.administration);
   appendOverviewCard(
     grid,
     "Services",
@@ -80,6 +87,12 @@ function renderOverview(value: unknown): void {
   const metadata = document.createElement("p");
   metadata.textContent = `Version: ${displayValue(record.applicationVersion, "unavailable")} · source: ${displayValue(record.sourceCommit, "unavailable")}`;
   root.append(grid, metadata);
+  if (powerControls !== null)
+    void powerControlsController.render(
+      powerControls,
+      administration,
+      powerSafety,
+    );
 }
 
 function appendOverviewCard(
@@ -292,6 +305,13 @@ function renderMachinePlan(value: unknown): void {
       ? (value as { machineSchedule?: unknown }).machineSchedule
       : undefined;
   renderMachineScheduleView(document, schedule, machineSchedule);
+  let preview = section.querySelector<HTMLElement>("#machine-preview");
+  if (preview === null) {
+    preview = document.createElement("div");
+    preview.id = "machine-preview";
+    section.append(preview);
+  }
+  renderMachinePreviewView(document, preview, value);
 }
 
 function renderAvailability(value: unknown): void {
@@ -499,6 +519,48 @@ function appendBackupActionForm(
 }
 
 const status = document.querySelector<HTMLElement>("#status");
+
+function powerControlsHttpError(statusCode: number): PowerControlsRequestError {
+  if (statusCode === 401 || statusCode === 403)
+    return new PowerControlsRequestError("unauthorized");
+  if (statusCode === 409 || statusCode === 429)
+    return new PowerControlsRequestError("busy");
+  return new PowerControlsRequestError("failed");
+}
+
+async function mutatePowerState(
+  path: string,
+  method: "PUT" | "DELETE" | "POST",
+  body: unknown,
+): Promise<unknown> {
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+    redirect: "error",
+  });
+  if (!response.ok) throw powerControlsHttpError(response.status);
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new PowerControlsRequestError("invalid_response");
+  }
+}
+
+const powerControlsController = new PowerControlsController({
+  document,
+  transport: { read: readJson, mutate: mutatePowerState },
+  refresh,
+  setStatus: (message) => {
+    if (status !== null) status.textContent = message;
+  },
+});
+
 async function refresh(): Promise<void> {
   const [
     overview,

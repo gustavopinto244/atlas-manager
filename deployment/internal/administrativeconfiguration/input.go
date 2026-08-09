@@ -50,6 +50,8 @@ type Input struct {
 	CloudflareTeam         string                 `json:"cloudflareTeamName"`
 	CloudflareAudience     string                 `json:"cloudflareAudience"`
 	PublicOrigin           string                 `json:"publicOrigin"`
+	WakeAlarmHTTPEnabled   bool                   `json:"wakeAlarmHttpEnabled"`
+	ShutdownHTTPEnabled    bool                   `json:"shutdownHttpEnabled"`
 	RoleAssignments        []RoleAssignment       `json:"roleAssignments"`
 	RegisteredServices     json.RawMessage        `json:"registeredServices"`
 	BackupSchedulerEnabled bool                   `json:"backupSchedulerEnabled"`
@@ -190,6 +192,19 @@ func validPublicOrigin(value string) bool {
 		return false
 	}
 	return hostname == strings.ToLower(hostname) && strings.TrimSpace(value) == value
+}
+
+// PublicOriginAuthority returns the authority used by internal administrative
+// probes while keeping their socket destination on loopback.
+func PublicOriginAuthority(origin string) (string, error) {
+	if !validPublicOrigin(origin) {
+		return "", fmt.Errorf("administrative_public_origin_invalid")
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return "", fmt.Errorf("administrative_public_origin_invalid")
+	}
+	return parsed.Host, nil
 }
 
 func validBackupTarget(data []byte) (string, string, bool) {
@@ -381,6 +396,10 @@ func environmentWithoutPublicOrigin(input Input) ([]byte, error) {
 	}
 	services := bytes.TrimSpace(input.RegisteredServices)
 	schedulerFiles := "SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-service-availability/scheduler-cursor.json\nSERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl\nSERVICE_AVAILABILITY_OVERRIDE_FILE=/var/lib/atlas-manager-service-availability/overrides.json\n"
+	powerFiles := ""
+	if input.ShutdownHTTPEnabled {
+		powerFiles = "MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-machine-power/occurrence-claims.jsonl\nMACHINE_POWER_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-machine-power/scheduler-cursor.json\n"
+	}
 	if input.BackupSchedulerEnabled {
 		schedulerFiles += "BACKUP_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-backups/scheduler-cursor.json\nBACKUP_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-backups/occurrence-claims.jsonl\n"
 	}
@@ -398,9 +417,24 @@ func environmentWithoutPublicOrigin(input Input) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("administrative_input_invalid")
 		}
-		return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nSERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\nADMINISTRATIVE_EVENT_HISTORY_DIRECTORY=/var/lib/atlas-manager-event-history\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS=%d\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES=%d\nADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY=%s\nADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED=%t\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.EventHistoryOperations.Segment.MaxEvents, input.EventHistoryOperations.Segment.MaxBytes, bytes.TrimSpace(retention), input.EventHistoryOperations.Retention.AutomaticPruneEnabled, input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
+		environment := []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nSERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\nADMINISTRATIVE_EVENT_HISTORY_DIRECTORY=/var/lib/atlas-manager-event-history\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS=%d\nADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES=%d\nADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY=%s\nADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED=%t\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%s%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.EventHistoryOperations.Segment.MaxEvents, input.EventHistoryOperations.Segment.MaxBytes, bytes.TrimSpace(retention), input.EventHistoryOperations.Retention.AutomaticPruneEnabled, input.BackupSchedulerEnabled, schedulerFiles, powerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets)))
+		return applyPowerSurfaceFlags(environment, input), nil
 	}
-	return []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nSERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\nADMINISTRATIVE_EVENT_HISTORY_FILE=/var/lib/atlas-manager/admin-events.jsonl\nBACKUP_RUN_HISTORY_FILE=/var/lib/atlas-manager-backups/runs.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.BackupSchedulerEnabled, schedulerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets))), nil
+	environment := []byte(fmt.Sprintf("HOST=127.0.0.1\nPORT=3000\nLOG_LEVEL=info\nPOWER_MANAGEMENT_BACKEND=mock\nMACHINE_POWER_EFFECTS_ACTIVATION=disabled\nMACHINE_POWER_SCHEDULER_ENABLED=false\nMACHINE_OPERATING_POLICY={\"mode\":\"always_on\"}\nADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED=true\nADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED=true\nADMINISTRATIVE_OVERVIEW_HTTP_ENABLED=true\nADMINISTRATIVE_DASHBOARD_ENABLED=true\nADMINISTRATIVE_BACKUP_HTTP_ENABLED=true\nADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\nADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\nSERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\nADMINISTRATIVE_EVENT_HISTORY_FILE=/var/lib/atlas-manager/admin-events.jsonl\nBACKUP_SCHEDULER_ENABLED=%t\n%s%sCLOUDFLARE_ACCESS_TEAM_NAME=%s\nCLOUDFLARE_ACCESS_AUDIENCE=%s\nADMINISTRATIVE_ROLE_ASSIGNMENTS=%s\nREGISTERED_SERVICES_JSON=%s\nREGISTERED_BACKUP_TARGETS_JSON=%s\n", input.BackupSchedulerEnabled, schedulerFiles, powerFiles, input.CloudflareTeam, input.CloudflareAudience, canonical, services, bytes.TrimSpace(input.BackupTargets)))
+	return applyPowerSurfaceFlags(environment, input), nil
+}
+
+func applyPowerSurfaceFlags(environment []byte, input Input) []byte {
+	wake := []byte("ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n")
+	if input.WakeAlarmHTTPEnabled {
+		wake = []byte("ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=true\n")
+	}
+	shutdown := []byte("ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n")
+	if input.ShutdownHTTPEnabled {
+		shutdown = []byte("ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=true\n")
+	}
+	environment = bytes.Replace(environment, []byte("ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n"), wake, 1)
+	return bytes.Replace(environment, []byte("ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n"), shutdown, 1)
 }
 
 func addPublicOrigin(environment []byte, origin string) []byte {
