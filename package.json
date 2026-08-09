@@ -1,6 +1,6 @@
 {
   "name": "atlas-manager",
-  "version": "1.0.0-rc.8",
+  "version": "1.0.0-rc.9",
   "description": "Self-hosted management and automation platform for the Atlas homelab server.",
   "private": true,
   "type": "module",

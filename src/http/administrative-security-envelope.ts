@@ -59,11 +59,18 @@ function validateFetchMetadata(request: Request): void {
         "Administrative request rejected",
       );
   }
+  const cloudflareAccessDashboardReturn =
+    site === "cross-site" &&
+    request.method === "GET" &&
+    request.path === "/" &&
+    mode === "navigate" &&
+    destination === "document";
   if (
     site !== undefined &&
     site !== "same-origin" &&
     site !== "same-site" &&
-    site !== "none"
+    site !== "none" &&
+    !cloudflareAccessDashboardReturn
   )
     throw new HttpError(
       403,
