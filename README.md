@@ -120,6 +120,7 @@ changing administrative features or registered services.
 - [Service lifecycle](docs/operations/atlas-manager-service-lifecycle.md)
 - [Operator CLI](docs/cli.md)
 - [Operator runbook](docs/operator-runbook.md)
+- [Installation and reinstallation](docs/installation.md)
 - [Scheduling](docs/scheduling.md)
 - [Dashboard](docs/dashboard.md)
 - [Capability matrix](docs/capabilities.md)
