@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/atlas-manager/atlas-manager/deployment/internal/administrativeconfiguration"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/installer"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
@@ -302,12 +303,7 @@ func (service Service) validateConfiguration() error {
 		if err != nil {
 			return fmt.Errorf("configuration_absent")
 		}
-		var state struct {
-			SchemaVersion       int    `json:"schemaVersion"`
-			Profile             string `json:"profile"`
-			ConfigurationSHA256 string `json:"configurationSha256"`
-			Status              string `json:"status"`
-		}
+		var state administrativeconfiguration.State
 		if err := decodeStrict(stateData, &state); err != nil || state.SchemaVersion != 1 || state.Profile != "mock-administrative" || state.Status != "installed" || state.ConfigurationSHA256 != hashConfiguration(data) {
 			return fmt.Errorf("configuration_modified")
 		}

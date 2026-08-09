@@ -2,6 +2,7 @@ package servicelifecycle
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -26,5 +27,43 @@ func TestAdministrativeProfileMarkersAcceptCurrentAndLegacyOptionalSurfaces(t *t
 	legacyOptional = strings.ReplaceAll(legacyOptional, "SERVICE_AVAILABILITY_OVERRIDE_FILE=/var/lib/atlas-manager-service-availability/overrides.json\n", "")
 	if !isAdministrativeProfile([]byte(legacyOptional)) {
 		t.Fatal("legacy optional administrative profile was not recognized")
+	}
+}
+
+func TestValidateConfigurationAcceptsPersistedAdministrativeStateContract(t *testing.T) {
+	var input administrativeconfiguration.Input
+	if err := json.Unmarshal(administrativeconfiguration.ExampleInputBytes(), &input); err != nil {
+		t.Fatal(err)
+	}
+	environment, err := administrativeconfiguration.Environment(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	environmentPath := root + "/atlas-manager.env"
+	statePath := root + "/state.json"
+	if err := os.WriteFile(environmentPath, environment, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	state, err := json.Marshal(administrativeconfiguration.State{
+		SchemaVersion:       1,
+		Profile:             "mock-administrative",
+		ConfigurationSHA256: hashConfiguration(environment),
+		ApplicationVersion:  "1.0.0-rc.7",
+		SourceCommit:        strings.Repeat("a", 40),
+		Status:              "installed",
+		CurrentGeneration:   1,
+		PreviousGeneration:  0,
+		SourceInputSHA256:   strings.Repeat("b", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, state, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := Service{paths: Paths{ConfigEnvironment: environmentPath, AdministrativeConfigState: statePath}}
+	if err := service.validateConfiguration(); err != nil {
+		t.Fatalf("persisted administrative state should be accepted: %v", err)
 	}
 }
