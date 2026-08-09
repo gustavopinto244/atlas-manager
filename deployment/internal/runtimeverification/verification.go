@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
@@ -40,13 +42,15 @@ var administrativeRoutes = []administrativeRoute{
 }
 
 type Dependencies struct {
-	BaseURL            string
-	AdministrativeHost string
-	HTTPClient         *http.Client
-	CheckIdentity      func(int) error
-	Process            func(int) (runtimeidentity.Process, error)
-	PasswdPath         string
-	GroupPath          string
+	BaseURL                        string
+	AdministrativeHost             string
+	AdministrativeWakeAlarmEnabled bool
+	AdministrativeShutdownEnabled  bool
+	HTTPClient                     *http.Client
+	CheckIdentity                  func(int) error
+	Process                        func(int) (runtimeidentity.Process, error)
+	PasswdPath                     string
+	GroupPath                      string
 }
 
 func NewDependencies() Dependencies {
@@ -107,7 +111,8 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 		return fmt.Errorf("administrative_route_policy_invalid")
 	}
 	for _, route := range administrativeRoutes[1:] {
-		if err := verifyAbsentWithHost(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route.method, route.path); err != nil {
+		enabled := (strings.HasPrefix(route.path, "/admin/power/wake-alarm") && dependencies.AdministrativeWakeAlarmEnabled) || (strings.HasPrefix(route.path, "/admin/power/shutdown/") && dependencies.AdministrativeShutdownEnabled)
+		if err := verifyAdministrativeRoute(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route.method, route.path, enabled); err != nil {
 			return fmt.Errorf("administrative_route_policy_invalid")
 		}
 	}
@@ -117,6 +122,13 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 	return nil
 }
 
+func verifyAdministrativeRoute(ctx context.Context, client *http.Client, baseURL, host, method, path string, enabled bool) error {
+	if enabled {
+		return verifyProtected(ctx, client, baseURL, host, method, path)
+	}
+	return verifyAbsentWithHost(ctx, client, baseURL, host, method, path)
+}
+
 func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {
 	var last error
 	for attempt := 0; attempt < 20; attempt++ {
@@ -124,7 +136,7 @@ func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string
 		if last == nil {
 			return nil
 		}
-		if !strings.HasPrefix(last.Error(), "health_request_failed:") {
+		if !isRetryableHealthFailure(last) {
 			return last
 		}
 		timer := time.NewTimer(250 * time.Millisecond)
@@ -136,6 +148,17 @@ func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string
 		}
 	}
 	return last
+}
+
+func isRetryableHealthFailure(err error) bool {
+	if err == nil || !strings.HasPrefix(err.Error(), "health_request_failed:") {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connection refused") || strings.Contains(message, "connection reset") || strings.Contains(message, "network is unreachable") || strings.Contains(message, "no route to host")
 }
 
 func verifyHealthOnce(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {

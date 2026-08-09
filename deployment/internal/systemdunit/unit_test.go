@@ -9,7 +9,7 @@ func TestContentMatchesDisabledRuntimeContract(t *testing.T) {
 	if !Validate(Content) {
 		t.Fatal("unit does not satisfy the reviewed contract")
 	}
-	for _, required := range []string{"StateDirectoryMode=0700", "RuntimeDirectoryMode=0700", "/var/lib/atlas-manager-service-availability"} {
+	for _, required := range []string{"StateDirectoryMode=0700", "RuntimeDirectoryMode=0700", "/var/lib/atlas-manager-service-availability", "/var/lib/atlas-manager-machine-power"} {
 		if !strings.Contains(Content, required) {
 			t.Fatalf("unit must declare private managed state: %s", required)
 		}
