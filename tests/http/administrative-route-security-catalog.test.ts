@@ -11,6 +11,25 @@ describe("administrative route security catalog registration", () => {
     expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(45);
   });
 
+  it("records the implemented power endpoint body limits", () => {
+    const wake = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
+      (descriptor) => descriptor.routeId === "power.wake.update",
+    );
+    const shutdown = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
+      (descriptor) => descriptor.routeId === "power.shutdown.prepare",
+    );
+    const wakeDelete = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
+      (descriptor) => descriptor.routeId === "power.wake.delete",
+    );
+
+    expect(wake?.requestPolicy.maxBodyBytes).toBe(512);
+    expect(wakeDelete?.requestPolicy).toMatchObject({
+      body: "none",
+      maxBodyBytes: 0,
+    });
+    expect(shutdown?.requestPolicy.maxBodyBytes).toBe(1_024);
+  });
+
   it("records the descriptor at the point the Express route is registered", () => {
     const app = express();
     registerAdministrativeRoute(

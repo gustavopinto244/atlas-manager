@@ -152,7 +152,7 @@ describe("wake-alarm methods", () => {
 });
 
 describe("wake-alarm PUT validation", () => {
-  it("rejects malformed bodies, unsupported media, and non-future schedules", async () => {
+  it("rejects malformed, duplicate-key, unsupported-media, and non-future requests", async () => {
     const fixture = createFixture();
     const malformed = await request(fixture.app)
       .put(ADMINISTRATIVE_WAKE_ALARM_ROUTE)
@@ -162,6 +162,10 @@ describe("wake-alarm PUT validation", () => {
       .put(ADMINISTRATIVE_WAKE_ALARM_ROUTE)
       .set("Content-Type", "text/plain")
       .send("{}");
+    const duplicate = await request(fixture.app)
+      .put(ADMINISTRATIVE_WAKE_ALARM_ROUTE)
+      .set("Content-Type", "application/json")
+      .send(`{"scheduledFor":"${LATER}","scheduledFor":"${LATER}"}`);
     const pastFixture = createFixture({
       scheduleWakeAlarm: {
         execute: vi.fn(async () => {
@@ -178,6 +182,7 @@ describe("wake-alarm PUT validation", () => {
 
     expect(errorCode(malformed)).toBe("invalid_wake_alarm_request");
     expect(errorCode(media)).toBe("unsupported_media_type");
+    expect(errorCode(duplicate)).toBe("invalid_wake_alarm_request");
     expect(past.status).toBe(422);
     expect(errorCode(past)).toBe("wake_alarm_schedule_not_future");
   });

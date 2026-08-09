@@ -2,8 +2,10 @@ package runtimeverification
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
@@ -40,18 +43,21 @@ var administrativeRoutes = []administrativeRoute{
 }
 
 type Dependencies struct {
-	BaseURL            string
-	AdministrativeHost string
-	HTTPClient         *http.Client
-	CheckIdentity      func(int) error
-	Process            func(int) (runtimeidentity.Process, error)
-	PasswdPath         string
-	GroupPath          string
+	BaseURL                        string
+	AdministrativeHost             string
+	AdministrativeWakeAlarmEnabled bool
+	AdministrativeShutdownEnabled  bool
+	HTTPClient                     *http.Client
+	CheckIdentity                  func(int) error
+	Process                        func(int) (runtimeidentity.Process, error)
+	PasswdPath                     string
+	GroupPath                      string
+	Now                            func() time.Time
 }
 
 func NewDependencies() Dependencies {
 	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: RequestTimeout}).DialContext, MaxResponseHeaderBytes: MaxHeaderBytes}
-	return Dependencies{BaseURL: LoopbackURL, HTTPClient: &http.Client{Transport: transport, Timeout: RequestTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, Process: readProcessStatus, PasswdPath: "/etc/passwd", GroupPath: "/etc/group"}
+	return Dependencies{BaseURL: LoopbackURL, HTTPClient: &http.Client{Transport: transport, Timeout: RequestTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, Process: readProcessStatus, PasswdPath: "/etc/passwd", GroupPath: "/etc/group", Now: time.Now}
 }
 
 func Verify(ctx context.Context, pid int, dependencies Dependencies) error {
@@ -97,6 +103,9 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 	if dependencies.AdministrativeHost == "" {
 		return fmt.Errorf("administrative_host_missing")
 	}
+	if dependencies.Now == nil {
+		dependencies.Now = time.Now
+	}
 	if err := verifyHealth(ctx, dependencies.HTTPClient, dependencies.BaseURL, HealthLivePath, true); err != nil {
 		return fmt.Errorf("service_health_failed")
 	}
@@ -107,7 +116,8 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 		return fmt.Errorf("administrative_route_policy_invalid")
 	}
 	for _, route := range administrativeRoutes[1:] {
-		if err := verifyAbsentWithHost(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route.method, route.path); err != nil {
+		enabled := (strings.HasPrefix(route.path, "/admin/power/wake-alarm") && dependencies.AdministrativeWakeAlarmEnabled) || (strings.HasPrefix(route.path, "/admin/power/shutdown/") && dependencies.AdministrativeShutdownEnabled)
+		if err := verifyAdministrativeRoute(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route, enabled, dependencies.Now()); err != nil {
 			return fmt.Errorf("administrative_route_policy_invalid")
 		}
 	}
@@ -117,6 +127,32 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 	return nil
 }
 
+func verifyAdministrativeRoute(ctx context.Context, client *http.Client, baseURL, host string, route administrativeRoute, enabled bool, now time.Time) error {
+	if enabled {
+		body := administrativeProbeBody(route, now)
+		return verifyProtectedWithBody(ctx, client, baseURL, host, route.method, route.path, body)
+	}
+	return verifyAbsentWithHost(ctx, client, baseURL, host, route.method, route.path)
+}
+
+func administrativeProbeBody(route administrativeRoute, now time.Time) []byte {
+	canonical := func(value time.Time) string {
+		return value.UTC().Format("2006-01-02T15:04:05.000Z")
+	}
+	scheduledFor := canonical(now.Add(time.Hour))
+	wakeScheduledFor := canonical(now.Add(2 * time.Hour))
+	switch {
+	case route.method == http.MethodPut && route.path == "/admin/power/wake-alarm":
+		return []byte(fmt.Sprintf(`{"scheduledFor":%q}`, scheduledFor))
+	case route.method == http.MethodPost && route.path == "/admin/power/shutdown/preparations":
+		return []byte(fmt.Sprintf(`{"operation":"shutdown","scheduledFor":%q,"wakeScheduledFor":%q,"confirmation":"confirm_shutdown_preparation"}`, scheduledFor, wakeScheduledFor))
+	case route.method == http.MethodPost && route.path == "/admin/power/shutdown/executions":
+		return []byte(fmt.Sprintf(`{"operation":"shutdown","scheduledFor":%q,"wakeScheduledFor":%q,"confirmation":"confirm_shutdown_execution"}`, scheduledFor, wakeScheduledFor))
+	default:
+		return nil
+	}
+}
+
 func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {
 	var last error
 	for attempt := 0; attempt < 20; attempt++ {
@@ -124,8 +160,11 @@ func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string
 		if last == nil {
 			return nil
 		}
-		if !strings.HasPrefix(last.Error(), "health_request_failed:") {
+		if !isRetryableHealthFailure(last) {
 			return last
+		}
+		if attempt == 19 {
+			break
 		}
 		timer := time.NewTimer(250 * time.Millisecond)
 		select {
@@ -136,6 +175,17 @@ func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string
 		}
 	}
 	return last
+}
+
+func isRetryableHealthFailure(err error) bool {
+	if err == nil || !strings.HasPrefix(err.Error(), "health_request_failed:") {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connection refused") || strings.Contains(message, "connection reset") || strings.Contains(message, "network is unreachable") || strings.Contains(message, "no route to host")
 }
 
 func verifyHealthOnce(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {
@@ -151,12 +201,12 @@ func verifyHealthOnce(ctx context.Context, client *http.Client, baseURL, path st
 	if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
 		return fmt.Errorf("health_response_invalid")
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
-	if err != nil || len(body) > MaxResponseBytes {
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
+	if err != nil || len(responseBody) > MaxResponseBytes {
 		return fmt.Errorf("health_response_invalid")
 	}
 	var value map[string]any
-	if json.Unmarshal(body, &value) != nil || value == nil {
+	if json.Unmarshal(responseBody, &value) != nil || value == nil {
 		return fmt.Errorf("health_response_invalid")
 	}
 	if live {
@@ -198,18 +248,25 @@ func verifyAbsentWithHost(ctx context.Context, client *http.Client, baseURL, hos
 }
 
 func verifyProtected(ctx context.Context, client *http.Client, baseURL, host, method, path string) error {
-	request, err := http.NewRequestWithContext(ctx, method, baseURL+path, nil)
+	return verifyProtectedWithBody(ctx, client, baseURL, host, method, path, nil)
+}
+
+func verifyProtectedWithBody(ctx context.Context, client *http.Client, baseURL, host, method, path string, body []byte) error {
+	request, err := http.NewRequestWithContext(ctx, method, baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	request.Host = host
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
-	if err != nil || len(body) > MaxResponseBytes {
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
+	if err != nil || len(responseBody) > MaxResponseBytes {
 		return fmt.Errorf("administrative_protection_invalid")
 	}
 	if response.StatusCode != http.StatusUnauthorized && response.StatusCode != http.StatusForbidden {
@@ -220,7 +277,7 @@ func verifyProtected(ctx context.Context, client *http.Client, baseURL, host, me
 			Code string `json:"code"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(body, &value) != nil || (value.Error.Code != "administrative_authentication_required" && value.Error.Code != "administrative_authorization_denied") {
+	if json.Unmarshal(responseBody, &value) != nil || (value.Error.Code != "administrative_authentication_required" && value.Error.Code != "administrative_authorization_denied") {
 		return fmt.Errorf("administrative_protection_invalid")
 	}
 	return nil

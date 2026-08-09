@@ -78,6 +78,32 @@ describe("mock administrative runtime profile", () => {
     expect(environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED).toBe("true");
   });
 
+  it.each([
+    ["wakeAlarmHttpEnabled", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED"],
+    ["shutdownHttpEnabled", "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED"],
+  ])(
+    "accepts the independent optional %s field",
+    (inputKey, environmentKey) => {
+      const value = JSON.parse(input) as Record<string, unknown>;
+      value[inputKey] = true;
+
+      const environment = createMockAdministrativeEnvironment(
+        parseMockAdministrativeInput(JSON.stringify(value)),
+      );
+
+      expect(environment[environmentKey]).toBe("true");
+    },
+  );
+
+  it("rejects an unknown top-level input field", () => {
+    const value = JSON.parse(input) as Record<string, unknown>;
+    value.unrecognized = true;
+
+    expect(() => parseMockAdministrativeInput(JSON.stringify(value))).toThrow(
+      "administrative_input_invalid",
+    );
+  });
+
   it.each(["unknown", "administrator", "service_operator"])(
     "keeps role validation bounded for %s",
     (role) => {

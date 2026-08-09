@@ -27,9 +27,11 @@ export function renderMachinePlan(
   const nextSummary = document.createElement("p");
   nextSummary.setAttribute("role", "status");
   nextSummary.textContent =
-    next === null
-      ? "Next transition: not planned"
-      : `Next transition: ${next.label} at ${next.scheduledFor}`;
+    next === undefined
+      ? "Next transition: unavailable"
+      : next === null
+        ? "Next transition: not planned"
+        : `Next transition: ${next.label} at ${next.scheduledFor}`;
   parent.append(nextSummary);
 
   const table = document.createElement("table");
@@ -159,10 +161,13 @@ function appendTransition(
 
 function findNextTransition(
   plan: Readonly<{
+    evaluatedAt: string;
     nextShutdown: Transition;
     nextWake: Transition;
   }>,
-): Readonly<{ label: string; scheduledFor: string }> | null {
+): Readonly<{ label: string; scheduledFor: string }> | null | undefined {
+  const evaluatedAt = Date.parse(plan.evaluatedAt);
+  if (!Number.isFinite(evaluatedAt)) return undefined;
   const candidates = [
     { label: "shutdown", transition: plan.nextShutdown },
     { label: "wake", transition: plan.nextWake },
@@ -173,7 +178,9 @@ function findNextTransition(
       Number.isNaN(Date.parse(scheduledFor))
     )
       return [];
-    return [{ label, scheduledFor, timestamp: Date.parse(scheduledFor) }];
+    const timestamp = Date.parse(scheduledFor);
+    if (timestamp <= evaluatedAt) return [];
+    return [{ label, scheduledFor, timestamp }];
   });
   candidates.sort((left, right) => left.timestamp - right.timestamp);
   const next = candidates[0];

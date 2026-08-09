@@ -34,8 +34,19 @@ export function parseMockAdministrativeInput(
   const parsed = parseStrictJson(value);
   if (
     !isRecord(parsed) ||
-    (Reflect.ownKeys(parsed).length !== 9 &&
-      Reflect.ownKeys(parsed).length !== 11) ||
+    !hasOnlyKeys(parsed, [
+      "schemaVersion",
+      "cloudflareTeamName",
+      "cloudflareAudience",
+      "publicOrigin",
+      "wakeAlarmHttpEnabled",
+      "shutdownHttpEnabled",
+      "roleAssignments",
+      "registeredServices",
+      "backupSchedulerEnabled",
+      "backupTargets",
+      "eventHistoryOperations",
+    ]) ||
     parsed.schemaVersion !== 1 ||
     typeof parsed.cloudflareTeamName !== "string" ||
     typeof parsed.cloudflareAudience !== "string" ||
@@ -196,4 +207,13 @@ export function createMockAdministrativeEnvironment(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
+  return Reflect.ownKeys(value).every(
+    (key) => typeof key === "string" && allowed.includes(key),
+  );
 }
