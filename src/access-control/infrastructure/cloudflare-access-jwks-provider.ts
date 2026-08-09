@@ -12,6 +12,7 @@ const JWKS_PATH = "/cdn-cgi/access/certs";
 const MAX_KID_LENGTH = 128;
 const KID_PATTERN = /^[\x21-\x7e]+$/u;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;
+const ALLOWED_JWKS_FIELDS = new Set(["keys", "public_cert", "public_certs"]);
 const ALLOWED_KEY_FIELDS = new Set([
   "alg",
   "e",
@@ -256,7 +257,12 @@ async function parseJwks(body: string): Promise<CachedKeys> {
   } catch {
     throw new CloudflareAccessJwksInvalidError();
   }
-  if (!isRecord(parsed) || Reflect.ownKeys(parsed).length !== 1)
+  if (
+    !isRecord(parsed) ||
+    Reflect.ownKeys(parsed).some(
+      (key) => typeof key !== "string" || !ALLOWED_JWKS_FIELDS.has(key),
+    )
+  )
     throw new CloudflareAccessJwksInvalidError();
   const keys = parsed["keys"];
   if (!Array.isArray(keys) || keys.length < 1 || keys.length > MAX_KEYS)

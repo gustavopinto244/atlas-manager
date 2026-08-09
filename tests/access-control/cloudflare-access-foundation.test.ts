@@ -152,6 +152,28 @@ describe("Cloudflare Access JWT verification", () => {
     });
   });
 
+  it("accepts Cloudflare JWKS metadata alongside signing keys", async () => {
+    const fixture = await createFixture();
+    const fetch = createJwksFetch(fixture.publicJwk, {
+      public_cert: "certificate",
+      public_certs: ["certificate"],
+    });
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("ready");
+  });
+
+  it("rejects unknown Cloudflare JWKS envelope fields", async () => {
+    const fixture = await createFixture();
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch: createJwksFetch(fixture.publicJwk, { unexpected: true }),
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("unavailable");
+  });
+
   it("accepts a signed Cloudflare application token without an optional typ header", async () => {
     const fixture = await createFixture();
     const verifier = new CloudflareAccessJwtVerifierAdapter(
@@ -449,7 +471,10 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
   };
 }
 
-function createJwksFetch(publicJwk: Record<string, unknown>) {
+function createJwksFetch(
+  publicJwk: Record<string, unknown>,
+  metadata: Record<string, unknown> = {},
+) {
   const calls: string[] = [];
   let lastInit: unknown;
   const fetch: CloudflareAccessJwksFetch & {
@@ -459,7 +484,7 @@ function createJwksFetch(publicJwk: Record<string, unknown>) {
     async (input: string, init: Readonly<Record<string, unknown>>) => {
       calls.push(input);
       lastInit = init;
-      return new Response(JSON.stringify({ keys: [publicJwk] }), {
+      return new Response(JSON.stringify({ keys: [publicJwk], ...metadata }), {
         status: 200,
       });
     },
