@@ -54,6 +54,11 @@ tests use fake transports only.
 ## Consequences
 
 - Read-only CLI progress can continue independently of mutation identity.
+- A real Cloudflare Access JWT may be supplied through the protected process
+  environment variable `ATLAS_CLOUDFLARE_ACCESS_JWT` for HTTP transport. The
+  CLI only forwards this externally issued assertion; it never creates or
+  validates a substitute identity and never accepts the value in URLs or
+  arguments.
 - Operators must authenticate through the existing administrative boundary for
   protected reads.
 - Service start/stop/restart and schedule mutations remain explicitly
@@ -65,8 +70,9 @@ tests use fake transports only.
 
 - Treating the Unix username as the administrative principal: it loses the
   application identity and audit contract.
-- Forging Cloudflare headers from environment variables: it bypasses the
-  assertion verifier and makes credential handling unsafe.
+- Inventing Cloudflare assertions in environment variables: it bypasses the
+  assertion verifier. Forwarding a real externally issued assertion is allowed
+  only as the explicit transport described above.
 - Calling PM2/Docker/systemd directly: it bypasses domain orchestration,
   authorization, audit and concurrency gates.
 - Embedding sudo passwords in CLI arguments or files: it exposes secrets to

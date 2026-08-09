@@ -128,6 +128,28 @@ describe("Atlas HTTP CLI transport", () => {
     );
   });
 
+  it("forwards only a supplied real Access assertion to protected requests", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { services: [] }));
+    const transport = createAtlasHttpTransport({
+      administrativeAccessToken: "real-token-from-access",
+      fetchImplementation,
+    });
+
+    await transport.execute("services list", [], new AbortController().signal);
+
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:3000/admin/services"),
+      expect.objectContaining({
+        headers: {
+          accept: "application/json",
+          "Cf-Access-Jwt-Assertion": "real-token-from-access",
+        },
+      }),
+    );
+  });
+
   it("projects backup status from the protected overview", async () => {
     const fetchImplementation = vi
       .fn<typeof fetch>()

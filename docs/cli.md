@@ -45,7 +45,11 @@ The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a
 different HTTP endpoint. Public health responses are read directly. Protected
 administrative responses require an already authenticated transport; the
 default CLI transport does not forge Cloudflare Access assertions and reports
-`authentication_required` in a partial `atlas status` result.
+`authentication_required` in a partial `atlas status` result. If the operator
+already has a real Cloudflare Access JWT, it may be supplied in memory through
+`ATLAS_CLOUDFLARE_ACCESS_JWT`; the adapter forwards it as
+`Cf-Access-Jwt-Assertion`. Never put it in `ATLAS_BASE_URL`, command arguments
+or shell history.
 
 `atlas doctor` is read-only and never invokes a repair action. Its current
 checks cover `/health/live`, `/health/server`, administrative overview and the

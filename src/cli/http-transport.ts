@@ -4,6 +4,8 @@ import type { AtlasCliTransport } from "./contracts.js";
 export interface AtlasHttpTransportOptions {
   readonly baseUrl?: string;
   readonly fetchImplementation?: typeof fetch;
+  /** A real Cloudflare Access JWT held in memory for protected requests. */
+  readonly administrativeAccessToken?: string;
 }
 
 export function createAtlasHttpTransport(
@@ -11,9 +13,19 @@ export function createAtlasHttpTransport(
 ): AtlasCliTransport {
   const baseUrl = parseBaseUrl(options.baseUrl ?? process.env.ATLAS_BASE_URL);
   const fetchImplementation = options.fetchImplementation ?? fetch;
+  const administrativeAccessToken =
+    options.administrativeAccessToken ??
+    process.env.ATLAS_CLOUDFLARE_ACCESS_JWT;
   return Object.freeze({
     execute: (command: string, args: readonly string[], signal: AbortSignal) =>
-      executeHttpCommand(baseUrl, fetchImplementation, command, args, signal),
+      executeHttpCommand(
+        baseUrl,
+        fetchImplementation,
+        command,
+        args,
+        signal,
+        administrativeAccessToken,
+      ),
   });
 }
 
@@ -23,20 +35,37 @@ async function executeHttpCommand(
   command: string,
   args: readonly string[],
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
   switch (command) {
     case "health":
-      return readHealth(baseUrl, fetchImplementation, signal);
+      return readHealth(
+        baseUrl,
+        fetchImplementation,
+        signal,
+        administrativeAccessToken,
+      );
     case "status":
-      return readStatus(baseUrl, fetchImplementation, signal);
+      return readStatus(
+        baseUrl,
+        fetchImplementation,
+        signal,
+        administrativeAccessToken,
+      );
     case "doctor":
-      return readDoctor(baseUrl, fetchImplementation, signal);
+      return readDoctor(
+        baseUrl,
+        fetchImplementation,
+        signal,
+        administrativeAccessToken,
+      );
     case "services list":
       return readEndpoint(
         baseUrl,
         fetchImplementation,
         "/admin/services",
         signal,
+        administrativeAccessToken,
       );
     case "services status": {
       const serviceId = requireArgument(args, "service id");
@@ -45,6 +74,7 @@ async function executeHttpCommand(
         fetchImplementation,
         `/admin/services/${encodeURIComponent(serviceId)}`,
         signal,
+        administrativeAccessToken,
       );
     }
     case "services logs": {
@@ -54,6 +84,7 @@ async function executeHttpCommand(
         fetchImplementation,
         `/admin/services/${encodeURIComponent(serviceId)}/logs`,
         signal,
+        administrativeAccessToken,
       );
     }
     case "services schedule show": {
@@ -61,8 +92,9 @@ async function executeHttpCommand(
       return readEndpoint(
         baseUrl,
         fetchImplementation,
-        `/admin/services/${encodeURIComponent(serviceId)}/availability`,
+        `/admin/services/${encodeURIComponent(serviceId)}/schedule`,
         signal,
+        administrativeAccessToken,
       );
     }
     case "services schedule preview": {
@@ -73,6 +105,7 @@ async function executeHttpCommand(
         fetchImplementation,
         `/admin/services/${encodeURIComponent(serviceId)}/availability/preview?startsAt=${encodeURIComponent(interval.startsAt)}&endsAt=${encodeURIComponent(interval.endsAt)}`,
         signal,
+        administrativeAccessToken,
       );
     }
     case "backups list":
@@ -81,15 +114,23 @@ async function executeHttpCommand(
         fetchImplementation,
         "/admin/backups/targets",
         signal,
+        administrativeAccessToken,
       );
     case "backups status":
-      return readOverviewField(baseUrl, fetchImplementation, "backups", signal);
+      return readOverviewField(
+        baseUrl,
+        fetchImplementation,
+        "backups",
+        signal,
+        administrativeAccessToken,
+      );
     case "backups runs":
       return readEndpoint(
         baseUrl,
         fetchImplementation,
         "/admin/backups/runs?limit=50",
         signal,
+        administrativeAccessToken,
       );
     case "events": {
       const limit = args.includes("--tail") ? 100 : 20;
@@ -98,6 +139,7 @@ async function executeHttpCommand(
         fetchImplementation,
         `/admin/event-history?limit=${limit}`,
         signal,
+        administrativeAccessToken,
       );
     }
     case "machine plan":
@@ -106,6 +148,7 @@ async function executeHttpCommand(
         fetchImplementation,
         "machinePlan",
         signal,
+        administrativeAccessToken,
       );
     case "machine status":
       return readOverviewField(
@@ -113,6 +156,7 @@ async function executeHttpCommand(
         fetchImplementation,
         "powerSafety",
         signal,
+        administrativeAccessToken,
       );
     case "machine schedule show":
       return readOverviewField(
@@ -120,6 +164,7 @@ async function executeHttpCommand(
         fetchImplementation,
         "machineSchedule",
         signal,
+        administrativeAccessToken,
       );
     default:
       throw new AtlasCliError(
@@ -134,12 +179,14 @@ async function readOverviewField(
   fetchImplementation: typeof fetch,
   field: "backups" | "machinePlan" | "powerSafety" | "machineSchedule",
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
   const overview = await readEndpoint(
     baseUrl,
     fetchImplementation,
     "/admin/overview",
     signal,
+    administrativeAccessToken,
   );
   if (typeof overview !== "object" || overview === null) return null;
   return (overview as Record<string, unknown>)[field] ?? null;
@@ -169,10 +216,23 @@ async function readHealth(
   baseUrl: URL,
   fetchImplementation: typeof fetch,
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
   const [live, server] = await Promise.all([
-    readEndpoint(baseUrl, fetchImplementation, "/health/live", signal),
-    readEndpoint(baseUrl, fetchImplementation, "/health/server", signal),
+    readEndpoint(
+      baseUrl,
+      fetchImplementation,
+      "/health/live",
+      signal,
+      administrativeAccessToken,
+    ),
+    readEndpoint(
+      baseUrl,
+      fetchImplementation,
+      "/health/server",
+      signal,
+      administrativeAccessToken,
+    ),
   ]);
   return Object.freeze({ endpoint: endpointLabel(baseUrl), live, server });
 }
@@ -181,8 +241,14 @@ async function readStatus(
   baseUrl: URL,
   fetchImplementation: typeof fetch,
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
-  const health = await readHealth(baseUrl, fetchImplementation, signal);
+  const health = await readHealth(
+    baseUrl,
+    fetchImplementation,
+    signal,
+    administrativeAccessToken,
+  );
   let administrative: unknown;
   try {
     administrative = await readEndpoint(
@@ -190,6 +256,7 @@ async function readStatus(
       fetchImplementation,
       "/admin/overview",
       signal,
+      administrativeAccessToken,
     );
   } catch (error) {
     if (
@@ -211,6 +278,7 @@ async function readDoctor(
   baseUrl: URL,
   fetchImplementation: typeof fetch,
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
   const checks: Array<Record<string, unknown>> = [];
   for (const [name, path] of [
@@ -220,7 +288,13 @@ async function readDoctor(
     ["administrative_security_posture", "/admin/security/status"],
   ] as const) {
     try {
-      await readEndpoint(baseUrl, fetchImplementation, path, signal);
+      await readEndpoint(
+        baseUrl,
+        fetchImplementation,
+        path,
+        signal,
+        administrativeAccessToken,
+      );
       checks.push({ name, status: "pass" });
     } catch (error) {
       checks.push({
@@ -246,6 +320,7 @@ async function readEndpoint(
   fetchImplementation: typeof fetch,
   path: string,
   signal: AbortSignal,
+  administrativeAccessToken: string | undefined,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -253,7 +328,12 @@ async function readEndpoint(
       method: "GET",
       redirect: "error",
       signal,
-      headers: { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        ...(administrativeAccessToken === undefined
+          ? {}
+          : { "Cf-Access-Jwt-Assertion": administrativeAccessToken }),
+      },
     });
   } catch (error) {
     if (signal.aborted) throw error;
