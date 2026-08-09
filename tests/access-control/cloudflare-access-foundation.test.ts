@@ -311,6 +311,50 @@ describe("Cloudflare Access JWT verification", () => {
     expect(fetch.calls).toHaveLength(1);
   });
 
+  it("coalesces concurrent JWKS refreshes", async () => {
+    const fixture = await createFixture();
+    let resolveFetch: ((response: Response) => void) | undefined;
+    const fetch: CloudflareAccessJwksFetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    const first = provider.checkReadiness(NOW);
+    const second = provider.checkReadiness(NOW);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    resolveFetch?.(
+      new Response(JSON.stringify({ keys: [fixture.publicJwk] }), {
+        status: 200,
+      }),
+    );
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      "ready",
+      "ready",
+    ]);
+  });
+
+  it("applies the failure cooldown after an invalid JWKS response", async () => {
+    const fixture = await createFixture();
+    const fetch: CloudflareAccessJwksFetch = vi.fn(
+      async () => new Response(JSON.stringify({ keys: [] }), { status: 200 }),
+    );
+    const provider = new CloudflareAccessJwksProvider(fixture.configuration, {
+      fetch,
+    });
+
+    await expect(provider.checkReadiness(NOW)).resolves.toBe("unavailable");
+    await expect(
+      provider.checkReadiness(new Date(NOW.getTime() + 1_000)),
+    ).resolves.toBe("unavailable");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("flows a verified subject through the existing access-control port", async () => {
     const fixture = await createFixture();
     const fetch = createJwksFetch(fixture.publicJwk);
