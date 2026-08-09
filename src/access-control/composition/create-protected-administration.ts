@@ -89,6 +89,15 @@ export interface ProtectedAdministrationCapabilities {
       input: { readonly startsAt: string; readonly endsAt: string },
     ): Promise<unknown>;
   }>;
+  readonly getRegisteredServiceSchedule: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly setRegisteredServiceSchedule: Readonly<{
+    execute(serviceId: string, input: unknown): Promise<unknown>;
+  }>;
+  readonly removeRegisteredServiceSchedule: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
   readonly setRegisteredServiceAvailability: Readonly<{
     execute(serviceId: string, input: unknown): Promise<unknown>;
   }>;
@@ -325,7 +334,9 @@ export function createProtectedAdministration(
       | "stop_registered_service"
       | "restart_registered_service"
       | "update_registered_service_availability"
-      | "remove_registered_service_availability",
+      | "remove_registered_service_availability"
+      | "update_registered_service_schedule"
+      | "remove_registered_service_schedule",
     serviceId: string,
     invoke: () => Promise<unknown>,
   ): Promise<unknown> =>
@@ -397,7 +408,7 @@ export function createProtectedAdministration(
   });
   const getRegisteredServiceAvailability = Object.freeze({
     execute: (serviceId: string) =>
-      runner.run("read_registered_service_availability", async (observedAt) => {
+      runner.run("read_registered_service_schedule", async (observedAt) => {
         const service = (
           await requireServices().listRegisteredServices.execute()
         ).find((candidate) => candidate.id === serviceId);
@@ -436,6 +447,48 @@ export function createProtectedAdministration(
             serviceId,
             value,
           ),
+      ),
+  });
+  const getRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string) =>
+      runner.run("read_registered_service_availability", async (observedAt) => {
+        const service = (
+          await requireServices().listRegisteredServices.execute()
+        ).find((candidate) => candidate.id === serviceId);
+        if (service === undefined)
+          throw new Error("registered_service_not_found");
+        return Object.freeze({
+          serviceId,
+          policy: service.availabilityPolicy,
+          observedAt,
+        });
+      }),
+  });
+  const setRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string, value: unknown) =>
+      runServiceMutation("update_registered_service_schedule", serviceId, () =>
+        requireServices().updateRegisteredServiceAvailabilityPolicy.execute(
+          serviceId,
+          value,
+        ),
+      ),
+  });
+  const removeRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation(
+        "remove_registered_service_schedule",
+        serviceId,
+        async () => {
+          const service = (
+            await requireServices().listRegisteredServices.execute()
+          ).find((candidate) => candidate.id === serviceId);
+          if (service === undefined)
+            throw new Error("registered_service_not_found");
+          await requireServices().removeRegisteredServiceAvailabilityPolicy.execute(
+            serviceId,
+          );
+          return service.availabilityPolicy;
+        },
       ),
   });
   const removeRegisteredServiceAvailability = Object.freeze({
@@ -845,6 +898,9 @@ export function createProtectedAdministration(
     restartRegisteredService,
     getRegisteredServiceAvailability,
     getRegisteredServiceAvailabilityPreview,
+    getRegisteredServiceSchedule,
+    setRegisteredServiceSchedule,
+    removeRegisteredServiceSchedule,
     setRegisteredServiceAvailability,
     removeRegisteredServiceAvailability,
     getOperationsOverview,

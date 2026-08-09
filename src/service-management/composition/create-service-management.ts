@@ -89,6 +89,7 @@ import type { ServiceReadinessReader } from "../application/ports/service-readin
 import type { ServiceController } from "../application/ports/service-controller.js";
 import { GetRegisteredServiceAvailabilityForInterval } from "../application/get-registered-service-availability-for-interval.js";
 import { UpdateRegisteredServiceAvailabilityPolicy } from "../application/update-registered-service-availability-policy.js";
+import { RemoveRegisteredServiceAvailabilityPolicy } from "../application/remove-registered-service-availability-policy.js";
 import {
   OrchestrateRegisteredServicesStop,
   type OrchestrateRegisteredServicesStopPort,
@@ -102,6 +103,7 @@ export interface ServiceManagementCapabilities {
   readonly getRegisteredServiceLogs: GetRegisteredServiceLogs;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly updateRegisteredServiceAvailabilityPolicy: UpdateRegisteredServiceAvailabilityPolicy;
+  readonly removeRegisteredServiceAvailabilityPolicy: RemoveRegisteredServiceAvailabilityPolicy;
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly getRegisteredServiceAvailabilityForInterval: GetRegisteredServiceAvailabilityForInterval;
@@ -387,6 +389,8 @@ export function createServiceManagement(
       ),
     updateRegisteredServiceAvailabilityPolicy:
       new UpdateRegisteredServiceAvailabilityPolicy(catalog, policyStore),
+    removeRegisteredServiceAvailabilityPolicy:
+      new RemoveRegisteredServiceAvailabilityPolicy(catalog, policyStore),
     cancelRegisteredServiceAvailabilityOverride:
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
     getRegisteredServiceEffectiveAvailability,

@@ -127,13 +127,13 @@ export function renderWeeklyScheduleEditor(
         ? { mode: "scheduled", timezone: timezone.value, windows }
         : { mode: mode.value };
     void fetch(
-      `/admin/services/${encodeURIComponent(serviceId)}/availability`,
+      `/admin/services/${encodeURIComponent(serviceId)}/schedule`,
       {
         method: "PUT",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          confirmation: "confirm_registered_service_availability_update",
+          confirmation: "confirm_registered_service_schedule_update",
           policy: policyInput,
         }),
         redirect: "error",

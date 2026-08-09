@@ -26,6 +26,7 @@ import type { CloudflareAccessAssertionReader } from "../access-control/applicat
 import type { AdministrativeShutdownRouteDependencies } from "./administrative-shutdown-route.js";
 import type { AdministrativeServicesRouteDependencies } from "./administrative-services-route.js";
 import type { AdministrativeServiceAvailabilityRouteDependencies } from "./administrative-service-availability-route.js";
+import type { AdministrativeServiceScheduleRouteDependencies } from "./administrative-service-schedule-route.js";
 import type { AdministrativeOverviewRouteDependencies } from "./administrative-overview-route.js";
 import type { AdministrativeDashboardRouteDependencies } from "./administrative-dashboard-route.js";
 import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
@@ -45,6 +46,7 @@ export interface AdministrativeRuntime {
   readonly shutdown?: AdministrativeShutdownRouteDependencies;
   readonly services?: AdministrativeServicesRouteDependencies;
   readonly availability?: AdministrativeServiceAvailabilityRouteDependencies;
+  readonly schedule?: AdministrativeServiceScheduleRouteDependencies;
   readonly overview?: AdministrativeOverviewRouteDependencies;
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
   readonly backups?: AdministrativeBackupsRouteDependencies;
@@ -124,6 +126,9 @@ export function createAdministrativeRuntime(
       : []),
     ...(config.administrativeServiceAvailabilityHttpEnabled
       ? ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeServiceAvailabilityHttpEnabled
+      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
       ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
@@ -268,6 +273,17 @@ export function createAdministrativeRuntime(
     ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
       ? {
           availability: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
+      ? {
+          schedule: Object.freeze({
             admission,
             mutationGate: serviceMutationGate,
             createProtectedAdministration: (

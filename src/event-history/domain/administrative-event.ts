@@ -21,6 +21,8 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "restart_registered_service",
   "update_registered_service_availability",
   "remove_registered_service_availability",
+  "update_registered_service_schedule",
+  "remove_registered_service_schedule",
   "run_registered_backup",
   "update_backup_schedule",
   "remove_backup_schedule",
@@ -454,6 +456,8 @@ function createDetails(
       read_registered_service_availability: "services.availability.read",
       update_registered_service_availability: "services.availability.write",
       remove_registered_service_availability: "services.availability.write",
+      update_registered_service_schedule: "services.availability.write",
+      remove_registered_service_schedule: "services.availability.write",
       run_registered_backup: "backups.run",
       update_backup_schedule: "backups.schedule.write",
       remove_backup_schedule: "backups.schedule.write",
@@ -584,7 +588,9 @@ function createDetails(
     operation === "stop_registered_service" ||
     operation === "restart_registered_service" ||
     operation === "update_registered_service_availability" ||
-    operation === "remove_registered_service_availability"
+    operation === "remove_registered_service_availability" ||
+    operation === "update_registered_service_schedule" ||
+    operation === "remove_registered_service_schedule"
   ) {
     const serviceId = record["serviceId"];
     if (

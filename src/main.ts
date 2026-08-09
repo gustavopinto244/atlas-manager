@@ -310,6 +310,11 @@ function start(): void {
             administrativeServiceAvailability:
               administrativeRuntime.availability,
           }),
+      ...(administrativeRuntime?.schedule === undefined
+        ? {}
+        : {
+            administrativeServiceSchedule: administrativeRuntime.schedule,
+          }),
       ...(administrativeRuntime?.overview === undefined
         ? {}
         : { administrativeOverview: administrativeRuntime.overview }),

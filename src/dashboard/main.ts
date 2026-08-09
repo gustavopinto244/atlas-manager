@@ -508,7 +508,7 @@ async function refresh(): Promise<void> {
   const policies = await Promise.all(
     serviceValues.map((service) =>
       readJson(
-        `/admin/services/${encodeURIComponent(String(service.id))}/availability`,
+        `/admin/services/${encodeURIComponent(String(service.id))}/schedule`,
       ),
     ),
   );
