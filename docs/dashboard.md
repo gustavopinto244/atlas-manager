@@ -50,9 +50,16 @@ admission and audit.
 
 Each API read uses same-origin credentials and rejects redirects. A failed
 request leaves the authoritative state unknown and reports that condition to
-the operator. Mutation buttons are disabled while an operation is in flight.
-Power preparation and execution use separate explicit checkbox confirmations;
-execution is not offered until the backend returns a prepared occurrence.
+the operator. Power controls distinguish loading, unauthorized, busy/conflict,
+failed and malformed-response states. Mutation buttons are disabled while an
+operation is in flight. Power preparation and execution use separate explicit
+checkbox confirmations; execution is not offered until a bounded backend
+response returns a valid prepared occurrence.
+
+The power-control component imports the canonical shutdown confirmation values
+from the power domain. It does not implement shutdown validity, authorization,
+admission or effect activation: those rules remain authoritative in the domain,
+application and HTTP layers.
 
 ## Security and accessibility
 
@@ -65,5 +72,7 @@ than color alone. Responsive rules support narrow screens.
 ## Asset contract
 
 The build generates `index.html`, `app.js`, `styles.css`, `backup.js` and
-`event-history.js`. The generated manifest and bundle verifier require the
-source and packaged bytes to be identical.
+`event-history.js`. `app.js` is bundled as a browser IIFE so internal
+TypeScript component imports cannot escape the five-file asset contract. The
+generated manifest and bundle verifier require the generated and packaged
+bytes to be identical.

@@ -66,6 +66,11 @@ cd atlas-manager-install/atlas-manager_<version>_linux_amd64
 source commit, version, modes and required files. Do not repair a bundle by
 editing, replacing or copying individual files.
 
+The inspected root must also contain `INSTALLATION.md`. That generated file is
+the release-specific, bundled installation contract; this repository guide
+provides the broader operator context. If they disagree, stop and qualify the
+source/bundle pair instead of mixing instructions from different releases.
+
 ## 2. Qualify the host read-only
 
 Run the bundle's host qualification before any mutation:
@@ -305,17 +310,15 @@ Record at minimum:
 - power backend, effects, scheduler and HTTP feature flags;
 - relevant journal excerpts with secrets redacted.
 
-## Planned next steps
+## Post-install release steps
 
-1. Finish the remaining operator-experience slices and update the capability
-   matrix per commit.
-2. Re-run pinned Node and both Go module qualifications from a clean tree.
-3. Produce independent Candidate A and Candidate B bundles and require byte
+1. Re-run pinned Node and both Go module qualifications from a clean tree.
+2. Produce independent Candidate A and Candidate B bundles and require byte
    equality.
-4. Create immutable release evidence bound to the final source commit.
-5. Perform read-only Atlas qualification, then a controlled disabled-first
+3. Create immutable release evidence bound to the final source commit.
+4. Perform read-only Atlas qualification, then a controlled disabled-first
    reinstall with rollback armed.
-6. Validate dashboard pages, CLI commands, RBAC, audit and mock power simulation
+5. Validate dashboard pages, CLI commands, RBAC, audit and mock power simulation
    on Atlas.
-7. Keep physical power effects and the machine scheduler disabled until a
+6. Keep physical power effects and the machine scheduler disabled until a
    separate host-specific qualification and approval milestone exists.

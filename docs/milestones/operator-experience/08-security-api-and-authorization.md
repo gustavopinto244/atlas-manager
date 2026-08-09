@@ -1,5 +1,9 @@
 # Security, API and authorization plan
 
+Implementation reconciliation: the unauthenticated read exception has been
+removed and covered by shell, asset and API integration tests. The current
+catalog has 45 descriptors; the 40-route value below is the original baseline.
+
 ## Required request flow
 
 ```text
