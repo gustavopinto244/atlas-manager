@@ -12,7 +12,7 @@ const vulnerabilities = report.vulnerabilities;
 if (!vulnerabilities || typeof vulnerabilities !== "object")
   throw new Error("audit_report_invalid");
 
-const allowedDevelopmentAdvisories = new Set(["brace-expansion", "nanoid"]);
+const allowedDevelopmentAdvisories = new Set(["brace-expansion"]);
 const unclassified = [];
 let allowedCount = 0;
 for (const [name, value] of Object.entries(vulnerabilities)) {
