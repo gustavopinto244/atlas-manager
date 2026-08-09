@@ -109,6 +109,7 @@ func TestEnvironmentKeepsPowerSurfacesDisabled(t *testing.T) {
 		"POWER_MANAGEMENT_BACKEND=mock\n",
 		"MACHINE_POWER_EFFECTS_ACTIVATION=disabled\n",
 		"MACHINE_POWER_SCHEDULER_ENABLED=false\n",
+		"SERVICE_AVAILABILITY_POLICY_FILE=/var/lib/atlas-manager-service-availability/policies.json\n",
 		"ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=false\n",
 		"ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=false\n",
 	} {

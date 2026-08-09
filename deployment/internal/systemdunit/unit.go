@@ -21,7 +21,7 @@ KillSignal=SIGTERM
 TimeoutStartSec=30s
 TimeoutStopSec=30s
 UMask=0027
-StateDirectory=atlas-manager atlas-manager-backups atlas-manager-event-history
+StateDirectory=atlas-manager atlas-manager-backups atlas-manager-event-history atlas-manager-service-availability
 StateDirectoryMode=0700
 RuntimeDirectory=atlas-manager
 RuntimeDirectoryMode=0700
@@ -34,7 +34,7 @@ RestrictRealtime=true
 LockPersonality=true
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/var/lib/atlas-manager /var/lib/atlas-manager-backups /var/lib/atlas-manager-event-history
+ReadWritePaths=/var/lib/atlas-manager /var/lib/atlas-manager-backups /var/lib/atlas-manager-event-history /var/lib/atlas-manager-service-availability
 
 [Install]
 WantedBy=multi-user.target
@@ -45,7 +45,7 @@ func Validate(value string) bool {
 		"User=atlas-manager", "Group=atlas-manager", "SupplementaryGroups=atlas-manager-power",
 		"ExecStart=/usr/bin/node /opt/atlas-manager/current/dist/main.js",
 		"WorkingDirectory=/var/lib/atlas-manager", "EnvironmentFile=/etc/atlas-manager/atlas-manager.env",
-		"Restart=no", "StateDirectory=atlas-manager atlas-manager-backups atlas-manager-event-history", "RuntimeDirectory=atlas-manager", "UMask=0027",
+		"Restart=no", "StateDirectory=atlas-manager atlas-manager-backups atlas-manager-event-history atlas-manager-service-availability", "RuntimeDirectory=atlas-manager", "UMask=0027",
 	} {
 		if !strings.Contains(value, required) {
 			return false
