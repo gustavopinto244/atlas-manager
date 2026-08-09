@@ -1,6 +1,7 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { isUtf8 } from "node:buffer";
 
+import { parseStrictJson } from "../config/strict-json.js";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
 import { AdministrativeAccessControlError } from "../access-control/application/errors.js";
 import {
@@ -217,7 +218,7 @@ async function readScheduleBody(request: Request): Promise<unknown> {
       "Invalid wake-alarm request",
     );
   try {
-    return JSON.parse(body.toString("utf8")) as unknown;
+    return parseStrictJson(body.toString("utf8"));
   } catch {
     throw new HttpError(
       400,

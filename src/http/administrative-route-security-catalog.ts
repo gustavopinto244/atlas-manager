@@ -74,6 +74,11 @@ const NO_BODY = Object.freeze({
   body: "none" as const,
   maxBodyBytes: 0,
 });
+const WAKE_ALARM_JSON_BODY = Object.freeze({ ...JSON_BODY, maxBodyBytes: 512 });
+const SHUTDOWN_JSON_BODY = Object.freeze({
+  ...JSON_BODY,
+  maxBodyBytes: 1_024,
+});
 
 function route(
   input: Omit<
@@ -128,6 +133,7 @@ const mutation = (
   confirmation: string,
   gatePolicy: AdministrativeRouteSecurityDescriptor["gatePolicy"],
   replayPolicy: AdministrativeRouteSecurityDescriptor["replayPolicy"] = "state_recheck_required",
+  requestPolicy: AdministrativeRouteSecurityDescriptor["requestPolicy"] = JSON_BODY,
 ) =>
   route({
     routeId,
@@ -141,7 +147,7 @@ const mutation = (
     replayPolicy,
     responsePolicy: "json",
     dashboardExposure: "api",
-    requestPolicy: JSON_BODY,
+    requestPolicy,
   });
 const mutationWithoutConfirmation = (
   routeId: string,
@@ -150,6 +156,7 @@ const mutationWithoutConfirmation = (
   activationFlag: string,
   operation: AdministrativeOperation,
   gatePolicy: AdministrativeRouteSecurityDescriptor["gatePolicy"],
+  requestPolicy: AdministrativeRouteSecurityDescriptor["requestPolicy"] = JSON_BODY,
 ) =>
   route({
     routeId,
@@ -163,7 +170,7 @@ const mutationWithoutConfirmation = (
     replayPolicy: "state_recheck_required",
     responsePolicy: "json",
     dashboardExposure: "api",
-    requestPolicy: JSON_BODY,
+    requestPolicy,
   });
 
 export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRouteSecurityDescriptor[] =
@@ -205,6 +212,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED",
       "schedule_wake_alarm",
       "power_operation",
+      WAKE_ALARM_JSON_BODY,
     ),
     mutationWithoutConfirmation(
       "power.wake.delete",
@@ -213,6 +221,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED",
       "cancel_wake_alarm",
       "power_operation",
+      WAKE_ALARM_JSON_BODY,
     ),
     mutation(
       "power.shutdown.prepare",
@@ -222,6 +231,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "prepare_machine_shutdown_occurrence",
       "confirm_shutdown_preparation",
       "power_operation",
+      "state_recheck_required",
+      SHUTDOWN_JSON_BODY,
     ),
     mutation(
       "power.shutdown.execute",
@@ -231,6 +242,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "execute_machine_shutdown_occurrence",
       "confirm_shutdown_execution",
       "power_operation",
+      "state_recheck_required",
+      SHUTDOWN_JSON_BODY,
     ),
     read(
       "services.list",

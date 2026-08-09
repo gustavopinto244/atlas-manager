@@ -1,6 +1,7 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { isUtf8 } from "node:buffer";
 
+import { parseStrictJson } from "../config/strict-json.js";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
 import { AdministrativeAccessControlError } from "../access-control/application/errors.js";
 import { MachineShutdownOccurrenceExecutionError } from "../power-management/application/execute-machine-shutdown-occurrence.js";
@@ -226,14 +227,14 @@ async function readShutdownBody(request: Request): Promise<unknown> {
       "Invalid machine-shutdown request",
     );
   const bytes = Buffer.concat(chunks);
-  if (!isUtf8(bytes) || hasDuplicateTopLevelKeys(bytes.toString("utf8")))
+  if (!isUtf8(bytes))
     throw new HttpError(
       400,
       "invalid_machine_shutdown_request",
       "Invalid machine-shutdown request",
     );
   try {
-    return JSON.parse(bytes.toString("utf8")) as unknown;
+    return parseStrictJson(bytes.toString("utf8"));
   } catch {
     throw new HttpError(
       400,
@@ -368,85 +369,4 @@ function mapShutdownError(
     return accessError;
   }
   return new HttpError(500, "internal_error", "Internal server error");
-}
-
-function hasDuplicateTopLevelKeys(input: string): boolean {
-  let index = 0;
-  const keys = new Set<string>();
-  const skipWhitespace = (): void => {
-    while (/\s/u.test(input[index] ?? "")) index += 1;
-  };
-  const readString = (): string | undefined => {
-    if (input[index] !== '"') return undefined;
-    const start = index;
-    index += 1;
-    let escaped = false;
-    while (index < input.length) {
-      const character = input[index]!;
-      index += 1;
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === '"') {
-        try {
-          return JSON.parse(input.slice(start, index)) as string;
-        } catch {
-          return undefined;
-        }
-      }
-    }
-    return undefined;
-  };
-  const skipValue = (): void => {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    while (index < input.length) {
-      const character = input[index]!;
-      if (inString) {
-        index += 1;
-        if (escaped) escaped = false;
-        else if (character === "\\") escaped = true;
-        else if (character === '"') inString = false;
-        continue;
-      }
-      if (character === '"') {
-        inString = true;
-        index += 1;
-      } else if (character === "{" || character === "[") {
-        depth += 1;
-        index += 1;
-      } else if (character === "}" || character === "]") {
-        if (depth === 0) return;
-        depth -= 1;
-        index += 1;
-      } else if ((character === "," || character === "}") && depth === 0) {
-        return;
-      } else index += 1;
-    }
-  };
-  skipWhitespace();
-  if (input[index] !== "{") return false;
-  index += 1;
-  while (index < input.length) {
-    skipWhitespace();
-    if (input[index] === "}") return false;
-    const key = readString();
-    if (key === undefined) return false;
-    if (keys.has(key)) return true;
-    keys.add(key);
-    skipWhitespace();
-    if (input[index] !== ":") return false;
-    index += 1;
-    skipWhitespace();
-    skipValue();
-    skipWhitespace();
-    if (input[index] === ",") {
-      index += 1;
-      continue;
-    }
-    return false;
-  }
-  return false;
 }
