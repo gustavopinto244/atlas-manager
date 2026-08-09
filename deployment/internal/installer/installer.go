@@ -493,7 +493,7 @@ func installStatic(config Config, identity runtimeidentity.Identity) error {
 
 func verifyStatic(config Config, identity runtimeidentity.Identity) error {
 	unit, err := os.ReadFile(config.Paths.Unit)
-	if err != nil || !systemdunit.Validate(string(unit)) || !managedFileMetadata(config, config.Paths.Unit, 0o644, 0, 0) {
+	if err != nil || !systemdunit.ValidateManaged(string(unit)) || !managedFileMetadata(config, config.Paths.Unit, 0o644, 0, 0) {
 		return fmt.Errorf("systemd_unit_invalid")
 	}
 	if !managedFileMetadata(config, config.Paths.Template, 0o640, 0, identity.PrimaryGroupID) {

@@ -21,3 +21,15 @@ func TestRejectsHelperIncompatibleHardening(t *testing.T) {
 		t.Fatal("incompatible hardening must be rejected")
 	}
 }
+
+func TestAcceptsOnlyTheKnownPredecessorForManagedUpgrade(t *testing.T) {
+	if !ValidateManaged(legacyContent) {
+		t.Fatal("known predecessor must be accepted during managed upgrade")
+	}
+	if Validate(legacyContent) {
+		t.Fatal("candidate validation must still require the current unit contract")
+	}
+	if ValidateManaged(legacyContent + "\nNoNewPrivileges=true\n") {
+		t.Fatal("modified predecessor must be rejected")
+	}
+}
