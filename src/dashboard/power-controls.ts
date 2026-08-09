@@ -119,9 +119,9 @@ export class PowerControlsController {
     input.type = "datetime-local";
     input.required = true;
     input.setAttribute("aria-label", "Mock wake time");
-    input.value = new Date(this.#now().getTime() + 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 16);
+    input.value = formatLocalDateTime(
+      new Date(this.#now().getTime() + 60 * 60 * 1000),
+    );
     label.append(input);
     const schedule = this.#document.createElement("button");
     schedule.type = "submit";
@@ -325,7 +325,9 @@ function readShutdownOccurrence(
     typeof occurrence.scheduledFor !== "string" ||
     typeof occurrence.wakeScheduledFor !== "string" ||
     !Number.isFinite(Date.parse(occurrence.scheduledFor)) ||
-    !Number.isFinite(Date.parse(occurrence.wakeScheduledFor))
+    !Number.isFinite(Date.parse(occurrence.wakeScheduledFor)) ||
+    Date.parse(occurrence.scheduledFor) >=
+      Date.parse(occurrence.wakeScheduledFor)
   )
     return undefined;
   return {
@@ -333,6 +335,11 @@ function readShutdownOccurrence(
     scheduledFor: occurrence.scheduledFor,
     wakeScheduledFor: occurrence.wakeScheduledFor,
   };
+}
+
+function formatLocalDateTime(value: Date): string {
+  const pad = (component: number): string => String(component).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
 }
 
 function readRecord(value: unknown): Readonly<Record<string, unknown>> {

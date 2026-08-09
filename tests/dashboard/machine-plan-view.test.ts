@@ -66,7 +66,7 @@ describe("machine plan view", () => {
     );
   });
 
-  it("renders an unavailable state without trusting malformed data", () => {
+  it("distinguishes unavailable evaluation data from a valid empty plan", () => {
     const parent = new FakeElement();
 
     renderMachinePlan(fakeDocument(), parent as unknown as HTMLElement, {
@@ -75,7 +75,25 @@ describe("machine plan view", () => {
 
     expect(parent.textContent).toContain("Expected state: unavailable");
     expect(parent.textContent).toContain("not planned");
-    expect(parent.textContent).toContain("Next transition: not planned");
+    expect(parent.textContent).toContain("Next transition: unavailable");
+  });
+
+  it("chooses the earliest future transition relative to evaluatedAt", () => {
+    const parent = new FakeElement();
+
+    renderMachinePlan(fakeDocument(), parent as unknown as HTMLElement, {
+      evaluatedAt: "2026-08-08T12:00:00.000Z",
+      expectation: "operating",
+      nextShutdown: {
+        state: "planned",
+        scheduledFor: "2026-08-08T11:00:00.000Z",
+      },
+      nextWake: { state: "planned", scheduledFor: "2026-08-09T07:00:00.000Z" },
+    });
+
+    expect(parent.textContent).toContain(
+      "Next transition: wake at 2026-08-09T07:00:00.000Z",
+    );
   });
 
   it("renders the validated weekly machine schedule", () => {
