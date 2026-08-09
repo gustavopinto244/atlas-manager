@@ -75,7 +75,7 @@ if (
 )
   throw new Error("release_evidence_dashboard_digest_invalid");
 const forbidden =
-  /PLACEHOLDER|TBD|ci-generated|reproducible_in_ci|not_run|environment_unavailable|rc\.1/u;
+  /PLACEHOLDER|TBD|ci-generated|reproducible_in_ci|not_run|environment_unavailable|\brc\.1(?:\.\d+)?\b/u;
 for (const relative of [
   "docs/contracts/atlas-manager-administrative-api.json",
   "docs/release/atlas-manager-production-dependencies.json",

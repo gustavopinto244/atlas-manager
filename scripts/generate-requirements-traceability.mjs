@@ -92,7 +92,7 @@ const sourceLine = sourceCommit
   : "Source commit: detached CI qualification artifact";
 const output = `# Atlas Manager v1 requirements traceability
 
-Release candidate: \`1.0.0-rc.10\`
+Release candidate: \`${process.env.RELEASE_VERSION ?? "1.0.0-rc.11"}\`
 ${sourceLine}
 Scope: software-only qualification; physical gates are intentionally separate.
 
