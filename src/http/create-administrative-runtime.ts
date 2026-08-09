@@ -288,8 +288,7 @@ export function createAdministrativeRuntime(
           }),
         }
       : {}),
-    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false) &&
-    config.serviceAvailabilityPolicyFilePath !== undefined
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
       ? {
           availability: Object.freeze({
             admission,
@@ -300,7 +299,8 @@ export function createAdministrativeRuntime(
           }),
         }
       : {}),
-    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false) &&
+    config.serviceAvailabilityPolicyFilePath !== undefined
       ? {
           schedule: Object.freeze({
             admission,
