@@ -8,7 +8,7 @@ invoke PM2, Docker, systemd or power helpers directly.
 
 The foundation provides:
 
-- `atlas --help` and `atlas help`;
+- `atlas --version`, `atlas --help` and `atlas help`;
 - nested help such as `atlas services schedule --help`;
 - a stable JSON envelope with `schemaVersion`, `command`, `status`, `data`
   and structured `error` fields;

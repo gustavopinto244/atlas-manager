@@ -28,10 +28,13 @@ portion remains intentionally unavailable.
 | Administrative dashboard       | n/a                                                  | Yes                     | Protected shell/assets/API         | Vanilla TypeScript assets                | Cloudflare Access + RBAC           | UI confirmation for mutations | Backend audit    | n/a                       | Authenticated operational shell                    |
 | Reinstallable operator package | `npm install`                                        | n/a                     | Uses existing API                  | npm archive, no runtime deps             | Inherits API auth                  | n/a                           | Backend audit    | n/a                       | `npm run package:operator`                         |
 
+The packaged CLI exposes its installed package version through
+`atlas --version`.
+
 The administrative route catalog currently contains 45 descriptors. Route
-activation and feature-flag state are exposed by the protected security
-posture response; disabled power routes remain absent from the effective route
-set. See [CLI reference](cli.md), [dashboard guide](dashboard.md),
+activation and feature-flag state are exposed by the protected security posture
+response; disabled power routes remain absent from the effective route set. See
+[CLI reference](cli.md), [dashboard guide](dashboard.md),
 [scheduling](scheduling.md), and the [operator package runbook](operations/atlas-manager-operator-cli.md).
 
 The route count is an explicit source test. Dashboard power controls are a
