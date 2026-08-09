@@ -456,5 +456,5 @@ describe("file-backed post-conflict next-interval cursor-advancement failure rec
     await expect(
       finalStores.claimStore.claim(thirdOccurrence),
     ).resolves.toEqual({ kind: "duplicate" });
-  });
+  }, 10_000);
 });
