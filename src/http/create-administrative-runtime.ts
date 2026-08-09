@@ -35,6 +35,9 @@ import type { AdministrativeBackupsRouteDependencies } from "./administrative-ba
 import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
 import type { AdministrativeSecurityStatusRouteDependencies } from "./administrative-security-status-route.js";
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
+import { GetMachinePowerPlan } from "../power-management/application/get-machine-power-plan.js";
+import type { MachinePowerPlan } from "../power-management/domain/machine-power-plan.js";
+import type { MachineOperatingPolicy } from "../power-management/domain/machine-operating-policy.js";
 import {
   ADMINISTRATIVE_ROUTE_SECURITY_CATALOG,
   expectedAdministrativeRouteIds,
@@ -58,6 +61,10 @@ export interface AdministrativeRuntime {
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
   readonly eventHistory?: EventHistoryCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly machinePlanReader?: Readonly<{
+    getMachinePowerPlan: Readonly<{ execute(): MachinePowerPlan }>;
+    machineOperatingPolicy: MachineOperatingPolicy;
+  }>;
   readonly getServerHealth?: GetServerHealthCapability;
   readonly applicationVersion?: string;
   readonly backupManagement?: BackupManagementCapabilities;
@@ -83,6 +90,15 @@ export function createAdministrativeRuntime(
   const clock: AdministrativeRequestClock = Object.freeze({
     now: () => new Date(),
   });
+  const machinePlanReader =
+    compositionDependencies.machinePlanReader ??
+    Object.freeze({
+      getMachinePowerPlan: new GetMachinePowerPlan(
+        clock,
+        config.machineOperatingPolicy,
+      ),
+      machineOperatingPolicy: config.machineOperatingPolicy,
+    });
   const eventHistory =
     compositionDependencies.eventHistory ??
     (directoryPath === undefined
@@ -201,6 +217,7 @@ export function createAdministrativeRuntime(
     return createProtectedAdministration({
       accessControl,
       ...(powerManagement === undefined ? {} : { powerManagement }),
+      machinePlanReader,
       eventHistory,
       clock,
       ...(serviceManagement === undefined ? {} : { serviceManagement }),

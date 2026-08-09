@@ -29,10 +29,16 @@ import { AdministrativeAuditTrail } from "../../event-history/application/admini
 import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
 import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
 import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
+import type { MachinePowerPlan } from "../../power-management/domain/machine-power-plan.js";
+import type { MachineOperatingPolicy } from "../../power-management/domain/machine-operating-policy.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly machinePlanReader?: Readonly<{
+    getMachinePowerPlan: Readonly<{ execute(): MachinePowerPlan }>;
+    machineOperatingPolicy: MachineOperatingPolicy;
+  }>;
   readonly serviceManagement?: ServiceManagementCapabilities;
   readonly backupManagement?: BackupManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
@@ -825,9 +831,10 @@ export function createProtectedAdministration(
             helper: "unused",
           }),
           machinePlan:
-            power === undefined ? null : power.getMachinePowerPlan.execute(),
+            (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
+            null,
           machineSchedule:
-            power === undefined ? null : power.machineOperatingPolicy,
+            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
           backups: Object.freeze({
             registeredTargets: backupTargets.length,
             enabledTargets: backupTargets.filter(
@@ -877,6 +884,11 @@ export function createProtectedAdministration(
             machineScheduler: "disabled",
             helper: "unused",
           }),
+          machinePlan:
+            (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
+            null,
+          machineSchedule:
+            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
         });
       }),
   });
