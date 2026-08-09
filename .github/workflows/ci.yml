@@ -346,8 +346,8 @@ jobs:
           mkdir -p "$release_artifacts"
           test -f "$release_artifacts/atlas-manager-release-rehearsal-a.json"
           test -f "$release_artifacts/atlas-manager-release-rehearsal-b.json"
-          node --import tsx/esm -e 'import { validateAdministrativeRouteSecurityCatalog, ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "./src/http/administrative-route-security-catalog.ts"; validateAdministrativeRouteSecurityCatalog(); if (ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.length !== 41) process.exit(1)'
           test -f docs/contracts/atlas-manager-administrative-api.json
+          node --import tsx/esm -e 'import { readFileSync } from "node:fs"; import { createAdministrativeApiContract } from "./src/http/administrative-api-contract.ts"; import { validateAdministrativeRouteSecurityCatalog } from "./src/http/administrative-route-security-catalog.ts"; validateAdministrativeRouteSecurityCatalog(); const expected=JSON.parse(readFileSync("docs/contracts/atlas-manager-administrative-api.json","utf8")); const actual=createAdministrativeApiContract(); if (actual.routes.length!==expected.routeCount || actual.sha256!==expected.catalogSha256) process.exit(1)'
           test -f docs/contracts/atlas-manager-release-contract.json
           test -f docs/release/atlas-manager-v1-requirements-traceability.md
           test -f docs/release/atlas-manager-v1-security-review.md

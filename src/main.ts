@@ -42,6 +42,7 @@ import {
   type ServiceManagementCompositionOverrides,
 } from "./service-management/composition/create-service-management.js";
 import { FileServiceAvailabilityOverrideStore } from "./service-management/infrastructure/file-service-availability-override-store.js";
+import { FileServiceAvailabilityPolicyStore } from "./service-management/infrastructure/file-service-availability-policy-store.js";
 import { FileServiceAvailabilityReconciliationOccurrenceClaimStore } from "./service-management/infrastructure/file-service-availability-reconciliation-occurrence-claim-store.js";
 import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "./service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import { createBackupManagement } from "./backup-management/composition/create-backup-management.js";
@@ -115,11 +116,18 @@ function start(): void {
         : new FileServiceAvailabilityOverrideStore(
             config.serviceAvailabilityOverrideFilePath,
           );
+    const availabilityPolicyStore =
+      config.serviceAvailabilityPolicyFilePath === undefined
+        ? undefined
+        : new FileServiceAvailabilityPolicyStore(
+            config.serviceAvailabilityPolicyFilePath,
+          );
     const serviceManagementOverrides:
       ServiceManagementCompositionOverrides | undefined =
       schedulerCursorStore === undefined &&
       occurrenceClaimStore === undefined &&
-      availabilityOverrideStore === undefined
+      availabilityOverrideStore === undefined &&
+      availabilityPolicyStore === undefined
         ? undefined
         : {
             ...(schedulerCursorStore === undefined
@@ -138,6 +146,11 @@ function start(): void {
               ? {}
               : {
                   serviceAvailabilityOverrideStore: availabilityOverrideStore,
+                }),
+            ...(availabilityPolicyStore === undefined
+              ? {}
+              : {
+                  serviceAvailabilityPolicyStore: availabilityPolicyStore,
                 }),
           };
     const serviceManagement = createServiceManagement(
@@ -296,6 +309,11 @@ function start(): void {
         : {
             administrativeServiceAvailability:
               administrativeRuntime.availability,
+          }),
+      ...(administrativeRuntime?.schedule === undefined
+        ? {}
+        : {
+            administrativeServiceSchedule: administrativeRuntime.schedule,
           }),
       ...(administrativeRuntime?.overview === undefined
         ? {}

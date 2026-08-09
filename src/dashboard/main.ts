@@ -1,8 +1,21 @@
+import { initializeDashboardNavigation } from "./navigation.js";
+import {
+  renderMachinePlan as renderMachinePlanView,
+  renderMachineSchedule as renderMachineScheduleView,
+} from "./machine-plan-view.js";
+import { renderScheduleTimeline } from "./schedule-view.js";
+import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
+
+initializeDashboardNavigation(document);
+
 const root = document.querySelector<HTMLElement>("#app");
 const services = document.querySelector<HTMLElement>("#services");
 const availability = document.querySelector<HTMLElement>("#availability");
 const audit = document.querySelector<HTMLElement>("#audit");
 const backups = document.querySelector<HTMLElement>("#backups");
+const infrastructure = document.querySelector<HTMLElement>(
+  "#infrastructure-placeholder",
+);
 
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
@@ -19,6 +32,100 @@ function addText(parent: HTMLElement, value: unknown): void {
       typeof value === "string" ? value : JSON.stringify(value),
     ),
   );
+}
+
+function renderOverview(value: unknown): void {
+  if (root === null) return;
+  root.replaceChildren();
+  const record =
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+  const grid = document.createElement("div");
+  grid.className = "overview-grid";
+  const services = readRecord(record.services);
+  const powerSafety = readRecord(record.powerSafety);
+  const machinePlan = readRecord(record.machinePlan);
+  const backups = readRecord(record.backups);
+  appendOverviewCard(
+    grid,
+    "Services",
+    `${displayValue(services.registered, "0")} registered`,
+  );
+  appendOverviewCard(
+    grid,
+    "Power safety",
+    `${displayValue(powerSafety.backend, "unavailable")} · effects ${displayValue(powerSafety.effects, "unavailable")}`,
+  );
+  appendOverviewCard(
+    grid,
+    "Machine",
+    `expectation ${displayValue(machinePlan.expectation, "unavailable")}`,
+  );
+  appendOverviewCard(
+    grid,
+    "Backups",
+    `${displayValue(backups.activeRuns, "0")} active · ${displayValue(backups.interruptedRuns, "0")} interrupted`,
+  );
+  appendOverviewCard(
+    grid,
+    "Observed at",
+    displayValue(record.observedAt, "unavailable"),
+  );
+  root.append(grid);
+}
+
+function appendOverviewCard(
+  parent: HTMLElement,
+  headingText: string,
+  valueText: string,
+): void {
+  const article = document.createElement("article");
+  article.className = "overview-card";
+  const heading = document.createElement("h3");
+  heading.textContent = headingText;
+  const value = document.createElement("p");
+  value.textContent = valueText;
+  article.append(heading, value);
+  parent.append(article);
+}
+
+function readRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function displayValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+    ? String(value)
+    : fallback;
+}
+
+function renderInfrastructure(value: unknown): void {
+  if (infrastructure === null) return;
+  infrastructure.replaceChildren();
+  const heading = document.createElement("h2");
+  heading.textContent = "Infrastructure";
+  infrastructure.append(heading);
+  const record = readRecord(value);
+  const routeCatalog = readRecord(record.routeCatalog);
+  const lines = [
+    `Route catalog: ${displayValue(routeCatalog.routeCount, "unavailable")} routes · reconciled ${displayValue(routeCatalog.reconciled, "unknown")}`,
+    `Loopback binding: ${displayValue(record.loopbackBinding, "unknown")}`,
+    `CORS disabled: ${displayValue(record.corsDisabled, "unknown")}`,
+    `Trust proxy disabled: ${displayValue(record.trustProxyDisabled, "unknown")}`,
+    `Audit available: ${displayValue(record.auditAvailable, "unknown")}`,
+  ];
+  const list = document.createElement("ul");
+  for (const line of lines) {
+    const item = document.createElement("li");
+    item.textContent = line;
+    list.append(item);
+  }
+  infrastructure.append(list);
 }
 
 function renderServices(value: unknown): void {
@@ -45,22 +152,27 @@ function renderServices(value: unknown): void {
       `${String(service.displayName)} — ${String(service.status)} — ${String(service.availability)}`,
     );
     article.append(summary);
+    const metadata = document.createElement("p");
+    addText(
+      metadata,
+      `Adapter: ${String(service.managementKind)} · Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
+    );
+    article.append(metadata);
     for (const operation of ["start", "stop", "restart"] as const) {
       const form = document.createElement("form");
       form.className = "mutation";
-      const label = document.createElement("label");
-      addText(label, `${operation} confirmation`);
-      const input = document.createElement("input");
-      input.type = "text";
-      input.required = true;
-      input.autocomplete = "off";
-      label.append(input);
       const button = document.createElement("button");
       button.type = "submit";
       addText(button, operation);
-      form.append(label, button);
+      form.append(button);
       form.addEventListener("submit", (event) => {
         event.preventDefault();
+        if (
+          !window.confirm(
+            `${operation} ${String(service.displayName)}? This action is audited.`,
+          )
+        )
+          return;
         button.disabled = true;
         void fetch(
           `/admin/services/${encodeURIComponent(String(service.id))}/actions/${operation}`,
@@ -68,17 +180,17 @@ function renderServices(value: unknown): void {
             method: "POST",
             credentials: "same-origin",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ confirmation: input.value }),
+            body: JSON.stringify({
+              confirmation: `confirm_registered_service_${operation}`,
+            }),
             redirect: "error",
           },
         )
           .then(async (response) => {
-            input.value = "";
             if (!response.ok) throw new Error("operation_failed");
             await refresh();
           })
           .catch(() => {
-            input.value = "";
             if (status !== null)
               addText(
                 status,
@@ -91,6 +203,34 @@ function renderServices(value: unknown): void {
       });
       article.append(form);
     }
+    const logsButton = document.createElement("button");
+    logsButton.type = "button";
+    addText(logsButton, "Logs");
+    logsButton.addEventListener("click", () => {
+      logsButton.disabled = true;
+      void fetch(
+        `/admin/services/${encodeURIComponent(String(service.id))}/logs`,
+        { credentials: "same-origin", redirect: "error" },
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error("logs_failed");
+          const value: unknown = await response.json();
+          let output = article.querySelector<HTMLElement>(".service-logs");
+          if (output === null) {
+            output = document.createElement("pre");
+            output.className = "service-logs";
+            article.append(output);
+          }
+          output.textContent = JSON.stringify(value, null, 2);
+        })
+        .catch(() => {
+          if (status !== null) status.textContent = "Service logs unavailable.";
+        })
+        .finally(() => {
+          logsButton.disabled = false;
+        });
+    });
+    article.append(logsButton);
     services.append(article);
   }
 }
@@ -101,10 +241,59 @@ function renderAudit(value: unknown): void {
   addText(audit, value);
 }
 
+function renderMachinePlan(value: unknown): void {
+  const section = document.querySelector<HTMLElement>(
+    'main > section[aria-labelledby="safety-heading"]',
+  );
+  if (section === null) return;
+  let plan = section.querySelector<HTMLElement>("#machine-plan");
+  if (plan === null) {
+    plan = document.createElement("div");
+    plan.id = "machine-plan";
+    section.append(plan);
+  }
+  const machinePlan =
+    typeof value === "object" && value !== null
+      ? (value as { machinePlan?: unknown }).machinePlan
+      : undefined;
+  renderMachinePlanView(document, plan, machinePlan);
+  let schedule = section.querySelector<HTMLElement>("#machine-schedule");
+  if (schedule === null) {
+    schedule = document.createElement("div");
+    schedule.id = "machine-schedule";
+    section.append(schedule);
+  }
+  const machineSchedule =
+    typeof value === "object" && value !== null
+      ? (value as { machineSchedule?: unknown }).machineSchedule
+      : undefined;
+  renderMachineScheduleView(document, schedule, machineSchedule);
+}
+
 function renderAvailability(value: unknown): void {
   if (availability === null) return;
-  availability.textContent = "";
-  addText(availability, value);
+  availability.replaceChildren();
+  if (!Array.isArray(value) || value.length === 0) {
+    addText(availability, "No service schedules available.");
+    return;
+  }
+  for (const entry of value) {
+    const article = document.createElement("article");
+    const heading = document.createElement("h3");
+    const serviceId =
+      typeof entry === "object" && entry !== null
+        ? (entry as { serviceId?: unknown }).serviceId
+        : undefined;
+    addText(heading, serviceId ?? "Unknown service");
+    article.append(heading);
+    renderScheduleTimeline(document, article, entry);
+    if (
+      typeof serviceId === "string" &&
+      readRecord(entry).scheduleEditable !== false
+    )
+      renderWeeklyScheduleEditor(document, article, serviceId, entry, refresh);
+    availability.append(article);
+  }
 }
 
 function renderBackups(value: unknown, runsValue: unknown): void {
@@ -296,6 +485,7 @@ async function refresh(): Promise<void> {
     exports,
     backupTargets,
     backupRuns,
+    securityPosture,
   ] = await Promise.all([
     readJson("/admin/overview"),
     readJson("/admin/services"),
@@ -309,6 +499,7 @@ async function refresh(): Promise<void> {
     readJson("/admin/event-history/exports").catch(() => ({ exports: [] })),
     readJson("/admin/backups/targets").catch(() => ({ targets: [] })),
     readJson("/admin/backups/runs?limit=20").catch(() => ({ runs: [] })),
+    readJson("/admin/security/status").catch(() => ({ status: "unavailable" })),
   ]);
   const serviceValues =
     typeof serviceList === "object" &&
@@ -318,17 +509,50 @@ async function refresh(): Promise<void> {
           .services
       : [];
   const policies = await Promise.all(
+    serviceValues.map(async (service) => {
+      const servicePath = encodeURIComponent(String(service.id));
+      const schedule = await readJson(
+        `/admin/services/${servicePath}/schedule`,
+      ).catch(() => null);
+      if (schedule !== null) return { value: schedule, scheduleEditable: true };
+      const availability = await readJson(
+        `/admin/services/${servicePath}/availability`,
+      ).catch(() => null);
+      return { value: availability, scheduleEditable: false };
+    }),
+  );
+  const previewWindow = createPreviewWindow();
+  const previews = await Promise.all(
     serviceValues.map((service) =>
       readJson(
-        `/admin/services/${encodeURIComponent(String(service.id))}/availability`,
-      ),
+        `/admin/services/${encodeURIComponent(String(service.id))}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
+      ).catch(() => null),
     ),
   );
-  if (root !== null) root.textContent = JSON.stringify(overview, null, 2);
+  const schedules = policies.map(({ value, scheduleEditable }, index) => ({
+    ...(typeof value === "object" && value !== null ? value : {}),
+    scheduleEditable,
+    preview: previews[index],
+  }));
+  renderOverview(overview);
+  renderMachinePlan(overview);
   renderServices(serviceList);
-  renderAvailability(policies);
+  renderAvailability(schedules);
   renderAudit({ history, integrity, retention, exports });
   renderBackups(backupTargets, backupRuns);
+  renderInfrastructure(securityPosture);
+}
+
+function createPreviewWindow(): Readonly<{
+  startsAt: string;
+  endsAt: string;
+}> {
+  const starts = new Date();
+  starts.setUTCSeconds(0, 0);
+  return {
+    startsAt: starts.toISOString(),
+    endsAt: new Date(starts.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  };
 }
 
 void refresh().catch(() => {

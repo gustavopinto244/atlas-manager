@@ -29,10 +29,19 @@ import { AdministrativeAuditTrail } from "../../event-history/application/admini
 import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
 import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
 import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
+import type { MachinePowerPlan } from "../../power-management/domain/machine-power-plan.js";
+import type { MachineOperatingPolicy } from "../../power-management/domain/machine-operating-policy.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly machinePlanReader?: Readonly<{
+    getMachinePowerPlan: Readonly<{ execute(): MachinePowerPlan }>;
+    machineOperatingPolicy: MachineOperatingPolicy;
+  }>;
+  readonly powerSafetyReader?: Readonly<{
+    execute(): Readonly<Record<string, unknown>>;
+  }>;
   readonly serviceManagement?: ServiceManagementCapabilities;
   readonly backupManagement?: BackupManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
@@ -68,6 +77,9 @@ export interface ProtectedAdministrationCapabilities {
   readonly getRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
+  readonly getRegisteredServiceLogs: Readonly<{
+    execute(serviceId: string, tailLines?: number): Promise<unknown>;
+  }>;
   readonly startRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
@@ -78,6 +90,21 @@ export interface ProtectedAdministrationCapabilities {
     execute(serviceId: string): Promise<unknown>;
   }>;
   readonly getRegisteredServiceAvailability: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly getRegisteredServiceAvailabilityPreview: Readonly<{
+    execute(
+      serviceId: string,
+      input: { readonly startsAt: string; readonly endsAt: string },
+    ): Promise<unknown>;
+  }>;
+  readonly getRegisteredServiceSchedule: Readonly<{
+    execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly setRegisteredServiceSchedule: Readonly<{
+    execute(serviceId: string, input: unknown): Promise<unknown>;
+  }>;
+  readonly removeRegisteredServiceSchedule: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
   readonly setRegisteredServiceAvailability: Readonly<{
@@ -301,13 +328,24 @@ export function createProtectedAdministration(
     execute: (serviceId: string) =>
       runner.run("read_registered_service", () => readService(serviceId)),
   });
+  const getRegisteredServiceLogs = Object.freeze({
+    execute: (serviceId: string, tailLines?: number) =>
+      runner.run("read_registered_service_logs", () =>
+        requireServices().getRegisteredServiceLogs.execute(
+          serviceId,
+          tailLines,
+        ),
+      ),
+  });
   const runServiceMutation = (
     operation:
       | "start_registered_service"
       | "stop_registered_service"
       | "restart_registered_service"
       | "update_registered_service_availability"
-      | "remove_registered_service_availability",
+      | "remove_registered_service_availability"
+      | "update_registered_service_schedule"
+      | "remove_registered_service_schedule",
     serviceId: string,
     invoke: () => Promise<unknown>,
   ): Promise<unknown> =>
@@ -379,7 +417,7 @@ export function createProtectedAdministration(
   });
   const getRegisteredServiceAvailability = Object.freeze({
     execute: (serviceId: string) =>
-      runner.run("read_registered_service_availability", async (observedAt) => {
+      runner.run("read_registered_service_schedule", async (observedAt) => {
         const service = (
           await requireServices().listRegisteredServices.execute()
         ).find((candidate) => candidate.id === serviceId);
@@ -396,6 +434,18 @@ export function createProtectedAdministration(
         });
       }),
   });
+  const getRegisteredServiceAvailabilityPreview = Object.freeze({
+    execute: (
+      serviceId: string,
+      input: { readonly startsAt: string; readonly endsAt: string },
+    ) =>
+      runner.run("read_registered_service_availability_preview", () =>
+        requireServices().getRegisteredServiceAvailabilityForInterval.execute({
+          serviceId,
+          ...input,
+        }),
+      ),
+  });
   const setRegisteredServiceAvailability = Object.freeze({
     execute: (serviceId: string, value: unknown) =>
       runServiceMutation(
@@ -406,6 +456,48 @@ export function createProtectedAdministration(
             serviceId,
             value,
           ),
+      ),
+  });
+  const getRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string) =>
+      runner.run("read_registered_service_availability", async (observedAt) => {
+        const service = (
+          await requireServices().listRegisteredServices.execute()
+        ).find((candidate) => candidate.id === serviceId);
+        if (service === undefined)
+          throw new Error("registered_service_not_found");
+        return Object.freeze({
+          serviceId,
+          policy: service.availabilityPolicy,
+          observedAt,
+        });
+      }),
+  });
+  const setRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string, value: unknown) =>
+      runServiceMutation("update_registered_service_schedule", serviceId, () =>
+        requireServices().updateRegisteredServiceAvailabilityPolicy.execute(
+          serviceId,
+          value,
+        ),
+      ),
+  });
+  const removeRegisteredServiceSchedule = Object.freeze({
+    execute: (serviceId: string) =>
+      runServiceMutation(
+        "remove_registered_service_schedule",
+        serviceId,
+        async () => {
+          const service = (
+            await requireServices().listRegisteredServices.execute()
+          ).find((candidate) => candidate.id === serviceId);
+          if (service === undefined)
+            throw new Error("registered_service_not_found");
+          await requireServices().removeRegisteredServiceAvailabilityPolicy.execute(
+            serviceId,
+          );
+          return service.availabilityPolicy;
+        },
       ),
   });
   const removeRegisteredServiceAvailability = Object.freeze({
@@ -736,11 +828,18 @@ export function createProtectedAdministration(
           }),
           availability: Object.freeze(availabilityCounts),
           powerSafety: Object.freeze({
-            backend: "mock",
-            effects: "disabled",
-            machineScheduler: "disabled",
-            helper: "unused",
+            ...(input.powerSafetyReader?.execute() ?? {
+              backend: "mock",
+              effects: "disabled",
+              machineScheduler: "disabled",
+              helper: "unused",
+            }),
           }),
+          machinePlan:
+            (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
+            null,
+          machineSchedule:
+            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
           backups: Object.freeze({
             registeredTargets: backupTargets.length,
             enabledTargets: backupTargets.filter(
@@ -790,6 +889,11 @@ export function createProtectedAdministration(
             machineScheduler: "disabled",
             helper: "unused",
           }),
+          machinePlan:
+            (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
+            null,
+          machineSchedule:
+            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
         });
       }),
   });
@@ -805,10 +909,15 @@ export function createProtectedAdministration(
     getAdministrativeSecurityPosture,
     getRegisteredServices,
     getRegisteredService,
+    getRegisteredServiceLogs,
     startRegisteredService,
     stopRegisteredService,
     restartRegisteredService,
     getRegisteredServiceAvailability,
+    getRegisteredServiceAvailabilityPreview,
+    getRegisteredServiceSchedule,
+    setRegisteredServiceSchedule,
+    removeRegisteredServiceSchedule,
     setRegisteredServiceAvailability,
     removeRegisteredServiceAvailability,
     getOperationsOverview,

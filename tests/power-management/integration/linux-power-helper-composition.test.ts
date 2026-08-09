@@ -8,7 +8,7 @@ import type { PowerManagementClock } from "../../../src/power-management/applica
 const NOW = "2026-08-01T12:00:00.000Z";
 
 describe("helper-backed power-management composition seam", () => {
-  it("keeps eleven frozen capabilities and routes helper-backed overrides", async () => {
+  it("keeps twelve frozen capabilities and routes helper-backed overrides", async () => {
     const transport = new InMemoryLinuxPowerHelperTransport();
     const adapters = createLinuxPowerHelperAdapters({ transport });
     const infrastructure = createConfiguredPowerManagementInfrastructure(
@@ -24,7 +24,7 @@ describe("helper-backed power-management composition seam", () => {
     });
 
     expect(Object.isFrozen(capabilities)).toBe(true);
-    expect(Object.keys(capabilities)).toHaveLength(11);
+    expect(Object.keys(capabilities)).toHaveLength(12);
     await expect(capabilities.getNextWakeAlarm.execute()).resolves.toEqual({
       observedAt: NOW,
       wakeAlarm: { state: "not_scheduled" },

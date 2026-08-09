@@ -117,4 +117,32 @@ describe("administrative shutdown runtime composition", () => {
     expect(runtime.wakeAlarm).toBeUndefined();
     expect(createAdapters).not.toHaveBeenCalled();
   });
+
+  it("does not expose schedule mutations without a persistent policy file", () => {
+    const runtime = createAdministrativeRuntime(
+      {
+        ...shutdownConfig(),
+        administrativeShutdownHttpEnabled: false,
+        administrativeServiceAvailabilityHttpEnabled: true,
+      },
+      undefined,
+    );
+
+    expect(runtime.schedule).toBeUndefined();
+  });
+
+  it("exposes schedule mutations only with a persistent policy file", () => {
+    const runtime = createAdministrativeRuntime(
+      {
+        ...shutdownConfig(),
+        administrativeShutdownHttpEnabled: false,
+        administrativeServiceAvailabilityHttpEnabled: true,
+        serviceAvailabilityPolicyFilePath:
+          "/tmp/atlas-manager-service-policies.json",
+      },
+      undefined,
+    );
+
+    expect(runtime.schedule).toBeDefined();
+  });
 });

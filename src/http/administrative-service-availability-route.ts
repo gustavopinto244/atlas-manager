@@ -24,6 +24,12 @@ export interface ProtectedAdministrativeServiceAvailability {
   readonly getRegisteredServiceAvailability: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
+  readonly getRegisteredServiceAvailabilityPreview: Readonly<{
+    execute(
+      serviceId: string,
+      input: { readonly startsAt: string; readonly endsAt: string },
+    ): Promise<unknown>;
+  }>;
   readonly setRegisteredServiceAvailability: Readonly<{
     execute(serviceId: string, input: unknown): Promise<unknown>;
   }>;
@@ -53,6 +59,84 @@ export function registerAdministrativeServiceAvailabilityRoutes(
     ],
     createAvailabilityHandler(dependencies),
   );
+  registerAdministrativeRoute(
+    app,
+    ["services.availability.preview"],
+    createAvailabilityPreviewHandler(dependencies),
+  );
+}
+
+function createAvailabilityPreviewHandler(
+  dependencies: AdministrativeServiceAvailabilityRouteDependencies,
+): RequestHandler {
+  return (request, response, next) => {
+    setAdministrativeSecurityHeaders(response);
+    const releaseAdmission = dependencies.admission.tryAdmit();
+    if (releaseAdmission === undefined) {
+      response.setHeader("Retry-After", "1");
+      next(
+        new HttpError(
+          429,
+          "administrative_request_limited",
+          "Administrative request limit exceeded",
+        ),
+      );
+      return;
+    }
+    void processAvailabilityPreview(request, response, dependencies)
+      .catch((error) => next(mapAvailabilityError(error)))
+      .finally(releaseAdmission);
+  };
+}
+
+async function processAvailabilityPreview(
+  request: Request,
+  response: Response,
+  dependencies: AdministrativeServiceAvailabilityRouteDependencies,
+): Promise<void> {
+  if (request.method !== "GET") {
+    response.setHeader("Allow", "GET");
+    throw new HttpError(405, "method_not_allowed", "Method Not Allowed");
+  }
+  const serviceId = request.params.serviceId;
+  if (typeof serviceId !== "string" || !isServiceId(serviceId))
+    throw new HttpError(
+      404,
+      "registered_service_not_found",
+      "Service not found",
+    );
+  validateAdministrativeRequestTarget(request.url);
+  validateAdministrativeRequestHasNoBody(request);
+  const query = new URL(request.url, "http://atlas.invalid").searchParams;
+  const keys = [...query.keys()];
+  if (
+    keys.length !== 2 ||
+    new Set(keys).size !== 2 ||
+    !keys.includes("startsAt") ||
+    !keys.includes("endsAt")
+  )
+    throw new HttpError(
+      400,
+      "invalid_service_availability_request",
+      "Invalid availability preview request",
+    );
+  const startsAt = query.get("startsAt");
+  const endsAt = query.get("endsAt");
+  if (startsAt === null || endsAt === null)
+    throw new HttpError(
+      400,
+      "invalid_service_availability_request",
+      "Invalid availability preview request",
+    );
+  const value = await dependencies
+    .createProtectedAdministration(
+      createCloudflareAccessAssertionReader(request),
+    )
+    .getRegisteredServiceAvailabilityPreview.execute(serviceId, {
+      startsAt,
+      endsAt,
+    });
+  send(response, value);
 }
 
 function createAvailabilityHandler(
@@ -265,6 +349,16 @@ function mapAvailabilityError(error: unknown): HttpError {
       404,
       "registered_service_not_found",
       "Service not found",
+    );
+  if (
+    error instanceof Error &&
+    Object.hasOwn(error, "code") &&
+    (error as Error & { code?: unknown }).code === "invalid_interval"
+  )
+    return new HttpError(
+      400,
+      "invalid_service_availability_request",
+      "Invalid availability preview request",
     );
   return new HttpError(
     503,

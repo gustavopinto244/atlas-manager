@@ -30,6 +30,10 @@ import {
   type AdministrativeServiceAvailabilityRouteDependencies,
 } from "./administrative-service-availability-route.js";
 import {
+  registerAdministrativeServiceScheduleRoutes,
+  type AdministrativeServiceScheduleRouteDependencies,
+} from "./administrative-service-schedule-route.js";
+import {
   registerAdministrativeOverviewRoute,
   type AdministrativeOverviewRouteDependencies,
 } from "./administrative-overview-route.js";
@@ -65,6 +69,7 @@ export interface CreateAppDependencies {
   administrativeShutdown?: AdministrativeShutdownRouteDependencies;
   administrativeServices?: AdministrativeServicesRouteDependencies;
   administrativeServiceAvailability?: AdministrativeServiceAvailabilityRouteDependencies;
+  administrativeServiceSchedule?: AdministrativeServiceScheduleRouteDependencies;
   administrativeOverview?: AdministrativeOverviewRouteDependencies;
   administrativeDashboard?: AdministrativeDashboardRouteDependencies;
   administrativeBackups?: AdministrativeBackupsRouteDependencies;
@@ -84,6 +89,7 @@ export function createApp({
   administrativeShutdown,
   administrativeServices,
   administrativeServiceAvailability,
+  administrativeServiceSchedule,
   administrativeOverview,
   administrativeDashboard,
   administrativeBackups,
@@ -102,6 +108,7 @@ export function createApp({
     administrativeShutdown !== undefined ||
     administrativeServices !== undefined ||
     administrativeServiceAvailability !== undefined ||
+    administrativeServiceSchedule !== undefined ||
     administrativeOverview !== undefined ||
     administrativeDashboard !== undefined ||
     administrativeBackups !== undefined ||
@@ -138,6 +145,11 @@ export function createApp({
     registerAdministrativeServiceAvailabilityRoutes(
       app,
       administrativeServiceAvailability,
+    );
+  if (administrativeServiceSchedule !== undefined)
+    registerAdministrativeServiceScheduleRoutes(
+      app,
+      administrativeServiceSchedule,
     );
   if (administrativeOverview !== undefined)
     registerAdministrativeOverviewRoute(app, administrativeOverview);
@@ -180,6 +192,9 @@ export function createApp({
       ...(administrativeServiceAvailability === undefined
         ? []
         : ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]),
+      ...(administrativeServiceSchedule === undefined
+        ? []
+        : ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]),
       ...(administrativeOverview === undefined
         ? []
         : ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]),

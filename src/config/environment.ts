@@ -261,6 +261,7 @@ const environmentSchema = z
     SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
       persistenceFilePathSchema.optional(),
     SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
+    SERVICE_AVAILABILITY_POLICY_FILE: persistenceFilePathSchema.optional(),
     CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
     CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
     ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: z
@@ -373,6 +374,51 @@ const environmentSchema = z
         code: "custom",
         path: ["SERVICE_AVAILABILITY_OVERRIDE_FILE"],
         message: "must differ from the scheduler cursor file path",
+      });
+    }
+
+    if (
+      environment.SERVICE_AVAILABILITY_POLICY_FILE !== undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_POLICY_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_POLICY_FILE ===
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["SERVICE_AVAILABILITY_POLICY_FILE"],
+        message: "must differ from the scheduler cursor file path",
+      });
+    }
+
+    if (
+      environment.SERVICE_AVAILABILITY_POLICY_FILE !== undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_POLICY_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_POLICY_FILE ===
+        environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["SERVICE_AVAILABILITY_POLICY_FILE"],
+        message: "must differ from the occurrence claim file path",
+      });
+    }
+
+    if (
+      environment.SERVICE_AVAILABILITY_POLICY_FILE !== undefined &&
+      isValidPersistenceFilePath(
+        environment.SERVICE_AVAILABILITY_POLICY_FILE,
+      ) &&
+      environment.SERVICE_AVAILABILITY_POLICY_FILE ===
+        environment.SERVICE_AVAILABILITY_OVERRIDE_FILE
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["SERVICE_AVAILABILITY_POLICY_FILE"],
+        message: "must differ from the availability override file path",
       });
     }
 
@@ -684,6 +730,7 @@ const environmentSchema = z
       environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
       environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+      environment.SERVICE_AVAILABILITY_POLICY_FILE,
       environment.ADMINISTRATIVE_EVENT_HISTORY_FILE,
       environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY,
       environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
@@ -764,6 +811,7 @@ const environmentSchema = z
       environment.SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE,
       environment.SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE,
       environment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+      environment.SERVICE_AVAILABILITY_POLICY_FILE,
     ].filter((value): value is string => value !== undefined);
     for (const [variable, value] of [
       [
@@ -906,6 +954,7 @@ export interface EnvironmentConfig {
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   readonly serviceAvailabilityOverrideFilePath?: string;
+  readonly serviceAvailabilityPolicyFilePath?: string;
   readonly cloudflareAccess?: Readonly<{
     readonly teamName: string;
     readonly issuer: string;
@@ -1078,6 +1127,12 @@ export function parseEnvironment(
       : {
           serviceAvailabilityOverrideFilePath:
             parsedEnvironment.SERVICE_AVAILABILITY_OVERRIDE_FILE,
+        }),
+    ...(parsedEnvironment.SERVICE_AVAILABILITY_POLICY_FILE === undefined
+      ? {}
+      : {
+          serviceAvailabilityPolicyFilePath:
+            parsedEnvironment.SERVICE_AVAILABILITY_POLICY_FILE,
         }),
     ...(cloudflareAccess === undefined ? {} : { cloudflareAccess }),
     ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined

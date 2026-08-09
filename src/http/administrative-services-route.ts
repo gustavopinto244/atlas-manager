@@ -33,6 +33,9 @@ export interface ProtectedAdministrativeServices {
   readonly getRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
+  readonly getRegisteredServiceLogs: Readonly<{
+    execute(serviceId: string, tailLines?: number): Promise<unknown>;
+  }>;
   readonly startRegisteredService: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
@@ -65,6 +68,11 @@ export function registerAdministrativeServicesRoutes(
     app,
     ["services.read"],
     createServiceHandler(dependencies),
+  );
+  registerAdministrativeRoute(
+    app,
+    ["services.logs.read"],
+    createServiceLogsHandler(dependencies),
   );
   for (const operation of ["start", "stop", "restart"] as const) {
     registerAdministrativeRoute(
@@ -134,6 +142,36 @@ function createServiceHandler(
         result as Parameters<typeof mapAdministrativeServiceDetail>[0],
       ),
     );
+  }, dependencies.admission);
+}
+
+function createServiceLogsHandler(
+  dependencies: AdministrativeServicesRouteDependencies,
+): RequestHandler {
+  return createAdmittedHandler(async (request, response) => {
+    const serviceId = request.params.serviceId;
+    if (typeof serviceId !== "string" || !isServiceId(serviceId))
+      throw new HttpError(
+        404,
+        "registered_service_not_found",
+        "Service not found",
+      );
+    const expected = `${ADMINISTRATIVE_SERVICES_ROUTE}/${serviceId}/logs`;
+    if (request.path !== expected)
+      throw new HttpError(404, "route_not_found", "Route not found");
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      throw new HttpError(405, "method_not_allowed", "Method Not Allowed");
+    }
+    validateAdministrativeRequestTarget(request.url);
+    rejectAdministrativeQuery(request.url);
+    validateAdministrativeRequestHasNoBody(request);
+    const result = await dependencies
+      .createProtectedAdministration(
+        createCloudflareAccessAssertionReader(request),
+      )
+      .getRegisteredServiceLogs.execute(serviceId);
+    sendBounded(response, result);
   }, dependencies.admission);
 }
 

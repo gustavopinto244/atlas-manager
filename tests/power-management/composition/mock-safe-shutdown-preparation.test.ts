@@ -7,6 +7,7 @@ import {
   MockMachineShutdownFilesystemSynchronizationController,
 } from "../../../src/power-management/infrastructure/mock-machine-shutdown-preparation-controllers.js";
 const keys = [
+  "machineOperatingPolicy",
   "getRtcInformation",
   "getNextWakeAlarm",
   "scheduleWakeAlarm",
@@ -25,7 +26,7 @@ const occurrence = {
   wakeScheduledFor: "2026-08-04T12:00:00.000Z",
 };
 describe("mock safe-shutdown preparation composition", () => {
-  it("exposes exactly eleven frozen stable capabilities and performs no construction work", () => {
+  it("exposes exactly twelve frozen stable capabilities and performs no construction work", () => {
     const clock = { now: vi.fn(() => new Date(occurrence.scheduledFor)) };
     const recorder = new InMemoryMachineShutdownPreparationEventRecorder();
     const capabilities = createPowerManagement({

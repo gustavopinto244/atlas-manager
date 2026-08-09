@@ -26,6 +26,7 @@ import type { CloudflareAccessAssertionReader } from "../access-control/applicat
 import type { AdministrativeShutdownRouteDependencies } from "./administrative-shutdown-route.js";
 import type { AdministrativeServicesRouteDependencies } from "./administrative-services-route.js";
 import type { AdministrativeServiceAvailabilityRouteDependencies } from "./administrative-service-availability-route.js";
+import type { AdministrativeServiceScheduleRouteDependencies } from "./administrative-service-schedule-route.js";
 import type { AdministrativeOverviewRouteDependencies } from "./administrative-overview-route.js";
 import type { AdministrativeDashboardRouteDependencies } from "./administrative-dashboard-route.js";
 import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
@@ -34,6 +35,12 @@ import type { AdministrativeBackupsRouteDependencies } from "./administrative-ba
 import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
 import type { AdministrativeSecurityStatusRouteDependencies } from "./administrative-security-status-route.js";
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
+import { GetMachinePowerPlan } from "../power-management/application/get-machine-power-plan.js";
+import type { MachinePowerPlan } from "../power-management/domain/machine-power-plan.js";
+import {
+  createMachineOperatingPolicy,
+  type MachineOperatingPolicy,
+} from "../power-management/domain/machine-operating-policy.js";
 import {
   ADMINISTRATIVE_ROUTE_SECURITY_CATALOG,
   expectedAdministrativeRouteIds,
@@ -45,6 +52,7 @@ export interface AdministrativeRuntime {
   readonly shutdown?: AdministrativeShutdownRouteDependencies;
   readonly services?: AdministrativeServicesRouteDependencies;
   readonly availability?: AdministrativeServiceAvailabilityRouteDependencies;
+  readonly schedule?: AdministrativeServiceScheduleRouteDependencies;
   readonly overview?: AdministrativeOverviewRouteDependencies;
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
   readonly backups?: AdministrativeBackupsRouteDependencies;
@@ -56,6 +64,10 @@ export interface AdministrativeRuntime {
 export interface AdministrativeRuntimeCompositionDependencies extends ConfiguredPowerManagementRuntimeDependencies {
   readonly eventHistory?: EventHistoryCapabilities;
   readonly powerManagement?: PowerManagementCapabilities;
+  readonly machinePlanReader?: Readonly<{
+    getMachinePowerPlan: Readonly<{ execute(): MachinePowerPlan }>;
+    machineOperatingPolicy: MachineOperatingPolicy;
+  }>;
   readonly getServerHealth?: GetServerHealthCapability;
   readonly applicationVersion?: string;
   readonly backupManagement?: BackupManagementCapabilities;
@@ -80,6 +92,33 @@ export function createAdministrativeRuntime(
 
   const clock: AdministrativeRequestClock = Object.freeze({
     now: () => new Date(),
+  });
+  const machinePlanReader =
+    compositionDependencies.machinePlanReader ??
+    (() => {
+      const machineOperatingPolicy =
+        config.machineOperatingPolicy ??
+        createMachineOperatingPolicy({ mode: "always_on" });
+      return Object.freeze({
+        getMachinePowerPlan: new GetMachinePowerPlan(
+          clock,
+          machineOperatingPolicy,
+        ),
+        machineOperatingPolicy,
+      });
+    })();
+  const powerSafetyReader = Object.freeze({
+    execute: () => {
+      const effects = config.machinePowerEffectsActivation?.kind ?? "disabled";
+      return Object.freeze({
+        backend: config.powerManagementBackend ?? "mock",
+        effects,
+        machineScheduler: config.machinePowerSchedulerEnabled
+          ? "enabled"
+          : "disabled",
+        helper: effects === "linux_helper" ? "configured" : "unused",
+      });
+    },
   });
   const eventHistory =
     compositionDependencies.eventHistory ??
@@ -124,6 +163,10 @@ export function createAdministrativeRuntime(
       : []),
     ...(config.administrativeServiceAvailabilityHttpEnabled
       ? ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]
+      : []),
+    ...(config.administrativeServiceAvailabilityHttpEnabled &&
+    config.serviceAvailabilityPolicyFilePath !== undefined
+      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
       ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
@@ -196,6 +239,8 @@ export function createAdministrativeRuntime(
     return createProtectedAdministration({
       accessControl,
       ...(powerManagement === undefined ? {} : { powerManagement }),
+      machinePlanReader,
+      powerSafetyReader,
       eventHistory,
       clock,
       ...(serviceManagement === undefined ? {} : { serviceManagement }),
@@ -268,6 +313,18 @@ export function createAdministrativeRuntime(
     ...((config.administrativeServiceAvailabilityHttpEnabled ?? false)
       ? {
           availability: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeServiceAvailabilityHttpEnabled ?? false) &&
+    config.serviceAvailabilityPolicyFilePath !== undefined
+      ? {
+          schedule: Object.freeze({
             admission,
             mutationGate: serviceMutationGate,
             createProtectedAdministration: (
