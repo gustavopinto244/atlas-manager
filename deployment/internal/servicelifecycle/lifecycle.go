@@ -166,6 +166,9 @@ func New(paths Paths, deps Dependencies) Service {
 					dependencies.AdministrativeShutdownEnabled = profile.shutdownEnabled
 					return runtimeverification.VerifyAdministrative(ctx, pid, dependencies)
 				}
+				if looksAdministrativeProfile(data) {
+					return fmt.Errorf("administrative_configuration_invalid")
+				}
 			}
 			return runtimeverification.Verify(ctx, pid, dependencies)
 		}
@@ -350,26 +353,32 @@ func parseAdministrativeProfile(data []byte) (administrativeProfile, bool) {
 		return administrativeProfile{}, false
 	}
 	for key, value := range map[string]string{
-		"POWER_MANAGEMENT_BACKEND":                                  "mock",
-		"MACHINE_POWER_EFFECTS_ACTIVATION":                          "disabled",
-		"MACHINE_POWER_SCHEDULER_ENABLED":                           "false",
-		"MACHINE_OPERATING_POLICY":                                  `{"mode":"always_on"}`,
-		"ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED":                 "true",
+		"POWER_MANAGEMENT_BACKEND":                         "mock",
+		"MACHINE_POWER_EFFECTS_ACTIVATION":                 "disabled",
+		"MACHINE_POWER_SCHEDULER_ENABLED":                  "false",
+		"MACHINE_OPERATING_POLICY":                         `{"mode":"always_on"}`,
+		"ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED":        "true",
+		"ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED":   "true",
+		"ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED": "true",
+		"ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED":             "true",
+		"ADMINISTRATIVE_DASHBOARD_ENABLED":                 "true",
+		"ADMINISTRATIVE_BACKUP_HTTP_ENABLED":               "true",
+		"ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED":      "true",
+		"SERVICE_AVAILABILITY_POLICY_FILE":                 "/var/lib/atlas-manager-service-availability/policies.json",
+		"ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY":           "/var/lib/atlas-manager-event-history",
+		"BACKUP_RUN_HISTORY_FILE":                          "/var/lib/atlas-manager-backups/runs.jsonl",
+	} {
+		if environment[key] != value {
+			return administrativeProfile{}, false
+		}
+	}
+	for key, value := range map[string]string{
 		"ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED":      "true",
-		"ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED":            "true",
-		"ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED":          "true",
-		"ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED":                      "true",
-		"ADMINISTRATIVE_DASHBOARD_ENABLED":                          "true",
-		"ADMINISTRATIVE_BACKUP_HTTP_ENABLED":                        "true",
-		"ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED":               "true",
-		"SERVICE_AVAILABILITY_POLICY_FILE":                          "/var/lib/atlas-manager-service-availability/policies.json",
 		"SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE": "/var/lib/atlas-manager-service-availability/scheduler-cursor.json",
 		"SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE": "/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl",
 		"SERVICE_AVAILABILITY_OVERRIDE_FILE":                        "/var/lib/atlas-manager-service-availability/overrides.json",
-		"ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY":                    "/var/lib/atlas-manager-event-history",
-		"BACKUP_RUN_HISTORY_FILE":                                   "/var/lib/atlas-manager-backups/runs.jsonl",
 	} {
-		if environment[key] != value {
+		if actual, present := environment[key]; present && actual != value {
 			return administrativeProfile{}, false
 		}
 	}
@@ -395,6 +404,30 @@ func parseAdministrativeProfile(data []byte) (administrativeProfile, bool) {
 		return administrativeProfile{}, false
 	}
 	return administrativeProfile{host: host, wakeAlarmEnabled: wake, shutdownEnabled: shutdown}, true
+}
+
+func hasEnvironmentKey(data []byte, expected string) bool {
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		index := bytes.IndexByte(line, '=')
+		if index > 0 && string(line[:index]) == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func looksAdministrativeProfile(data []byte) bool {
+	for _, key := range []string{
+		"ADMINISTRATIVE_PUBLIC_ORIGIN",
+		"ADMINISTRATIVE_ROLE_ASSIGNMENTS",
+		"ADMINISTRATIVE_DASHBOARD_ENABLED",
+		"ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED",
+	} {
+		if hasEnvironmentKey(data, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseEnvironment(data []byte) (map[string]string, bool) {

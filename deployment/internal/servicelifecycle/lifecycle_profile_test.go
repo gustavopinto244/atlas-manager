@@ -32,6 +32,45 @@ func TestAdministrativeProfileMarkersAcceptCurrentAndEnabledMockPowerSurfaces(t 
 	}
 }
 
+func TestAdministrativeProfileAcceptsLegacyOptionalSurfaces(t *testing.T) {
+	var input administrativeconfiguration.Input
+	if err := json.Unmarshal(administrativeconfiguration.ExampleInputBytes(), &input); err != nil {
+		t.Fatal(err)
+	}
+	environment, err := administrativeconfiguration.Environment(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := string(environment)
+	for _, line := range []string{
+		"ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\n",
+		"SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE=/var/lib/atlas-manager-service-availability/scheduler-cursor.json\n",
+		"SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE=/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl\n",
+		"SERVICE_AVAILABILITY_OVERRIDE_FILE=/var/lib/atlas-manager-service-availability/overrides.json\n",
+	} {
+		legacy = strings.Replace(legacy, line, "", 1)
+	}
+	if !isAdministrativeProfile([]byte(legacy)) {
+		t.Fatal("legacy administrative profile was not recognized")
+	}
+	if !hasEnvironmentKey([]byte(legacy), "ADMINISTRATIVE_PUBLIC_ORIGIN") {
+		t.Fatal("legacy administrative marker was not detected")
+	}
+	if !looksAdministrativeProfile([]byte(legacy)) {
+		t.Fatal("legacy administrative profile was not classified")
+	}
+}
+
+func TestAdministrativeProfileMarkersFailClosedWithoutPublicOrigin(t *testing.T) {
+	data := []byte("ADMINISTRATIVE_DASHBOARD_ENABLED=true\n")
+	if isAdministrativeProfile(data) {
+		t.Fatal("partial administrative profile was accepted")
+	}
+	if !looksAdministrativeProfile(data) {
+		t.Fatal("partial administrative profile would fall back to the ordinary verifier")
+	}
+}
+
 func TestAdministrativeProfileRejectsPartialAndAmbiguousEnvironment(t *testing.T) {
 	var input administrativeconfiguration.Input
 	if err := json.Unmarshal(administrativeconfiguration.ExampleInputBytes(), &input); err != nil {
@@ -42,7 +81,7 @@ func TestAdministrativeProfileRejectsPartialAndAmbiguousEnvironment(t *testing.T
 		t.Fatal(err)
 	}
 	for name, candidate := range map[string]string{
-		"missing event-history operation surface": strings.Replace(string(environment), "ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\n", "", 1),
+		"invalid event-history operation surface": strings.Replace(string(environment), "ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=true\n", "ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED=false\n", 1),
 		"duplicate public origin":                 string(environment) + "ADMINISTRATIVE_PUBLIC_ORIGIN=https://other.example.test\n",
 		"prefixed marker":                         strings.Replace(string(environment), "ADMINISTRATIVE_ROLE_ASSIGNMENTS=", "XADMINISTRATIVE_ROLE_ASSIGNMENTS=", 1),
 		"crlf":                                    strings.Replace(string(environment), "POWER_MANAGEMENT_BACKEND=mock\n", "POWER_MANAGEMENT_BACKEND=mock\r\n", 1),

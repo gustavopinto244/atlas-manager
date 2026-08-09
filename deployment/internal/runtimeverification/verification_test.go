@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestVerifyChecksHealthAndAdministrativeRouteAbsence(t *testing.T) {
@@ -98,6 +99,7 @@ func TestVerifyRejectsRedirectedHealth(t *testing.T) {
 
 func TestVerifyAdministrativeUsesLoopbackURLAndConfiguredHost(t *testing.T) {
 	dependencies := NewDependencies()
+	dependencies.Now = func() time.Time { return time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC) }
 	dependencies.BaseURL = "http://127.0.0.1:3000"
 	dependencies.AdministrativeHost = "admin.example.test"
 	dependencies.AdministrativeWakeAlarmEnabled = true
@@ -117,6 +119,7 @@ func TestVerifyAdministrativeUsesLoopbackURLAndConfiguredHost(t *testing.T) {
 			if request.Host != "admin.example.test" {
 				t.Fatalf("unexpected administrative authority: %s", request.Host)
 			}
+			assertAdministrativeProbeRequest(t, request)
 			status = http.StatusUnauthorized
 			body = `{"error":{"code":"administrative_authentication_required"}}`
 		} else {
@@ -131,6 +134,32 @@ func TestVerifyAdministrativeUsesLoopbackURLAndConfiguredHost(t *testing.T) {
 	dependencies.CheckIdentity = func(int) error { return nil }
 	if err := VerifyAdministrative(context.Background(), 123, dependencies); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func assertAdministrativeProbeRequest(t *testing.T, request *http.Request) {
+	t.Helper()
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := ""
+	switch {
+	case request.Method == http.MethodPut && request.URL.Path == "/admin/power/wake-alarm":
+		expected = `{"scheduledFor":"2026-08-09T13:00:00.000Z"}`
+	case request.Method == http.MethodPost && request.URL.Path == "/admin/power/shutdown/preparations":
+		expected = `{"operation":"shutdown","scheduledFor":"2026-08-09T13:00:00.000Z","wakeScheduledFor":"2026-08-09T14:00:00.000Z","confirmation":"confirm_shutdown_preparation"}`
+	case request.Method == http.MethodPost && request.URL.Path == "/admin/power/shutdown/executions":
+		expected = `{"operation":"shutdown","scheduledFor":"2026-08-09T13:00:00.000Z","wakeScheduledFor":"2026-08-09T14:00:00.000Z","confirmation":"confirm_shutdown_execution"}`
+	}
+	if string(body) != expected {
+		t.Fatalf("unexpected %s %s probe body: %q", request.Method, request.URL.Path, string(body))
+	}
+	if expected != "" && request.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("missing JSON content type for %s %s", request.Method, request.URL.Path)
+	}
+	if expected == "" && request.Header.Get("Content-Type") != "" {
+		t.Fatalf("unexpected content type for bodyless %s %s", request.Method, request.URL.Path)
 	}
 }
 
