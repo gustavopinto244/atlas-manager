@@ -2,6 +2,7 @@ import { initializeDashboardNavigation } from "./navigation.js";
 import {
   renderMachinePlan as renderMachinePlanView,
   renderMachineSchedule as renderMachineScheduleView,
+  renderMachinePreview as renderMachinePreviewView,
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
@@ -542,6 +543,13 @@ function renderMachinePlan(value: unknown): void {
       ? (value as { machineSchedule?: unknown }).machineSchedule
       : undefined;
   renderMachineScheduleView(document, schedule, machineSchedule);
+  let preview = section.querySelector<HTMLElement>("#machine-preview");
+  if (preview === null) {
+    preview = document.createElement("div");
+    preview.id = "machine-preview";
+    section.append(preview);
+  }
+  renderMachinePreviewView(document, preview, value);
 }
 
 function renderAvailability(value: unknown): void {

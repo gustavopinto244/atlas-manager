@@ -20,6 +20,13 @@ Infrastructure is read-only and shows the protected security posture, route
 catalog reconciliation and host-boundary flags. It does not offer a repair
 button.
 
+Machine shows the authoritative operating policy, next shutdown/wake
+transitions and a simulation preview. The preview identifies the backend,
+effects and scheduler state; when the profile is mock with effects disabled it
+explicitly reports that no physical power effect is armed. Machine modes such
+as always-on and manual are described instead of being inferred from empty
+windows.
+
 ## Services and schedules
 
 Services render their registered adapter, current status, availability and
@@ -44,6 +51,8 @@ admission and audit.
 Each API read uses same-origin credentials and rejects redirects. A failed
 request leaves the authoritative state unknown and reports that condition to
 the operator. Mutation buttons are disabled while an operation is in flight.
+Power preparation and execution use separate explicit checkbox confirmations;
+execution is not offered until the backend returns a prepared occurrence.
 
 ## Security and accessibility
 

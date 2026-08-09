@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   renderMachinePlan,
+  renderMachinePreview,
   renderMachineSchedule,
 } from "../../src/dashboard/machine-plan-view.js";
 
@@ -105,5 +106,22 @@ describe("machine plan view", () => {
       mode: "manual",
     });
     expect(manual.textContent).toContain("operator control is required");
+  });
+
+  it("renders a simulation-only machine preview from authoritative safety data", () => {
+    const parent = new FakeElement();
+
+    renderMachinePreview(fakeDocument(), parent as unknown as HTMLElement, {
+      powerSafety: {
+        backend: "mock",
+        effects: "disabled",
+        machineScheduler: "disabled",
+      },
+      machineSchedule: { mode: "scheduled" },
+    });
+
+    expect(parent.textContent).toContain("Machine preview");
+    expect(parent.textContent).toContain("simulation-only");
+    expect(parent.textContent).toContain("Mode: scheduled");
   });
 });

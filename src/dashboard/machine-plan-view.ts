@@ -112,6 +112,32 @@ export function renderMachineSchedule(
   parent.append(table);
 }
 
+export function renderMachinePreview(
+  document: Document,
+  parent: HTMLElement,
+  value: unknown,
+): void {
+  parent.replaceChildren();
+  const record = readRecord(value);
+  const safety = readRecord(record.powerSafety);
+  const schedule = readRecord(record.machineSchedule);
+  const heading = document.createElement("h3");
+  heading.textContent = "Machine preview";
+  const details = document.createElement("p");
+  const backend = readString(safety.backend, "unavailable");
+  const effects = readString(safety.effects, "unavailable");
+  const scheduler = readString(safety.machineScheduler, "unavailable");
+  const mode = readString(schedule.mode, "unavailable");
+  const simulation = backend === "mock" && effects === "disabled";
+  details.textContent = `Mode: ${mode} · Backend: ${backend} · Effects: ${effects} · Scheduler: ${scheduler}`;
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  status.textContent = simulation
+    ? "Preview mode: simulation-only; no physical power effect is armed."
+    : "Preview mode: physical effect configuration requires qualification.";
+  parent.append(heading, details, status);
+}
+
 function appendTransition(
   document: Document,
   body: HTMLTableSectionElement,
@@ -170,6 +196,12 @@ function readPlan(value: unknown): Readonly<{
     nextShutdown: readTransition(record.nextShutdown),
     nextWake: readTransition(record.nextWake),
   };
+}
+
+function readRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function readTransition(value: unknown): Transition {
