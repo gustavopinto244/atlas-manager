@@ -405,6 +405,37 @@ describe("administrative control-plane routes", () => {
     expect(asset.status).toBe(200);
   });
 
+  it("reports enabled mock power controls from the administrative profile", async () => {
+    const app = createApp({
+      ...base(),
+      administrativeOverview: {
+        admission: new FixedAdministrativeRequestAdmission(base().clock),
+        createProtectedAdministration: vi.fn(() => ({
+          getOperationsOverview: {
+            execute: vi.fn(async () => ({ powerSafety: { backend: "mock" } })),
+          },
+        })),
+        getServerHealth: base().getServerHealth,
+        applicationVersion: "1.0.0",
+        administration: { wakeAlarmEnabled: true, shutdownEnabled: true },
+      },
+    });
+
+    const response = await request(app).get("/admin/overview");
+
+    expect(response.status).toBe(200);
+    const body = response.body as {
+      administration: {
+        wakeAlarmEnabled: boolean;
+        shutdownEnabled: boolean;
+      };
+    };
+    expect(body.administration).toMatchObject({
+      wakeAlarmEnabled: true,
+      shutdownEnabled: true,
+    });
+  });
+
   it("rejects cross-site and malformed Fetch Metadata before route execution", async () => {
     const execute = vi.fn(async () => ({
       services: { registered: 0 },
