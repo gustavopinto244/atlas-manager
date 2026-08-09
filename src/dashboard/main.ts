@@ -1,5 +1,9 @@
 import { initializeDashboardNavigation } from "./navigation.js";
 import {
+  PowerControlsController,
+  PowerControlsRequestError,
+} from "./power-controls.js";
+import {
   renderMachinePlan as renderMachinePlanView,
   renderMachineSchedule as renderMachineScheduleView,
   renderMachinePreview as renderMachinePreviewView,
@@ -19,20 +23,12 @@ const infrastructure = document.querySelector<HTMLElement>(
 );
 const powerControls = document.querySelector<HTMLElement>("#power-controls");
 
-let preparedShutdownOccurrence:
-  | Readonly<{
-      operation: "shutdown";
-      scheduledFor: string;
-      wakeScheduledFor: string;
-    }>
-  | undefined;
-
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
     credentials: "same-origin",
     redirect: "error",
   });
-  if (!response.ok) throw new Error("request_failed");
+  if (!response.ok) throw powerControlsHttpError(response.status);
   return response.json() as Promise<unknown>;
 }
 
@@ -91,246 +87,12 @@ function renderOverview(value: unknown): void {
   const metadata = document.createElement("p");
   metadata.textContent = `Version: ${displayValue(record.applicationVersion, "unavailable")} · source: ${displayValue(record.sourceCommit, "unavailable")}`;
   root.append(grid, metadata);
-  renderPowerControls(administration, powerSafety);
-}
-
-function renderPowerControls(
-  administration: Readonly<Record<string, unknown>>,
-  powerSafety: Readonly<Record<string, unknown>>,
-): void {
-  if (powerControls === null) return;
-  powerControls.replaceChildren();
-  const heading = document.createElement("h3");
-  heading.textContent = "Mock power controls";
-  const note = document.createElement("p");
-  note.textContent = `Backend: ${displayValue(powerSafety.backend, "unavailable")} · effects: ${displayValue(powerSafety.effects, "unavailable")} · scheduler: ${displayValue(powerSafety.machineScheduler, "unavailable")}`;
-  powerControls.append(heading, note);
-
-  const wakeEnabled = administration.wakeAlarmEnabled === true;
-  const shutdownEnabled = administration.shutdownEnabled === true;
-  if (!wakeEnabled && !shutdownEnabled) {
-    const disabled = document.createElement("p");
-    disabled.textContent =
-      "Wake-alarm and shutdown HTTP controls are disabled by configuration.";
-    powerControls.append(disabled);
-    return;
-  }
-
-  if (wakeEnabled) renderWakeAlarmControls(powerControls);
-  if (shutdownEnabled) {
-    renderShutdownPreparationControl(powerControls);
-    if (preparedShutdownOccurrence !== undefined)
-      renderShutdownExecutionControl(powerControls, preparedShutdownOccurrence);
-  }
-}
-
-function renderWakeAlarmControls(parent: HTMLElement): void {
-  const current = document.createElement("p");
-  current.setAttribute("role", "status");
-  current.textContent = "Current wake alarm: loading…";
-  parent.append(current);
-  void readJson("/admin/power/wake-alarm")
-    .then((value) => {
-      const alarm = readRecord(readRecord(value).wakeAlarm);
-      const state = displayValue(alarm.state, "unavailable");
-      const scheduledFor =
-        typeof alarm.scheduledFor === "string"
-          ? ` at ${alarm.scheduledFor}`
-          : "";
-      current.textContent = `Current wake alarm: ${state}${scheduledFor}`;
-    })
-    .catch(() => {
-      current.textContent = "Current wake alarm: unavailable";
-    });
-  const form = document.createElement("form");
-  const label = document.createElement("label");
-  label.textContent = "Mock wake time";
-  const input = document.createElement("input");
-  input.type = "datetime-local";
-  input.required = true;
-  input.setAttribute("aria-label", "Mock wake time");
-  const defaultTime = new Date(Date.now() + 60 * 60 * 1000);
-  input.value = defaultTime.toISOString().slice(0, 16);
-  label.append(input);
-  const schedule = document.createElement("button");
-  schedule.type = "submit";
-  schedule.textContent = "Schedule mock wake";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel mock wake";
-  form.append(label, schedule, cancel);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    void powerRequest(
-      "/admin/power/wake-alarm",
-      "PUT",
-      { scheduledFor: new Date(input.value).toISOString() },
-      schedule,
+  if (powerControls !== null)
+    void powerControlsController.render(
+      powerControls,
+      administration,
+      powerSafety,
     );
-  });
-  cancel.addEventListener("click", () => {
-    void powerRequest("/admin/power/wake-alarm", "DELETE", undefined, cancel);
-  });
-  parent.append(form);
-}
-
-function renderShutdownPreparationControl(parent: HTMLElement): void {
-  const form = document.createElement("form");
-  const label = document.createElement("label");
-  label.textContent = "Mock shutdown preparation";
-  const confirmationLabel = document.createElement("label");
-  const confirmation = document.createElement("input");
-  confirmation.type = "checkbox";
-  confirmation.required = true;
-  confirmation.setAttribute("aria-label", "Confirm mock shutdown preparation");
-  confirmationLabel.append(
-    confirmation,
-    document.createTextNode("I confirm this mock shutdown preparation."),
-  );
-  const button = document.createElement("button");
-  button.type = "submit";
-  button.className = "destructive-action";
-  button.textContent = "Prepare mock shutdown";
-  const feedback = document.createElement("p");
-  feedback.setAttribute("role", "status");
-  form.append(label, confirmationLabel, button, feedback);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (!confirmation.checked) {
-      feedback.textContent = "Explicit confirmation is required.";
-      return;
-    }
-    feedback.textContent = "";
-    const scheduledFor = new Date(Date.now() + 60 * 60 * 1000);
-    const wakeScheduledFor = new Date(scheduledFor.getTime() + 60 * 60 * 1000);
-    void powerRequest(
-      "/admin/power/shutdown/preparations",
-      "POST",
-      {
-        operation: "shutdown",
-        scheduledFor: scheduledFor.toISOString(),
-        wakeScheduledFor: wakeScheduledFor.toISOString(),
-        confirmation: "confirm_shutdown_preparation",
-      },
-      button,
-      (value) => {
-        const occurrence = readShutdownOccurrence(value);
-        if (occurrence !== undefined) preparedShutdownOccurrence = occurrence;
-      },
-    );
-  });
-  parent.append(form);
-}
-
-function renderShutdownExecutionControl(
-  parent: HTMLElement,
-  occurrence: Readonly<{
-    operation: "shutdown";
-    scheduledFor: string;
-    wakeScheduledFor: string;
-  }>,
-): void {
-  const section = document.createElement("div");
-  const summary = document.createElement("p");
-  summary.textContent = `Prepared mock shutdown: ${occurrence.scheduledFor} → wake ${occurrence.wakeScheduledFor}`;
-  const confirmationLabel = document.createElement("label");
-  const confirmation = document.createElement("input");
-  confirmation.type = "checkbox";
-  confirmation.required = true;
-  confirmation.setAttribute(
-    "aria-label",
-    "Confirm prepared mock shutdown execution",
-  );
-  confirmationLabel.append(
-    confirmation,
-    document.createTextNode(
-      "I confirm execution of this prepared mock action.",
-    ),
-  );
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "destructive-action";
-  button.textContent = "Execute prepared mock shutdown";
-  const feedback = document.createElement("p");
-  feedback.setAttribute("role", "status");
-  button.addEventListener("click", () => {
-    if (!confirmation.checked) {
-      feedback.textContent = "Explicit confirmation is required.";
-      return;
-    }
-    feedback.textContent = "";
-    void powerRequest(
-      "/admin/power/shutdown/executions",
-      "POST",
-      {
-        ...occurrence,
-        confirmation: "confirm_shutdown_execution",
-      },
-      button,
-      () => {
-        preparedShutdownOccurrence = undefined;
-      },
-    );
-  });
-  section.append(summary, confirmationLabel, button, feedback);
-  parent.append(section);
-}
-
-function readShutdownOccurrence(value: unknown):
-  | Readonly<{
-      operation: "shutdown";
-      scheduledFor: string;
-      wakeScheduledFor: string;
-    }>
-  | undefined {
-  const record = readRecord(value);
-  const occurrence = readRecord(record.occurrence);
-  if (
-    occurrence.operation !== "shutdown" ||
-    typeof occurrence.scheduledFor !== "string" ||
-    typeof occurrence.wakeScheduledFor !== "string"
-  )
-    return undefined;
-  return {
-    operation: "shutdown",
-    scheduledFor: occurrence.scheduledFor,
-    wakeScheduledFor: occurrence.wakeScheduledFor,
-  };
-}
-
-async function powerRequest(
-  path: string,
-  method: "PUT" | "DELETE" | "POST",
-  body: unknown,
-  button: HTMLButtonElement,
-  onSuccess?: (value: unknown) => void,
-): Promise<unknown> {
-  button.disabled = true;
-  try {
-    const response = await fetch(path, {
-      method,
-      credentials: "same-origin",
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-      redirect: "error",
-    });
-    if (!response.ok) throw new Error("power_operation_failed");
-    const result = (await response.json()) as unknown;
-    onSuccess?.(result);
-    if (status !== null) status.textContent = "Mock power state updated.";
-    await refresh();
-    return result;
-  } catch {
-    if (status !== null)
-      status.textContent = "Mock power state could not be updated.";
-    return undefined;
-  } finally {
-    button.disabled = false;
-  }
 }
 
 function appendOverviewCard(
@@ -757,6 +519,48 @@ function appendBackupActionForm(
 }
 
 const status = document.querySelector<HTMLElement>("#status");
+
+function powerControlsHttpError(statusCode: number): PowerControlsRequestError {
+  if (statusCode === 401 || statusCode === 403)
+    return new PowerControlsRequestError("unauthorized");
+  if (statusCode === 409 || statusCode === 429)
+    return new PowerControlsRequestError("busy");
+  return new PowerControlsRequestError("failed");
+}
+
+async function mutatePowerState(
+  path: string,
+  method: "PUT" | "DELETE" | "POST",
+  body: unknown,
+): Promise<unknown> {
+  const response = await fetch(path, {
+    method,
+    credentials: "same-origin",
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+    redirect: "error",
+  });
+  if (!response.ok) throw powerControlsHttpError(response.status);
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    throw new PowerControlsRequestError("invalid_response");
+  }
+}
+
+const powerControlsController = new PowerControlsController({
+  document,
+  transport: { read: readJson, mutate: mutatePowerState },
+  refresh,
+  setStatus: (message) => {
+    if (status !== null) status.textContent = message;
+  },
+});
+
 async function refresh(): Promise<void> {
   const [
     overview,

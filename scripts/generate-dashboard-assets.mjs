@@ -10,9 +10,8 @@ const root = process.cwd();
 const output = join(root, "dist/dashboard-assets");
 const manifestPath = join(root, "dist/dashboard-assets.manifest.json");
 const snapshot = { ...getAdministrativeDashboardAssetSnapshot() };
-let compiledApp;
 try {
-  compiledApp = await readFile(join(root, "dist/dashboard/main.js"), "utf8");
+  await readFile(join(root, "dist/dashboard/main.js"), "utf8");
 } catch {
   execFileSync(
     process.execPath,
@@ -22,8 +21,26 @@ try {
       stdio: "inherit",
     },
   );
-  compiledApp = await readFile(join(root, "dist/dashboard/main.js"), "utf8");
 }
+execFileSync(
+  join(root, "node_modules/.bin/esbuild"),
+  [
+    "src/dashboard/main.ts",
+    "--bundle",
+    "--platform=browser",
+    "--format=iife",
+    "--target=es2022",
+    "--legal-comments=none",
+    "--outfile=dist/dashboard/main.js",
+  ],
+  { cwd: root, stdio: "inherit" },
+);
+const compiledApp = await readFile(
+  join(root, "dist/dashboard/main.js"),
+  "utf8",
+);
+if (/^\s*(?:import|export)\s/mu.test(compiledApp))
+  throw new Error("dashboard_app_not_bundled");
 const sourceStyles = await readFile(
   join(root, "src/dashboard/styles.css"),
   "utf8",

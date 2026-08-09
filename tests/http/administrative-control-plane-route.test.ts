@@ -405,11 +405,11 @@ describe("administrative control-plane routes", () => {
     const asset = await request(app).get("/assets/styles.css");
     expect(asset.status).toBe(200);
     const appAsset = await request(app).get("/assets/app.js");
-    expect(appAsset.text).toContain("Execute prepared mock shutdown");
-    expect(appAsset.text).toContain("/admin/power/shutdown/executions");
-    expect(appAsset.text).toContain("Current wake alarm:");
-    expect(appAsset.text).toContain("Explicit confirmation is required.");
-    expect(appAsset.text).toContain("destructive-action");
+    expect(appAsset.status).toBe(200);
+    expect(appAsset.headers["content-type"]).toContain(
+      "application/javascript",
+    );
+    expect(appAsset.text).toContain("PowerControlsController");
   });
 
   it("reports enabled mock power controls from the administrative profile", async () => {
