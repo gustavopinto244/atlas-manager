@@ -45,6 +45,23 @@ dependencies, requires Node 24, and does not contain server state, secrets or
 Cloudflare assertions. It installs with `npm install --global` and can be
 replaced by installing a newer archive over the old version.
 
+## Slice 4 — read-only server installation planner
+
+The server bundle now includes `atlas-manager-server-installer`. Its `inspect`
+and `plan` actions execute a fixed read-only inventory of the existing bundle,
+host qualification, identity, configuration and lifecycle tools. The planner
+returns bounded JSON, classifies recognized host state and identifies at most
+one next explicit mutation boundary without executing it.
+
+Sandbox coverage combines the planner state/error matrix with the existing
+installer lifecycle test for disabled install, same-version verification,
+upgrade, rollback and uninstall. Interrupted, exact-unmanaged, malformed,
+oversized and unknown reports fail closed. Activation remains separate.
+
+The bundle manifest and checksums now require the planner executable. The
+planner never reads secrets, invokes `sudo`, supplies confirmations or changes
+the mock-only power baseline.
+
 ## Deliberate boundaries
 
 The following are not falsely marked open:

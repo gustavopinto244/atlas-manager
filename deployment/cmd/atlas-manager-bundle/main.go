@@ -42,6 +42,7 @@ func main() {
 		SourceRoot: *source, OutputDir: *output, DashboardAssetsRoot: *dashboardAssets, NodeVersion: *nodeVersion,
 		NPMVersion: *npmVersion, GoVersion: *goVersion,
 		InstallerPath:                          filepath.Join(filepath.Dir(executable), "atlas-manager-installer"),
+		ServerInstallerPath:                    filepath.Join(filepath.Dir(executable), "atlas-manager-server-installer"),
 		QualificationPath:                      filepath.Join(filepath.Dir(executable), "atlas-manager-host-qualification"),
 		IdentityInstallerPath:                  filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-identity-installer"),
 		RuntimeConfigurationPath:               filepath.Join(filepath.Dir(executable), "atlas-manager-runtime-configuration"),

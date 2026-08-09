@@ -121,6 +121,7 @@ jobs:
         run: |
           mkdir -p ../dist/deployment
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-installer ./cmd/atlas-manager-installer
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-server-installer ./cmd/atlas-manager-server-installer
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-bundle ./cmd/atlas-manager-bundle
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-smoke ./cmd/atlas-manager-smoke
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags='-s -w' -o ../dist/deployment/atlas-manager-host-qualification ./cmd/atlas-manager-host-qualification
@@ -180,6 +181,9 @@ jobs:
           bundle_root="dist/atlas-manager-bundle/atlas-manager_${bundle_version}_linux_amd64"
           (cd "$bundle_root" && ./atlas-manager-installer inspect-bundle)
           test -x "$bundle_root/atlas-manager-runtime-identity-installer"
+          test -x "$bundle_root/atlas-manager-server-installer"
+          grep -q 'atlas-manager-server-installer' "$bundle_root/MANIFEST.json"
+          grep -q 'atlas-manager-server-installer' "$bundle_root/SHA256SUMS"
           grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-runtime-identity-installer' "$bundle_root/SHA256SUMS"
           test -x "$bundle_root/atlas-manager-runtime-configuration"

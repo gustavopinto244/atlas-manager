@@ -66,6 +66,19 @@ cd atlas-manager-install/atlas-manager_<version>_linux_amd64
 source commit, version, modes and required files. Do not repair a bundle by
 editing, replacing or copying individual files.
 
+The bundle also provides one read-only orchestration entrypoint:
+
+```sh
+./atlas-manager-server-installer inspect
+./atlas-manager-server-installer plan
+```
+
+Use `plan` to collect the fixed bundle, host, identity, configuration and
+lifecycle observations and identify the next explicit boundary. It does not
+run that boundary, elevate privileges or accept confirmations. A blocked JSON
+report is evidence, not permission to continue. See the
+[server installation planner](operations/atlas-manager-server-installer.md).
+
 The inspected root must also contain `INSTALLATION.md`. That generated file is
 the release-specific, bundled installation contract; this repository guide
 provides the broader operator context. If they disagree, stop and qualify the
