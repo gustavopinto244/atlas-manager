@@ -205,6 +205,9 @@ func inspectBundle(root string) error {
 	if _, err := os.Stat(filepath.Join(root, "atlas-manager-installer")); err != nil {
 		return fmt.Errorf("installer_missing")
 	}
+	if _, err := os.Stat(filepath.Join(root, "atlas-manager-server-installer")); err != nil {
+		return fmt.Errorf("server_installer_missing")
+	}
 	if _, err := os.Stat(filepath.Join(root, "atlas-manager-host-qualification")); err != nil {
 		return fmt.Errorf("qualification_missing")
 	}

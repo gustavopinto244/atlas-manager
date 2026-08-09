@@ -43,6 +43,7 @@ type Config struct {
 	RuntimeConfigurationPath               string
 	ServiceLifecyclePath                   string
 	AdministrativeRuntimeConfigurationPath string
+	ServerInstallerPath                    string
 	Runner                                 Runner
 }
 
@@ -176,7 +177,7 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "dashboard/backup.js", "dashboard/event-history.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service", "contracts/atlas-manager-administrative-api.json"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-server-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "dashboard/backup.js", "dashboard/event-history.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service", "contracts/atlas-manager-administrative-api.json"}
 	if config.AdministrativeRuntimeConfigurationPath != "" {
 		metadataPaths = append(metadataPaths, "atlas-manager-administrative-runtime-configuration")
 	}
@@ -353,6 +354,12 @@ func assemble(root, buildRoot, runtimeRoot string, config Config) error {
 	if err := copyFile(config.InstallerPath, filepath.Join(root, "atlas-manager-installer"), 0o755); err != nil {
 		return err
 	}
+	if config.ServerInstallerPath == "" {
+		return fmt.Errorf("server_installer_missing")
+	}
+	if err := copyFile(config.ServerInstallerPath, filepath.Join(root, "atlas-manager-server-installer"), 0o755); err != nil {
+		return err
+	}
 	if config.QualificationPath == "" {
 		return fmt.Errorf("qualification_missing")
 	}
@@ -467,6 +474,10 @@ This bundle is installed by a local administrator through
 atlas-manager-installer install-disabled. Installation does not create users
 or groups, create the real environment file, enable or start systemd, install
 the Linux power helper, or activate power effects.
+
+Before any mutation, run atlas-manager-server-installer inspect and
+atlas-manager-server-installer plan. The planner executes fixed read-only
+probes and describes, but never invokes, the next explicit boundary.
 `
 
 func writeChecksums(root string, value manifest.Manifest) error {
