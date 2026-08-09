@@ -2,6 +2,7 @@ package runtimeverification
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -28,6 +29,33 @@ func TestVerifyChecksHealthAndAdministrativeRouteAbsence(t *testing.T) {
 	dependencies.CheckIdentity = func(int) error { return nil }
 	if err := Verify(context.Background(), 123, dependencies); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVerifyRetriesTransientHealthConnectionFailure(t *testing.T) {
+	dependencies := NewDependencies()
+	attempts := 0
+	dependencies.HTTPClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == HealthLivePath && attempts < 2 {
+			attempts++
+			return nil, errors.New("connection refused")
+		}
+		body := `{"status":"ok"}`
+		status := http.StatusOK
+		if request.URL.Path == HealthServerPath {
+			body = `{"capturedAt":"2026-01-01T00:00:00.000Z","uptimeSeconds":1,"memory":{},"cpu":{},"cpuLoadAverage":[],"disk":{}}`
+		} else if request.URL.Path != HealthLivePath {
+			status = http.StatusNotFound
+			body = `{}`
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	})}
+	dependencies.CheckIdentity = func(int) error { return nil }
+	if err := Verify(context.Background(), 123, dependencies); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected two transient retries, got %d", attempts)
 	}
 }
 

@@ -118,13 +118,34 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 }
 
 func verifyHealth(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {
+	var last error
+	for attempt := 0; attempt < 20; attempt++ {
+		last = verifyHealthOnce(ctx, client, baseURL, path, live)
+		if last == nil {
+			return nil
+		}
+		if !strings.HasPrefix(last.Error(), "health_request_failed:") {
+			return last
+		}
+		timer := time.NewTimer(250 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return last
+}
+
+func verifyHealthOnce(ctx context.Context, client *http.Client, baseURL, path string, live bool) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+path, nil)
 	if err != nil {
 		return err
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return fmt.Errorf("health_request_failed: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
