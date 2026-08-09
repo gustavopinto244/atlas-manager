@@ -317,6 +317,23 @@ jobs:
       - name: Build production application
         run: npm run build
 
+      - name: Build and smoke-test operator package
+        shell: bash
+        run: |
+          npm run package:operator
+          operator_package_path="$(find dist/operator-package -maxdepth 1 -type f -name 'atlas-manager-operator-cli-*.tgz' -print)"
+          test "$(printf '%s\n' "$operator_package_path" | sed '/^$/d' | wc -l)" -eq 1
+          test -f "$operator_package_path"
+          operator_package_sha256="$(sha256sum "$operator_package_path" | awk '{print $1}')"
+          operator_package_name="$(basename "$operator_package_path")"
+          test "$(awk -v name="$operator_package_name" '$2 == name {print $1}' dist/operator-package/SHA256SUMS)" = "$operator_package_sha256"
+          operator_smoke_root="$RUNNER_TEMP/atlas-operator-smoke"
+          npm install --prefix "$operator_smoke_root" "$operator_package_path" --ignore-scripts --no-audit --no-fund
+          "$operator_smoke_root/node_modules/.bin/atlas" --help > "$RUNNER_TEMP/atlas-operator-help.txt"
+          test -s "$RUNNER_TEMP/atlas-operator-help.txt"
+          echo "OPERATOR_PACKAGE_NAME=$operator_package_name" >> "$GITHUB_ENV"
+          echo "OPERATOR_PACKAGE_SHA256=$operator_package_sha256" >> "$GITHUB_ENV"
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
@@ -344,6 +361,18 @@ jobs:
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
           release_artifacts="$RUNNER_TEMP/atlas-manager-release-artifacts"
           mkdir -p "$release_artifacts"
+          operator_package_path="$(find dist/operator-package -maxdepth 1 -type f -name 'atlas-manager-operator-cli-*.tgz' -print)"
+          test "$(printf '%s\n' "$operator_package_path" | sed '/^$/d' | wc -l)" -eq 1
+          operator_package_name="$(basename "$operator_package_path")"
+          operator_package_sha256="$(sha256sum "$operator_package_path" | awk '{print $1}')"
+          test "${OPERATOR_PACKAGE_NAME:-}" = "$operator_package_name"
+          test "${OPERATOR_PACKAGE_SHA256:-}" = "$operator_package_sha256"
+          test "$(awk -v name="$operator_package_name" '$2 == name {print $1}' dist/operator-package/SHA256SUMS)" = "$operator_package_sha256"
+          mkdir -p "$release_artifacts/operator-package"
+          cp "$operator_package_path" "$release_artifacts/operator-package/"
+          cp dist/operator-package/SHA256SUMS "$release_artifacts/operator-package/"
+          operator_package_version="$(node -p "require('./package.json').version")"
+          node -e 'const fs=require("node:fs"); const [output,name,sha,commit,version]=process.argv.slice(1); fs.writeFileSync(output, JSON.stringify({schemaVersion:1,package:name,sha256:sha,sourceCommit:commit,version}, null, 2)+"\n")' "$release_artifacts/operator-package/metadata.json" "$operator_package_name" "$operator_package_sha256" "$SOURCE_COMMIT" "$operator_package_version"
           test -f "$release_artifacts/atlas-manager-release-rehearsal-a.json"
           test -f "$release_artifacts/atlas-manager-release-rehearsal-b.json"
           test -f docs/contracts/atlas-manager-administrative-api.json
@@ -383,6 +412,10 @@ jobs:
           cp "$bundle_path" "$bundle_artifact_dir/"
           cp "$bundle_root/MANIFEST.json" "$bundle_artifact_root/"
           cp "$bundle_root/SHA256SUMS" "$bundle_artifact_root/"
+          mkdir -p "$bundle_artifact_dir/operator-package"
+          cp "$release_artifacts/operator-package/$OPERATOR_PACKAGE_NAME" "$bundle_artifact_dir/operator-package/"
+          cp "$release_artifacts/operator-package/SHA256SUMS" "$bundle_artifact_dir/operator-package/"
+          cp "$release_artifacts/operator-package/metadata.json" "$bundle_artifact_dir/operator-package/"
           SOURCE_COMMIT="$SOURCE_COMMIT" RELEASE_VERSION="$bundle_version" node scripts/generate-deployment-bundle-metadata.mjs \
             --bundle-root "$bundle_root" \
             --bundle-archive "$bundle_path" \

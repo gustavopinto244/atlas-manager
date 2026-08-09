@@ -178,14 +178,28 @@ export function createAdministrativeRuntime(
       ? ["ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED"]
       : []),
   ];
-  const enabledRouteCount = expectedAdministrativeRouteIds(
+  const enabledRouteIds = expectedAdministrativeRouteIds(
     enabledActivationFlags,
-  ).length;
+  );
+  const enabledRouteCount = enabledRouteIds.length;
   const activationFlagCount = new Set(
     ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.map(
       (descriptor) => descriptor.activationFlag,
     ),
   ).size;
+  const activationFlags = Object.freeze(
+    Object.fromEntries(
+      [
+        ...new Set(
+          ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.map(
+            (descriptor) => descriptor.activationFlag,
+          ),
+        ),
+      ]
+        .sort()
+        .map((flag) => [flag, enabledActivationFlags.includes(flag)]),
+    ),
+  );
   const securityPostureReader = Object.freeze({
     execute: async (): Promise<unknown> => {
       const identityReadiness: AdministrativeIdentityReadiness =
@@ -195,7 +209,9 @@ export function createAdministrativeRuntime(
         routeCatalog: Object.freeze({
           reconciled: routeCatalogReconciled,
           routeCount: enabledRouteCount,
+          routeIds: enabledRouteIds,
         }),
+        activationFlags,
         featureCounts: Object.freeze({
           enabled: enabledActivationFlags.length,
           disabled: activationFlagCount - enabledActivationFlags.length,

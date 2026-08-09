@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { commandPath, findCommand } from "./command-tree.js";
 import { AtlasCliError, exitCodeForCliError } from "./errors.js";
 import type { AtlasCliTransport, CliResult } from "./contracts.js";
@@ -85,7 +87,9 @@ function writeResult(
   output.write(`error: ${result.error?.code}: ${result.error?.message}\n`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedEntryPoint =
+  process.argv[1] === undefined ? undefined : realpathSync(process.argv[1]);
+if (invokedEntryPoint === fileURLToPath(import.meta.url)) {
   void runAtlasCli(process.argv.slice(2)).then((code) => {
     process.exitCode = code;
   });

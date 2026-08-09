@@ -57,6 +57,9 @@ describe("mock administrative runtime profile", () => {
     expect(environment.POWER_MANAGEMENT_BACKEND).toBe("mock");
     expect(environment.MACHINE_POWER_SCHEDULER_ENABLED).toBe("false");
     expect(environment.ADMINISTRATIVE_DASHBOARD_ENABLED).toBe("true");
+    expect(environment.SERVICE_AVAILABILITY_POLICY_FILE).toBe(
+      "/var/lib/atlas-manager-service-availability/policies.json",
+    );
     expect(environment.ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED).toBe("false");
     expect(environment.ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED).toBe("false");
   });

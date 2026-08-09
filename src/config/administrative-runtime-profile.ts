@@ -127,6 +127,14 @@ export function createMockAdministrativeEnvironment(
     ADMINISTRATIVE_DASHBOARD_ENABLED: "true",
     ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: "false",
     ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: "false",
+    SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
+      "/var/lib/atlas-manager-service-availability/scheduler-cursor.json",
+    SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
+      "/var/lib/atlas-manager-service-availability/occurrence-claims.jsonl",
+    SERVICE_AVAILABILITY_OVERRIDE_FILE:
+      "/var/lib/atlas-manager-service-availability/overrides.json",
+    SERVICE_AVAILABILITY_POLICY_FILE:
+      "/var/lib/atlas-manager-service-availability/policies.json",
     CLOUDFLARE_ACCESS_TEAM_NAME: input.cloudflareTeamName,
     CLOUDFLARE_ACCESS_AUDIENCE: input.cloudflareAudience,
     ADMINISTRATIVE_PUBLIC_ORIGIN: input.publicOrigin,

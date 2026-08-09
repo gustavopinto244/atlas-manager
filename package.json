@@ -30,6 +30,7 @@
     "release:validate-snapshots": "node scripts/validate-versioned-release-snapshots.mjs",
     "dashboard:generate-assets": "node --import tsx/esm scripts/generate-dashboard-assets.mjs",
     "dashboard:verify-assets": "node scripts/verify-dashboard-assets.mjs",
+    "package:operator": "node scripts/build-operator-package.mjs",
     "release:rehearse": "node scripts/run-release-rehearsal.mjs"
   },
   "keywords": [
