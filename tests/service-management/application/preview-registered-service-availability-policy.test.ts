@@ -51,6 +51,20 @@ describe("PreviewRegisteredServiceAvailabilityPolicy", () => {
     expect(result.outcome).toBeDefined();
   });
 
+  it("tags the result as a candidate preview, distinct from a persisted-policy preview", async () => {
+    const preview = new PreviewRegisteredServiceAvailabilityPolicy(
+      catalog(),
+      overrideStore(),
+    );
+    const result = await preview.execute({
+      serviceId: "atlas-api",
+      policy: { mode: "always" },
+      startsAt: "2026-08-03T21:00:00.000Z",
+      endsAt: "2026-08-04T12:00:00.000Z",
+    });
+    expect(result.source).toBe("candidate_preview");
+  });
+
   it("evaluates a candidate always policy as always required", async () => {
     const preview = new PreviewRegisteredServiceAvailabilityPolicy(
       catalog(),

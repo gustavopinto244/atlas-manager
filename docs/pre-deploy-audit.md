@@ -598,8 +598,15 @@ CRIT-01.
    yes. The whole MED-03 analysis presumes `linux_helper` activation arrives in a
    later stage, when the two undocumented variables become mandatory.
 
-8. **Release contract** — should the `catalogSha256` in
-   `docs/contracts/atlas-manager-administrative-api.json` be regenerated before
-   rollout? The `release:generate-*` scripts were not executed, to avoid creating
-   files beyond this report, so it was not verified whether the published contract
-   still matches the current `rc.11` catalog.
+8. **Release contract** — resolved. The `catalogSha256` field named in this
+   finding had no generator or verifier anywhere in the repository (confirmed
+   by exhaustive grep across `scripts/`, `deployment/`, and `tests/`); the
+   actual integrity mechanism for this file is a whole-file SHA256 digest
+   computed by `scripts/generate-release-contract.mjs` and
+   `scripts/generate-release-evidence.mjs` and checked by
+   `scripts/validate-release-artifacts.mjs` against
+   `contract.administrativeApiContractSha256` / `evidence.routeCatalog.contractSha256`
+   in the separate release-contract/evidence files — a real, tested mechanism
+   independent of any field inside this file. The orphaned `catalogSha256`
+   field was removed rather than populated with a value nothing would ever
+   check.
