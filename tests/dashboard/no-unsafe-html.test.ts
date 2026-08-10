@@ -22,10 +22,7 @@ describe("dashboard source contains no unsafe HTML or dynamic script insertion",
 
   for (const file of files) {
     it(`${file} builds DOM only through safe APIs`, () => {
-      const content = readFileSync(
-        resolve(DASHBOARD_SOURCE_DIR, file),
-        "utf8",
-      );
+      const content = readFileSync(resolve(DASHBOARD_SOURCE_DIR, file), "utf8");
       for (const pattern of UNSAFE_PATTERNS) {
         expect(content).not.toMatch(pattern);
       }
