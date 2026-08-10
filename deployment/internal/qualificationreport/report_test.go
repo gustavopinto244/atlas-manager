@@ -10,7 +10,7 @@ func TestMarshalIsCanonicalAndBounded(t *testing.T) {
 		SchemaVersion: SchemaVersion, Action: "qualify", Result: "qualified",
 		Bundle:          Check{Name: "bundle", Status: Passed, Code: "bundle_valid"},
 		Platform:        Check{Name: "platform", Status: Passed, Code: "linux_amd64_root"},
-		NodeRuntime:     Check{Name: "node_runtime", Status: Passed, Code: "node_runtime_exact"},
+		NodeRuntime:     Check{Name: "node_runtime", Status: Passed, Code: "node_runtime_supported"},
 		Systemd:         Check{Name: "systemd", Status: Passed, Code: "systemd_available"},
 		Filesystem:      Check{Name: "filesystem", Status: Passed, Code: "filesystem_safe"},
 		RuntimeIdentity: Check{Name: "runtime_identity", Status: Warning, Code: "runtime_identity_absent"},

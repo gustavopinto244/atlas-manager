@@ -16,6 +16,7 @@ import (
 
 	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/nodeversion"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/systemdunit"
 )
@@ -854,7 +855,7 @@ func defaultNodeCheck(path string) NodeVersionChecker {
 		stderr := &boundedWriter{limit: 1024}
 		command.Stdout = stdout
 		command.Stderr = stderr
-		if err := command.Run(); err != nil || stdout.overflow || stderr.overflow || strings.TrimSpace(string(stdout.data)) != "v24.18.0" {
+		if err := command.Run(); err != nil || stdout.overflow || stderr.overflow || !nodeversion.Supported(string(stdout.data)) {
 			return fmt.Errorf("node_version_invalid")
 		}
 		return nil

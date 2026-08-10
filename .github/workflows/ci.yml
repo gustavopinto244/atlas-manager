@@ -154,6 +154,10 @@ jobs:
           cmp dist/power-helper-bundle/atlas-manager-power-helper_0.0.0_linux_amd64/manifest.json \
             dist/power-helper-bundle-repeat/atlas-manager-power-helper_0.0.0_linux_amd64/manifest.json
 
+      # Pinned exactly, and deliberately narrower than the engines range in
+      # package.json: this job reproduces release bundles, so it must match
+      # bundle.PinnedNode. Deployment hosts are held to the wider supported
+      # range instead — see deployment/internal/nodeversion.
       - name: Set up Node.js
         uses: actions/setup-node@v4.4.0
         with:

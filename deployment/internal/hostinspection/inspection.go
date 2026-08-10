@@ -14,6 +14,7 @@ import (
 	"github.com/atlas-manager/atlas-manager/deployment/internal/identitystate"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/installer"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
+	"github.com/atlas-manager/atlas-manager/deployment/internal/nodeversion"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/qualificationreport"
 	"github.com/atlas-manager/atlas-manager/deployment/internal/runtimeidentity"
 )
@@ -232,7 +233,7 @@ func (inspector Inspector) inspectNode(ctx context.Context) qualificationreport.
 	if err := inspector.deps.CheckNode(ctx, inspector.paths.Deployment.Node); err != nil {
 		return check("node_runtime", qualificationreport.Blocked, "node_runtime_version_mismatch")
 	}
-	return check("node_runtime", qualificationreport.Passed, "node_runtime_exact")
+	return check("node_runtime", qualificationreport.Passed, "node_runtime_supported")
 }
 
 func (inspector Inspector) inspectSystemd() qualificationreport.Check {
@@ -473,7 +474,7 @@ func checkNode(ctx context.Context, path string) error {
 	stdout := &boundedWriter{limit: 1024}
 	stderr := &boundedWriter{limit: 1024}
 	command.Stdout, command.Stderr = stdout, stderr
-	if err := command.Run(); err != nil || stdout.overflow || stderr.overflow || strings.TrimSpace(string(stdout.data)) != "v24.18.0" {
+	if err := command.Run(); err != nil || stdout.overflow || stderr.overflow || !nodeversion.Supported(string(stdout.data)) {
 		return fmt.Errorf("node_runtime_version_mismatch")
 	}
 	return nil

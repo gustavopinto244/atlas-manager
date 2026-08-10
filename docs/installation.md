@@ -29,6 +29,37 @@ effects and the machine scheduler disabled. This guide never installs or
 activates the Linux power helper and never performs a real shutdown, reboot,
 wake-alarm or RTC mutation.
 
+## Host Node.js runtime
+
+The service unit runs `ExecStart=/usr/bin/node`, so `/usr/bin/node` must be the
+interpreter the host provides:
+
+```text
+supported range: >=24 <25   (package.json "engines.node")
+required path:   /usr/bin/node
+required type:   regular file owned by root, executable, not a symlink
+```
+
+`package.json` is the source of truth for the range. Host qualification and the
+installer both accept any release inside it, so a Node 24 security patch does
+not require a new deployment build. Verify with:
+
+```bash
+/usr/bin/node --version
+```
+
+A `node` resolved through nvm, `$PATH` or a shell profile does not satisfy this
+requirement, and neither does a symlink at `/usr/bin/node`. Qualification
+inspects the path with `lstat` and reports `node_runtime_unsafe` for a symlink
+and `node_runtime_version_mismatch` for an out-of-range release. If the
+workstation uses nvm, note that `node --version` in a shell may report a
+different release than the one the service will execute; only the reading from
+`/usr/bin/node` above is authoritative.
+
+Bundle reproduction is a separate, stricter constraint: a release bundle is
+built with one exact pinned toolchain, recorded in the release evidence, and
+that pin is not relaxed by this range.
+
 ## Supported installation products
 
 | Product               | Purpose                                                                        | Installation boundary                                                    |
