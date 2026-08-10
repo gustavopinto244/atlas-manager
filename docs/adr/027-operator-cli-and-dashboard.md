@@ -1,6 +1,15 @@
 # ADR-027 — Operator CLI and dashboard are presentation adapters
 
-Status: Proposed
+Status: Accepted
+
+Accepted based on implementation conformance review
+(`docs/reviews/adr-027-implementation-conformance.md`, 2026-08-10): twelve of
+the thirteen normative decisions below are implemented and regression-covered
+in the source, and the thirteenth (read-only host diagnostics) is an unbuilt
+capability rather than a divergence. The follow-up mutating-CLI identity ADR
+required by "Privilege boundaries" was discharged by ADR-028 (identity and
+privilege constraints) and ADR-031 (concrete authenticated mutation
+transport). The text below is preserved as originally proposed.
 
 ## Context
 

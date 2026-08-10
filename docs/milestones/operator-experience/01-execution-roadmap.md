@@ -7,9 +7,13 @@ leave directly related tests green and update `docs/capabilities.md`.
 
 ## Phase A — security and contracts
 
-1. Restore authenticated reads and prove Cloudflare assertion propagation.
-2. Accept ADR-027.
-3. Write and accept a local/remote CLI identity ADR.
+1. Restore authenticated reads and prove Cloudflare assertion propagation. —
+   done.
+2. Accept ADR-027. — done 2026-08-10, on the strength of
+   `docs/reviews/adr-027-implementation-conformance.md`.
+3. Write and accept a local/remote CLI identity ADR. — done: ADR-028 fixes the
+   identity and privilege constraints, ADR-031 chooses the concrete
+   authenticated mutation transport.
 4. Define shared command result, error and pagination contracts.
 5. Inventory proposed route additions and establish the new explicit route
    count before implementation.
@@ -31,18 +35,27 @@ command handlers.
 
 1. Expose missing service logs transport through a protected capability.
 2. Add CLI list/status/logs.
-3. Add authenticated start/stop/restart after the CLI auth ADR is implemented.
+3. Add authenticated start/stop/restart after the CLI auth ADR is implemented. —
+   done 2026-08-10 over the ADR-031 transport, with zero new administrative
+   routes.
 4. Build dashboard navigation and Services page using the same API DTOs.
 
 Exit gate: PM2, Docker and Compose remain hidden behind registered-service
-ports; all mutations are audited and gated.
+ports; all mutations are audited and gated. **Met** — additionally guarded by
+`tests/cli/no-direct-host-mutation.test.ts`, which forbids process execution
+anywhere in `src/cli`, and by
+`tests/http/authenticated-cli-mutation-integration.test.ts`, which proves a CLI
+mutation is audited with the same principal as a dashboard mutation.
 
 ## Phase D — service scheduling
 
 1. Add a persistent registered-service policy store and policy mutation use
    cases distinct from temporary availability overrides.
-2. Add schedule show/update/remove and preview APIs.
-3. Add CLI schedule commands.
+2. Add schedule show/update/remove and preview APIs. — done.
+3. Add CLI schedule commands. — `schedule show` and both previews (persisted and
+   candidate) are delivered; the mutation commands
+   (`set`/`always`/`manual`/`disable`/`remove`) are the next slice and reuse the
+   ADR-031 transport unchanged.
 4. Add reusable weekly editor and timeline components.
 5. Add next-transition data to service detail and overview.
 

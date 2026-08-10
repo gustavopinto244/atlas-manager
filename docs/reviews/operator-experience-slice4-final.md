@@ -2,6 +2,22 @@
 
 2026-08-10
 
+> **Correction appended 2026-08-10 (authenticated mutating CLI milestone).**
+> This report is preserved as written. Two of its recommendations rested on a
+> factual error inherited from the current-state inventory: ADR-028 already
+> existed with `Status: Accepted` when this report was written, so
+> recommendation 2 ("Accept ADR-028 … before adding any mutating CLI command")
+> was not actionable as stated, and recommendation 3's precondition
+> ("once ADR-028 lands") had already been met.
+>
+> ADR-028 does not itself unblock mutations: it fixes the _constraints_ and
+> requires a further ADR to choose the concrete authenticated transport. That
+> ADR is **ADR-031** (Accepted), and `services start/stop/restart` are
+> implemented against it. Recommendation 1 (accept ADR-027) was acted on; see
+> `docs/reviews/adr-027-implementation-conformance.md`. See also correction C1
+> in `docs/reviews/operator-experience-current-state.md` and the milestone
+> report `docs/reviews/authenticated-mutating-cli-final.md`.
+
 ## Initial state
 
 - Source HEAD: `298ffa95f53fa18b48221f6c81df26279d9ea9e9` (merge of Operator

@@ -25,7 +25,9 @@ for the full, source-derived inventory. Summary:
   (Slice 3), and registered-service scheduling — persistent policy store,
   candidate-draft preview, weekly editor overhaul, timeline current-state
   display (Slice 4).
-- Remaining implementation: mutating CLI commands (blocked on ADR-028),
+- Remaining implementation: mutating CLI schedule and backup commands
+  (unblocked — ADR-031's authenticated transport is accepted and in use by
+  `services start/stop/restart`; these are a mechanical follow-up slice),
   infrastructure diagnostics (CLI/dashboard), machine schedule mutation
   (blocked on a dedicated policy-store ADR), Compose resource aggregation
   semantics, active-override display on the schedule timeline.
