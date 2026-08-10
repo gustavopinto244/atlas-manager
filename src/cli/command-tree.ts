@@ -107,6 +107,36 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
     implemented: true,
   },
   {
+    path: ["backups", "schedule", "show"],
+    summary: "Show a backup schedule",
+    implemented: true,
+  },
+  {
+    path: ["backups", "schedule", "set"],
+    summary: "Set a backup schedule policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "schedule", "remove"],
+    summary: "Remove a backup schedule",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "show"],
+    summary: "Show a backup retention policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "set"],
+    summary: "Set a backup retention policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "prune"],
+    summary: "Prune backup artifacts beyond retention",
+    implemented: true,
+  },
+  {
     path: ["infra", "status"],
     summary: "Show infrastructure status",
     implemented: false,

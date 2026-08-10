@@ -32,6 +32,7 @@ import { ServiceAvailabilityModeValidationError } from "../../service-scheduling
 import { ServiceScheduleValidationError } from "../../service-scheduling/domain/service-schedule-validation-error.js";
 import { ServiceScheduleTimezoneValidationError } from "../../service-scheduling/domain/service-schedule-timezone.js";
 import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
+import { BackupTargetValidationError } from "../../backup-management/domain/backup-target.js";
 import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
 import type { MachinePowerPlan } from "../../power-management/domain/machine-power-plan.js";
 import type { MachineOperatingPolicy } from "../../power-management/domain/machine-operating-policy.js";
@@ -1108,7 +1109,8 @@ class ExecuteProtectedAdministrativeOperation {
         error instanceof ServiceAvailabilityPolicyValidationError ||
         error instanceof ServiceAvailabilityModeValidationError ||
         error instanceof ServiceScheduleValidationError ||
-        error instanceof ServiceScheduleTimezoneValidationError
+        error instanceof ServiceScheduleTimezoneValidationError ||
+        error instanceof BackupTargetValidationError
       )
         throw error;
       if (error instanceof MachineShutdownOccurrenceExecutionError) throw error;

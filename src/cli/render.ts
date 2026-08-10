@@ -33,7 +33,29 @@ export function renderHumanResult(command: string, data: unknown): string {
     const rendered = renderBackupRun(data);
     if (rendered !== undefined) return rendered;
   }
+  if (command === "backups retention prune") {
+    const rendered = renderRetentionPrune(data);
+    if (rendered !== undefined) return rendered;
+  }
   return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+function renderRetentionPrune(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const record = data as Record<string, unknown>;
+  if (
+    typeof record.targetId !== "string" ||
+    typeof record.result !== "string" ||
+    typeof record.processedCount !== "number" ||
+    typeof record.deletedCount !== "number"
+  )
+    return undefined;
+  return `${[
+    `Backup target: ${record.targetId}`,
+    `Retention prune: ${record.result}`,
+    `Processed: ${record.processedCount}`,
+    `Deleted: ${record.deletedCount}`,
+  ].join("\n")}\n`;
 }
 
 function renderBackupRun(data: unknown): string | undefined {

@@ -205,6 +205,100 @@ export function backupRunReadPath(runId: string): string {
   );
 }
 
+export type AtlasBackupScheduleOperation = "update" | "delete";
+
+export const ATLAS_BACKUP_SCHEDULE_OPERATIONS: readonly AtlasBackupScheduleOperation[] =
+  Object.freeze(["update", "delete"]);
+
+const BACKUP_SCHEDULE_MUTATIONS: Readonly<
+  Record<AtlasBackupScheduleOperation, AtlasAdministrativeMutationDescriptor>
+> = Object.freeze({
+  update: Object.freeze({
+    routeId: "backups.schedule.update",
+    method: "PUT",
+    pathTemplate: "/admin/backups/targets/:targetId/schedule",
+    confirmation: "confirm_registered_backup_schedule_update",
+  }),
+  delete: Object.freeze({
+    routeId: "backups.schedule.delete",
+    method: "DELETE",
+    pathTemplate: "/admin/backups/targets/:targetId/schedule",
+    confirmation: "confirm_registered_backup_schedule_removal",
+  }),
+});
+
+export const ATLAS_BACKUP_SCHEDULE_MUTATIONS = BACKUP_SCHEDULE_MUTATIONS;
+
+export type AtlasBackupRetentionOperation = "update" | "prune";
+
+export const ATLAS_BACKUP_RETENTION_OPERATIONS: readonly AtlasBackupRetentionOperation[] =
+  Object.freeze(["update", "prune"]);
+
+const BACKUP_RETENTION_MUTATIONS: Readonly<
+  Record<AtlasBackupRetentionOperation, AtlasAdministrativeMutationDescriptor>
+> = Object.freeze({
+  update: Object.freeze({
+    routeId: "backups.retention.update",
+    method: "PUT",
+    pathTemplate: "/admin/backups/targets/:targetId/retention",
+    confirmation: "confirm_registered_backup_retention_update",
+  }),
+  prune: Object.freeze({
+    routeId: "backups.retention.prune",
+    method: "POST",
+    pathTemplate: "/admin/backups/targets/:targetId/retention/prunes",
+    confirmation: "confirm_registered_backup_retention_prune",
+  }),
+});
+
+export const ATLAS_BACKUP_RETENTION_MUTATIONS = BACKUP_RETENTION_MUTATIONS;
+
+/**
+ * `backups.scheduler.tick` is deliberately absent from this table and has no
+ * CLI command. Its `claim_protected` replay policy and reentrancy-guarded
+ * compare-and-set cursor mark it as internal, cron-triggered maintenance whose
+ * correctness depends on not being invoked ad hoc; exposing it as an
+ * interactive operator command would invite exactly that.
+ */
+
+export const ATLAS_BACKUP_SCHEDULE_READ_PATH_TEMPLATE =
+  "/admin/backups/targets/:targetId/schedule";
+export const ATLAS_BACKUP_RETENTION_READ_PATH_TEMPLATE =
+  "/admin/backups/targets/:targetId/retention";
+
+export function backupScheduleMutation(
+  operation: AtlasBackupScheduleOperation,
+): AtlasAdministrativeMutationDescriptor {
+  return BACKUP_SCHEDULE_MUTATIONS[operation];
+}
+
+export function backupRetentionMutation(
+  operation: AtlasBackupRetentionOperation,
+): AtlasAdministrativeMutationDescriptor {
+  return BACKUP_RETENTION_MUTATIONS[operation];
+}
+
+export function backupSchedulePath(targetId: string): string {
+  return ATLAS_BACKUP_SCHEDULE_READ_PATH_TEMPLATE.replace(
+    ":targetId",
+    encodeURIComponent(targetId),
+  );
+}
+
+export function backupRetentionPath(targetId: string): string {
+  return ATLAS_BACKUP_RETENTION_READ_PATH_TEMPLATE.replace(
+    ":targetId",
+    encodeURIComponent(targetId),
+  );
+}
+
+export function backupRetentionPrunePath(targetId: string): string {
+  return BACKUP_RETENTION_MUTATIONS.prune.pathTemplate.replace(
+    ":targetId",
+    encodeURIComponent(targetId),
+  );
+}
+
 /**
  * A backup is addressed by *registered target id* only. There is deliberately
  * no source or destination path anywhere in this vocabulary: accepting one

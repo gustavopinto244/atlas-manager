@@ -10,6 +10,15 @@ import {
   ATLAS_SERVICE_SCHEDULE_READ_PATH_TEMPLATE,
   ATLAS_BACKUP_ACTION_MUTATIONS,
   ATLAS_BACKUP_OPERATIONS,
+  ATLAS_BACKUP_RETENTION_MUTATIONS,
+  ATLAS_BACKUP_RETENTION_OPERATIONS,
+  ATLAS_BACKUP_RETENTION_READ_PATH_TEMPLATE,
+  ATLAS_BACKUP_SCHEDULE_MUTATIONS,
+  ATLAS_BACKUP_SCHEDULE_OPERATIONS,
+  ATLAS_BACKUP_SCHEDULE_READ_PATH_TEMPLATE,
+  backupRetentionPath,
+  backupRetentionPrunePath,
+  backupSchedulePath,
   ATLAS_BACKUP_RUN_READ_PATH_TEMPLATE,
   ATLAS_BACKUP_TARGET_READ_PATH_TEMPLATE,
   backupActionPath,
@@ -233,5 +242,103 @@ describe("CLI administrative contract binding — backup operations", () => {
       true,
     );
     expect(isAtlasBackupRunId("not-a-uuid")).toBe(false);
+  });
+});
+
+describe("CLI administrative contract binding — backup policy mutations", () => {
+  it("matches the canonical catalog for every backup schedule mutation", () => {
+    for (const operation of ATLAS_BACKUP_SCHEDULE_OPERATIONS) {
+      const declared = ATLAS_BACKUP_SCHEDULE_MUTATIONS[operation];
+      const canonical = descriptorFor(declared.routeId);
+      expect(declared.routeId, operation).toBe(`backups.schedule.${operation}`);
+      expect(declared.method, operation).toBe(canonical.method);
+      expect(declared.pathTemplate, operation).toBe(canonical.pathTemplate);
+      expect(canonical.confirmationPolicy, operation).toBe(
+        `exact:${declared.confirmation}`,
+      );
+      expect(canonical.permission, operation).toBe("backups.schedule.write");
+      expect(canonical.gatePolicy, operation).toBe("backup_operation");
+    }
+  });
+
+  it("matches the canonical catalog for every backup retention mutation", () => {
+    for (const operation of ATLAS_BACKUP_RETENTION_OPERATIONS) {
+      const declared = ATLAS_BACKUP_RETENTION_MUTATIONS[operation];
+      const canonical = descriptorFor(declared.routeId);
+      expect(declared.method, operation).toBe(canonical.method);
+      expect(declared.pathTemplate, operation).toBe(canonical.pathTemplate);
+      expect(canonical.confirmationPolicy, operation).toBe(
+        `exact:${declared.confirmation}`,
+      );
+      expect(canonical.gatePolicy, operation).toBe("backup_operation");
+    }
+    // Pruning is a distinct permission from writing the policy: being allowed
+    // to change how much is kept is not being allowed to delete what is kept.
+    expect(descriptorFor("backups.retention.update").permission).toBe(
+      "backups.retention.write",
+    );
+    expect(descriptorFor("backups.retention.prune").permission).toBe(
+      "backups.retention.prune",
+    );
+  });
+
+  it("declares no backup policy confirmation the catalog does not require", () => {
+    const catalogConfirmations = new Set(
+      ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.filter(
+        (entry) => entry.confirmationPolicy !== "none",
+      ).map((entry) => entry.confirmationPolicy),
+    );
+    for (const declared of [
+      ...Object.values(ATLAS_BACKUP_SCHEDULE_MUTATIONS),
+      ...Object.values(ATLAS_BACKUP_RETENTION_MUTATIONS),
+    ])
+      expect(
+        catalogConfirmations.has(`exact:${declared.confirmation}`),
+        declared.routeId,
+      ).toBe(true);
+  });
+
+  it("keeps the destructive prune behind a confirmation with no bypass", () => {
+    const canonical = descriptorFor("backups.retention.prune");
+    // The confirmation string is the only accepted authorization. There is no
+    // catalog affordance for skipping it, and the CLI exposes no --force.
+    expect(canonical.confirmationPolicy).toBe(
+      "exact:confirm_registered_backup_retention_prune",
+    );
+    expect(canonical.authenticationPolicy).toBe("required");
+    expect(canonical.auditPolicy).toBe("authorization_started_terminal");
+  });
+
+  it("binds the backup policy reads to the catalog's own routes", () => {
+    expect(ATLAS_BACKUP_SCHEDULE_READ_PATH_TEMPLATE).toBe(
+      descriptorFor("backups.schedule.read").pathTemplate,
+    );
+    expect(ATLAS_BACKUP_RETENTION_READ_PATH_TEMPLATE).toBe(
+      descriptorFor("backups.retention.read").pathTemplate,
+    );
+    expect(backupSchedulePath("atlas-config")).toBe(
+      "/admin/backups/targets/atlas-config/schedule",
+    );
+    expect(backupRetentionPath("atlas-config")).toBe(
+      "/admin/backups/targets/atlas-config/retention",
+    );
+    expect(backupRetentionPrunePath("atlas-config")).toBe(
+      "/admin/backups/targets/atlas-config/retention/prunes",
+    );
+  });
+
+  it("declares no descriptor for the internal backup scheduler tick", () => {
+    // The route exists server-side and stays deliberately unexposed: its
+    // claim-protected replay policy makes it cron-triggered maintenance, not
+    // an interactive operator command.
+    expect(descriptorFor("backups.scheduler.tick").replayPolicy).toBe(
+      "claim_protected",
+    );
+    const declared = [
+      ...Object.values(ATLAS_BACKUP_ACTION_MUTATIONS),
+      ...Object.values(ATLAS_BACKUP_SCHEDULE_MUTATIONS),
+      ...Object.values(ATLAS_BACKUP_RETENTION_MUTATIONS),
+    ].map((entry) => entry.routeId);
+    expect(declared).not.toContain("backups.scheduler.tick");
   });
 });
