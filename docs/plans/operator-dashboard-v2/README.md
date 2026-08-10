@@ -1,15 +1,34 @@
 # Operator dashboard v2 plan
 
-Planning source binding:
+Original planning baseline (unchanged — do not edit; describes the state that
+motivated this plan):
 
 ```text
 origin/main=928697c782e1c68bffba389d10a48b96aee74ba8
 release=1.0.0-rc.11
 ```
 
+Current implementation baseline:
+
+```text
+origin/main=ab152b3e7866e1091022d667e41e63d020cedad3
+release=1.0.0-rc.13
+```
+
+Completed slices: none fully closed yet. Slice 1's reliability/isolation work
+and its `supportedOperations`-driven controls are delivered in source (see
+[01-reliability-and-registration.md](01-reliability-and-registration.md) for
+the exact item-by-item status); registering the real Task Manager PM2 entry
+remains an operator action pending live Atlas inspection, not source work.
+
+Remaining slices: 2 (visual shell), 3 (resource observability), 4 (scheduling
+UX) are not started.
+
 This plan responds to the first successful authenticated dashboard acceptance
 on Atlas. The shell loads, but it is visually primitive, can remain stuck on
-`Loading...`, and does not show the running Task Manager.
+`Loading...`, and does not show the running Task Manager. That original
+baseline observation is preserved above because slices 2-4 still address it;
+only the reliability portion of slice 1 has since been delivered.
 
 ## Verified Atlas baseline
 

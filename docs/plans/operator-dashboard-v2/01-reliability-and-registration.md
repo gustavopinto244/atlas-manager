@@ -17,7 +17,7 @@ enforces (`control-registered-service.ts`, `get-registered-service-logs.ts`).
 action, not source work.** The PM2 dispatch pipeline
 (`create-service-management.ts`) is already fully generic — any
 `managementAdapter: "pm2"` catalog entry works without adapter-specific code.
-What is missing is the *fact* of Task Manager's real PM2 process name on
+What is missing is the _fact_ of Task Manager's real PM2 process name on
 Atlas, which this repository cannot observe. Registration itself is: confirm
 the process name with `pm2 jlist` on Atlas, add the catalog entry to the
 administrative input, then run the existing transactional

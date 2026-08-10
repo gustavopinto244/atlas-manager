@@ -19,7 +19,9 @@ describe("Nginx administrative server block invariants", () => {
   });
 
   it("contains the health endpoint denial block", () => {
-    expect(configContent).toMatch(/location\s+\/health\/\s*\{[\s\S]*?deny\s+all;/);
+    expect(configContent).toMatch(
+      /location\s+\/health\/\s*\{[\s\S]*?deny\s+all;/,
+    );
   });
 
   it("does not allow public access to health metrics", () => {

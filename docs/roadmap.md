@@ -25,10 +25,10 @@ dates.
 
 ## Current phase
 
-Atlas Manager is preparing the `1.0.0-rc.8` software candidate. Rc.8 assigns a
-new immutable identity to the Advanced Manager readiness source because Atlas
-already runs a distinct rc.7 generation. Physical Atlas deployment and real
-power effects remain separately approved gates.
+Atlas Manager is preparing the `1.0.0-rc.13` software candidate. No physical
+Atlas deployment has occurred since `rc.8` was cut (see the historical v0.9
+note below), so `rc.7` remains the installed predecessor on Atlas. Physical
+Atlas deployment and real power effects remain separately approved gates.
 
 Completed milestones include:
 
@@ -816,7 +816,7 @@ implemented.
 
 ## v1.0 software release candidate — qualification pending mandatory gates
 
-`1.0.0-rc.8` is the current software-only candidate. Qualification requires
+`1.0.0-rc.13` is the current software-only candidate. Qualification requires
 the mandatory Node, Go, bundle, and rehearsal gates; the local environment
 must not claim qualification when one of those gates is unavailable.
 
