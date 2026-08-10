@@ -335,3 +335,64 @@ export function isAtlasServiceId(value: string): boolean {
     value.length > 0 && value.length <= 64 && SERVICE_ID_PATTERN.test(value)
   );
 }
+
+// ---------------------------------------------------------------------------
+// Infrastructure diagnostics (ADR-032)
+// ---------------------------------------------------------------------------
+
+/** The catalog's read-only diagnostics route. */
+export const ATLAS_INFRASTRUCTURE_DIAGNOSTICS_ROUTE_ID =
+  "infrastructure.diagnostics.read";
+export const ATLAS_INFRASTRUCTURE_DIAGNOSTICS_PATH =
+  "/admin/infrastructure/diagnostics";
+
+/**
+ * The check-id prefixes the diagnostics commands filter on. These mirror
+ * `src/infrastructure-diagnostics/domain/check-ids.ts`; the contract test pins
+ * them to it.
+ */
+export const ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX = Object.freeze({
+  listener: "listener.",
+  nginx: "nginx.",
+  tunnel: "tunnel.",
+} as const);
+
+export const ATLAS_DIAGNOSTIC_NGINX_CONFIG_CHECK_ID = "nginx.config";
+
+export type AtlasDiagnosticStatus =
+  "ok" | "degraded" | "down" | "disabled" | "unavailable";
+
+/**
+ * The CLI's pinned copy of the server's `deriveOverallStatus` precedence.
+ *
+ * A copy exists for one structural reason: `tests/cli/no-direct-host-mutation.test.ts`
+ * forbids the CLI from importing anything outside `src/cli/` and `node:`, and
+ * the operator package ships only `dist/cli`. It is *not* an independent
+ * second implementation — `tests/cli/administrative-contract.test.ts` asserts
+ * it agrees with the domain function across an exhaustive status matrix, so a
+ * change to the precedence rule fails there rather than letting the CLI and
+ * the dashboard disagree about whether the system is healthy.
+ *
+ * The full-report status is computed server-side; this is used only to
+ * summarize a *filtered subset* of checks for a command such as
+ * `atlas nginx status`.
+ */
+export function atlasDiagnosticOverallStatus(
+  checks: readonly Readonly<{ status: AtlasDiagnosticStatus }>[],
+): AtlasDiagnosticStatus {
+  const precedence: Readonly<Record<string, number>> = Object.freeze({
+    down: 0,
+    unavailable: 1,
+    degraded: 2,
+    ok: 3,
+  });
+  // A deliberately-disabled capability is excluded entirely: it must never
+  // make a report read as an outage.
+  const considered = checks.filter((check) => check.status !== "disabled");
+  if (considered.length === 0) return "disabled";
+  let worst: AtlasDiagnosticStatus = "ok";
+  for (const check of considered)
+    if ((precedence[check.status] ?? 3) < (precedence[worst] ?? 3))
+      worst = check.status;
+  return worst;
+}

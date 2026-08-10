@@ -9,6 +9,10 @@ import {
 } from "./administrative-client.js";
 import {
   ATLAS_SERVICE_SCHEDULE_ALIAS_MODES,
+  ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX,
+  ATLAS_DIAGNOSTIC_NGINX_CONFIG_CHECK_ID,
+  ATLAS_INFRASTRUCTURE_DIAGNOSTICS_PATH,
+  atlasDiagnosticOverallStatus,
   backupActionMutation,
   backupActionPath,
   backupRetentionMutation,
@@ -28,6 +32,7 @@ import {
   serviceSchedulePath,
   type AtlasAdministrativeMutationDescriptor,
   type AtlasBackupRetentionOperation,
+  type AtlasDiagnosticStatus,
   type AtlasBackupScheduleOperation,
   type AtlasServiceOperation,
   type AtlasServiceScheduleOperation,
@@ -177,6 +182,26 @@ async function executeHttpCommand(
       const limit = args.includes("--tail") ? 100 : 20;
       return client.read(`/admin/event-history?limit=${limit}`, signal);
     }
+    case "infra status":
+      return readInfraStatus(client, signal);
+    case "infra listeners":
+      return readDiagnosticSubset(client, signal, (id) =>
+        id.startsWith(ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX.listener),
+      );
+    case "nginx status":
+      return readDiagnosticSubset(client, signal, (id) =>
+        id.startsWith(ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX.nginx),
+      );
+    case "nginx test":
+      return readDiagnosticSubset(
+        client,
+        signal,
+        (id) => id === ATLAS_DIAGNOSTIC_NGINX_CONFIG_CHECK_ID,
+      );
+    case "tunnel status":
+      return readDiagnosticSubset(client, signal, (id) =>
+        id.startsWith(ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX.tunnel),
+      );
     case "machine plan":
       return readOverviewField(client, "machinePlan", signal);
     case "machine status":
@@ -1387,12 +1412,21 @@ async function readStatus(
       throw error;
     }
   }
+  const infrastructure = await readOptionalDiagnostics(client, signal);
   return Object.freeze({
     atlasManager: Object.freeze({ endpoint: client.endpoint, health }),
     administrative,
+    // Additive: nothing above is removed or renamed.
+    infrastructure,
   });
 }
 
+/**
+ * The four legacy checks keep their exact `{name, status, code?}` shape. The
+ * infrastructure checks are *appended* as further entries and the new optional
+ * fields sit alongside the old ones, so a consumer that only reads `name` and
+ * `status` is unaffected.
+ */
 async function readDoctor(
   client: AtlasAdministrativeClient,
   signal: AbortSignal,
@@ -1418,12 +1452,170 @@ async function readDoctor(
       });
     }
   }
+  const infrastructure = await readOptionalDiagnostics(client, signal);
+  for (const check of infrastructure.checks)
+    checks.push({
+      name: check.id,
+      // "disabled" is not a failure, even in the legacy pass/fail vocabulary:
+      // an intentionally-off capability must never read as broken.
+      status:
+        check.status === "ok" || check.status === "disabled" ? "pass" : "fail",
+      ...(check.errorCode === undefined ? {} : { code: check.errorCode }),
+      id: check.id,
+      diagnosticStatus: check.status,
+      observedAt: check.observedAt,
+      ...(check.observed === undefined ? {} : { observed: check.observed }),
+      ...(check.expected === undefined ? {} : { expected: check.expected }),
+      ...(check.hint === undefined ? {} : { hint: check.hint }),
+      ...(check.requiresPrivilege === undefined
+        ? {}
+        : { requiresPrivilege: check.requiresPrivilege }),
+    });
   const failed = checks.filter((check) => check.status === "fail");
   return Object.freeze({
     endpoint: client.endpoint,
     status: failed.length === 0 ? "pass" : "partial",
+    infrastructureStatus: infrastructure.overallStatus,
     checks: Object.freeze(checks),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure diagnostics (ADR-032)
+//
+// Every diagnostic reaches the CLI over the authenticated administrative API.
+// The CLI never inspects a host itself — not remotely and not when it happens
+// to run on the Atlas host — which `tests/cli/no-direct-host-mutation.test.ts`
+// enforces structurally. These are reads only: there is no repair command, and
+// adding one would require its own route with a real mutation gate.
+// ---------------------------------------------------------------------------
+
+export type AtlasDiagnosticCheck = Readonly<{
+  id: string;
+  status: AtlasDiagnosticStatus;
+  observed?: string;
+  expected?: string;
+  errorCode?: string;
+  hint?: string;
+  requiresPrivilege?: boolean;
+  observedAt: string;
+}>;
+
+export type AtlasDiagnosticReport = Readonly<{
+  generatedAt: string;
+  overallStatus: AtlasDiagnosticStatus;
+  checks: readonly AtlasDiagnosticCheck[];
+}>;
+
+/** The single HTTP call every diagnostics command shares. */
+async function readInfrastructureDiagnostics(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+): Promise<AtlasDiagnosticReport> {
+  const body = await client.read(ATLAS_INFRASTRUCTURE_DIAGNOSTICS_PATH, signal);
+  const report = parseDiagnosticReport(body);
+  if (report === undefined)
+    throw new AtlasCliError(
+      "infrastructure_unavailable",
+      "Atlas returned an unrecognized diagnostics report",
+    );
+  return report;
+}
+
+function parseDiagnosticReport(
+  body: unknown,
+): AtlasDiagnosticReport | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const record = body as Record<string, unknown>;
+  if (
+    typeof record.generatedAt !== "string" ||
+    !isDiagnosticStatus(record.overallStatus) ||
+    !Array.isArray(record.checks)
+  )
+    return undefined;
+  const checks: AtlasDiagnosticCheck[] = [];
+  for (const entry of record.checks) {
+    if (typeof entry !== "object" || entry === null) return undefined;
+    const check = entry as Record<string, unknown>;
+    if (
+      typeof check.id !== "string" ||
+      !isDiagnosticStatus(check.status) ||
+      typeof check.observedAt !== "string"
+    )
+      return undefined;
+    checks.push(check as unknown as AtlasDiagnosticCheck);
+  }
+  return Object.freeze({
+    generatedAt: record.generatedAt,
+    overallStatus: record.overallStatus,
+    checks: Object.freeze(checks),
+  });
+}
+
+function isDiagnosticStatus(value: unknown): value is AtlasDiagnosticStatus {
+  return (
+    value === "ok" ||
+    value === "degraded" ||
+    value === "down" ||
+    value === "disabled" ||
+    value === "unavailable"
+  );
+}
+
+async function readInfraStatus(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const report = await readInfrastructureDiagnostics(client, signal);
+  return Object.freeze({ endpoint: client.endpoint, ...report });
+}
+
+/**
+ * A command-specific view over the one report, selected by check-id prefix.
+ *
+ * The subset carries its own `overallStatus` so `atlas nginx test` is not
+ * judged by a cloudflared outage it never asked about. The precedence used is
+ * the CLI's pinned copy of the server's, held honest by the contract test.
+ */
+async function readDiagnosticSubset(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+  matches: (id: string) => boolean,
+): Promise<unknown> {
+  const report = await readInfrastructureDiagnostics(client, signal);
+  const checks = report.checks.filter((check) => matches(check.id));
+  return Object.freeze({
+    endpoint: client.endpoint,
+    generatedAt: report.generatedAt,
+    overallStatus: atlasDiagnosticOverallStatus(checks),
+    checks: Object.freeze(checks),
+  });
+}
+
+/**
+ * Diagnostics for `status` and `doctor`.
+ *
+ * These two commands must keep working on a deployment that never enabled the
+ * diagnostics capability, so a refusal or an unreachable route degrades to
+ * `disabled` — calm, exit 0 — rather than reporting an outage that is really
+ * just an unset feature flag. The five dedicated diagnostics commands make the
+ * opposite trade: you asked for diagnostics and did not get them, so that is a
+ * partial failure.
+ */
+async function readOptionalDiagnostics(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+): Promise<AtlasDiagnosticReport> {
+  try {
+    return await readInfrastructureDiagnostics(client, signal);
+  } catch (error) {
+    if (error instanceof AtlasCliInterruptedError) throw error;
+    return Object.freeze({
+      generatedAt: new Date(0).toISOString(),
+      overallStatus: "disabled" as const,
+      checks: Object.freeze([]),
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

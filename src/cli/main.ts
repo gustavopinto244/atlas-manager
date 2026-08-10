@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { commandPath, findCommand } from "./command-tree.js";
+import { diagnosticOutcome } from "./diagnostic-exit.js";
 import { AtlasCliError, exitCodeForCliError } from "./errors.js";
 import type { AtlasCliTransport, CliResult } from "./contracts.js";
 import { helpFor } from "./help.js";
@@ -63,13 +64,28 @@ export async function runAtlasCli(
         parsed.commandArguments,
         controller.signal,
       );
+      const command = commandPath(parsed.command);
       writeResult(output, parsed.format, {
         schemaVersion: 1,
-        command: commandPath(parsed.command),
+        command,
         status: "ok",
         data,
       });
-      return 0;
+      // The body is already written. Only now is the exit code decided, so a
+      // partial diagnosis never costs the operator the report itself.
+      const outcome = diagnosticOutcome(command, data);
+      if (outcome === "warning")
+        errorOutput.write(
+          "warning: infrastructure is degraded; see the report above\n",
+        );
+      return outcome === "failure"
+        ? exitCodeForCliError(
+            new AtlasCliError(
+              "infrastructure_unavailable",
+              "Infrastructure diagnostics reported a failure",
+            ),
+          )
+        : 0;
     } finally {
       process.off("SIGINT", onInterrupt);
     }
