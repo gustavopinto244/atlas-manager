@@ -3,6 +3,15 @@
 This table maps every phase of the original milestone prompt to the planning
 document that owns it. It is a coverage index, not evidence of implementation.
 
+A follow-up "Phase 0-1" tranche (source HEAD `bc83380` at start) closed four
+of the five `REAL_GAP` items recorded by this milestone's closeout audit
+(active override + expiry, following transitions, dashboard backups "run
+now", dashboard events pagination); scheduler health/cursor visibility stays
+open, re-confirmed as not small. See
+[`docs/reviews/operator-experience-final-gap-audit.md`](../../reviews/operator-experience-final-gap-audit.md)
+for evidence; this table's phase-to-document mapping is unaffected since none
+of those items required a new ADR or planning document.
+
 | Prompt phase | Subject                             | Planning owner                                              |
 | ------------ | ----------------------------------- | ----------------------------------------------------------- |
 | 0            | Architectural inventory             | `operator-experience-inventory.md`, current-state context   |

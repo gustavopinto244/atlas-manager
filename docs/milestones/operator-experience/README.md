@@ -38,12 +38,28 @@ retention set/prune`), and infrastructure diagnostics (CLI `infra`/`nginx`/
 - Remaining implementation gaps: see the final gap audit for the
   authoritative, classified list. At a minimum: machine schedule mutation
   (blocked on a dedicated policy-store ADR — deliberately out of scope for
-  this milestone), Compose resource aggregation semantics, active-override/
-  expiry presentation on the schedule timeline, a separate multi-section
-  service detail page, and Events pagination/tail UX.
+  this milestone), Compose resource aggregation semantics, a separate
+  multi-section service detail page, and scheduler health/cursor visibility.
 - Remaining operational acceptance: Task Manager registration and any live
   Atlas scheduling acceptance require real Atlas host access this
   reconciliation does not have.
+
+### Phase 0-1 follow-up (source HEAD after this reconciliation: `bc83380`)
+
+A follow-up tranche (`fix/operator-experience-phase-0-1-gaps`) re-verified
+the final gap audit against current source and implemented the four gap
+items that turned out to be genuinely small and additive: active override +
+expiry presentation, following-transitions presentation, dashboard backups
+"run now", and dashboard events pagination. Scheduler health/cursor
+visibility was re-confirmed as not small (needs a new route, `CHECK_ID`,
+config field and a `readLastTick()` fix) and stays deferred as the leading
+candidate for the next tranche. See
+[`docs/reviews/operator-experience-final-gap-audit.md`](../../reviews/operator-experience-final-gap-audit.md)
+for the per-item before/after evidence and
+[`docs/capabilities.md`](../../capabilities.md) for the current capability
+matrix. No security boundary, RBAC rule, audit behavior or mutation gate was
+touched — every closed item extends an existing read route's response shape
+or reuses an existing mutation route's confirmation contract unchanged.
 
 ### Original inventory snapshot (historical, do not treat as current)
 

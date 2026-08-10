@@ -150,7 +150,11 @@ set|remove/retention set|prune`).
   dedicated ADR; physical power management stays out of scope for 1.0
   entirely, not just this release).
 
-**Real gaps** (not by design, just not built — see gap audit items 2-6):
+**Real gaps at #320 closeout** (not by design, just not built — see gap audit
+items 2-6). None of these were implemented in this closeout milestone: each
+was judged to require extending a route response contract or adding UX
+comparable in size to an existing mutation flow, which was outside this
+milestone's small-fixes bar:
 
 - Active schedule override + expiry presentation.
 - Following-transitions list (beyond the single next value).
@@ -158,9 +162,14 @@ set|remove/retention set|prune`).
 - Dashboard manual backup "run now" control (CLI-only today).
 - Events pagination/tail UX in the dashboard.
 
-None of these were implemented in this closeout milestone: each requires
-extending a route response contract or adding UX comparable in size to an
-existing mutation flow, which is outside this milestone's small-fixes bar.
+**Phase 0-1 update:** a follow-up tranche re-verified this judgment against
+source and found four of the five items were in fact additive or narrowly
+contained — they are now **closed**: active override + expiry, following
+transitions, dashboard backups "run now", and dashboard events pagination.
+Scheduler health/cursor visibility was re-confirmed as genuinely not small
+(needs a new route, `CHECK_ID`, config field and a `readLastTick()` fix) and
+stays a **real gap**, now the leading candidate for the next tranche. See
+`docs/reviews/operator-experience-final-gap-audit.md` for per-item evidence.
 
 **Operational** (depend on real Atlas host availability, not on source):
 
