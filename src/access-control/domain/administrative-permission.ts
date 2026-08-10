@@ -6,6 +6,8 @@ export const ADMINISTRATIVE_PERMISSIONS = Object.freeze([
   "power.shutdown.prepare",
   "power.shutdown.execute",
   "power.scheduler.tick",
+  "power.schedule.read",
+  "power.schedule.write",
   "event_history.read",
   "services.read",
   "services.start",
