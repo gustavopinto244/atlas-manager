@@ -29,7 +29,33 @@ export function renderHumanResult(command: string, data: unknown): string {
     const rendered = renderScheduleMutation(data);
     if (rendered !== undefined) return rendered;
   }
+  if (command === "backups run") {
+    const rendered = renderBackupRun(data);
+    if (rendered !== undefined) return rendered;
+  }
   return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+function renderBackupRun(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const record = data as Record<string, unknown>;
+  if (
+    typeof record.targetId !== "string" ||
+    typeof record.runId !== "string" ||
+    typeof record.status !== "string"
+  )
+    return undefined;
+  const lines = [
+    `Backup target: ${record.targetId}`,
+    `Run: ${record.runId}`,
+    // The server's own terminal status, never a rephrasing of it.
+    `Status: ${record.status}`,
+  ];
+  if (typeof record.fileCount === "number")
+    lines.push(`Files: ${record.fileCount}`);
+  if (typeof record.totalBytes === "number")
+    lines.push(`Bytes: ${record.totalBytes}`);
+  return `${lines.join("\n")}\n`;
 }
 
 function renderScheduleMutation(data: unknown): string | undefined {

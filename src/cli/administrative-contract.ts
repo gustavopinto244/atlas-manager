@@ -149,6 +149,86 @@ export function serviceSchedulePath(serviceId: string): string {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Registered-backup operations
+// ---------------------------------------------------------------------------
+
+export type AtlasBackupOperation = "run";
+
+export const ATLAS_BACKUP_OPERATIONS: readonly AtlasBackupOperation[] =
+  Object.freeze(["run"]);
+
+const BACKUP_ACTION_MUTATIONS: Readonly<
+  Record<AtlasBackupOperation, AtlasAdministrativeMutationDescriptor>
+> = Object.freeze({
+  run: Object.freeze({
+    routeId: "backups.run",
+    method: "POST",
+    pathTemplate: "/admin/backups/targets/:targetId/runs",
+    confirmation: "confirm_registered_backup_run",
+  }),
+});
+
+export const ATLAS_BACKUP_ACTION_MUTATIONS = BACKUP_ACTION_MUTATIONS;
+
+export const ATLAS_BACKUP_TARGET_READ_PATH_TEMPLATE =
+  "/admin/backups/targets/:targetId";
+export const ATLAS_BACKUP_RUN_READ_PATH_TEMPLATE = "/admin/backups/runs/:runId";
+
+export function backupActionMutation(
+  operation: AtlasBackupOperation,
+): AtlasAdministrativeMutationDescriptor {
+  return BACKUP_ACTION_MUTATIONS[operation];
+}
+
+export function backupActionPath(
+  operation: AtlasBackupOperation,
+  targetId: string,
+): string {
+  return BACKUP_ACTION_MUTATIONS[operation].pathTemplate.replace(
+    ":targetId",
+    encodeURIComponent(targetId),
+  );
+}
+
+export function backupTargetReadPath(targetId: string): string {
+  return ATLAS_BACKUP_TARGET_READ_PATH_TEMPLATE.replace(
+    ":targetId",
+    encodeURIComponent(targetId),
+  );
+}
+
+export function backupRunReadPath(runId: string): string {
+  return ATLAS_BACKUP_RUN_READ_PATH_TEMPLATE.replace(
+    ":runId",
+    encodeURIComponent(runId),
+  );
+}
+
+/**
+ * A backup is addressed by *registered target id* only. There is deliberately
+ * no source or destination path anywhere in this vocabulary: accepting one
+ * would let an operator back up or write to a location the application does
+ * not know about, outside its authorization, limits and audit model.
+ */
+const BACKUP_TARGET_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+export function isAtlasBackupTargetId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 64 &&
+    BACKUP_TARGET_ID_PATTERN.test(value)
+  );
+}
+
+/** Mirrors the server's `isRunId`: a canonical UUID with a valid variant. */
+const BACKUP_RUN_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+export function isAtlasBackupRunId(value: string): boolean {
+  return BACKUP_RUN_ID_PATTERN.test(value);
+}
+
 /**
  * Registered-service identifier grammar, mirroring the server's `isServiceId`.
  * Applied in the CLI only to reject obvious usage errors before spending a

@@ -8,6 +8,15 @@ import {
   ATLAS_SERVICE_SCHEDULE_MUTATIONS,
   ATLAS_SERVICE_SCHEDULE_OPERATIONS,
   ATLAS_SERVICE_SCHEDULE_READ_PATH_TEMPLATE,
+  ATLAS_BACKUP_ACTION_MUTATIONS,
+  ATLAS_BACKUP_OPERATIONS,
+  ATLAS_BACKUP_RUN_READ_PATH_TEMPLATE,
+  ATLAS_BACKUP_TARGET_READ_PATH_TEMPLATE,
+  backupActionPath,
+  backupRunReadPath,
+  backupTargetReadPath,
+  isAtlasBackupRunId,
+  isAtlasBackupTargetId,
   serviceActionPath,
   serviceReadPath,
   serviceSchedulePath,
@@ -151,5 +160,78 @@ describe("CLI administrative contract binding", () => {
     expect(serviceReadPath("task-manager")).toBe(
       "/admin/services/task-manager",
     );
+  });
+});
+
+describe("CLI administrative contract binding — backup operations", () => {
+  it("matches the canonical route security catalog for every backup mutation", () => {
+    for (const operation of ATLAS_BACKUP_OPERATIONS) {
+      const declared = ATLAS_BACKUP_ACTION_MUTATIONS[operation];
+      const canonical = descriptorFor(declared.routeId);
+      expect(declared.routeId, operation).toBe(`backups.${operation}`);
+      expect(declared.method, operation).toBe(canonical.method);
+      expect(declared.pathTemplate, operation).toBe(canonical.pathTemplate);
+      expect(canonical.confirmationPolicy, operation).toBe(
+        `exact:${declared.confirmation}`,
+      );
+    }
+  });
+
+  it("declares no backup confirmation the catalog does not require", () => {
+    const catalogConfirmations = new Set(
+      ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.filter(
+        (entry) => entry.confirmationPolicy !== "none",
+      ).map((entry) => entry.confirmationPolicy),
+    );
+    for (const operation of ATLAS_BACKUP_OPERATIONS)
+      expect(
+        catalogConfirmations.has(
+          `exact:${ATLAS_BACKUP_ACTION_MUTATIONS[operation].confirmation}`,
+        ),
+        operation,
+      ).toBe(true);
+  });
+
+  it("keeps the manual backup run behind authentication, RBAC and the backup gate", () => {
+    const canonical = descriptorFor("backups.run");
+    expect(canonical.authenticationPolicy).toBe("required");
+    expect(canonical.permission).toBe("backups.run");
+    // A separate gate from service_mutation: a busy backup and a busy service
+    // operation never block each other.
+    expect(canonical.gatePolicy).toBe("backup_operation");
+    expect(canonical.auditPolicy).toBe("authorization_started_terminal");
+  });
+
+  it("binds the backup reads used by the CLI to the catalog's own routes", () => {
+    expect(ATLAS_BACKUP_TARGET_READ_PATH_TEMPLATE).toBe(
+      descriptorFor("backups.target.read").pathTemplate,
+    );
+    expect(ATLAS_BACKUP_RUN_READ_PATH_TEMPLATE).toBe(
+      descriptorFor("backups.run.read").pathTemplate,
+    );
+  });
+
+  it("builds backup request paths by encoding the identifier into the template", () => {
+    expect(backupActionPath("run", "atlas-config")).toBe(
+      "/admin/backups/targets/atlas-config/runs",
+    );
+    expect(backupTargetReadPath("atlas-config")).toBe(
+      "/admin/backups/targets/atlas-config",
+    );
+    expect(backupRunReadPath("00000000-0000-4000-8000-000000000001")).toBe(
+      "/admin/backups/runs/00000000-0000-4000-8000-000000000001",
+    );
+  });
+
+  it("accepts only the identifier grammars the server accepts", () => {
+    expect(isAtlasBackupTargetId("atlas-config")).toBe(true);
+    expect(isAtlasBackupTargetId("Atlas_Config")).toBe(false);
+    expect(isAtlasBackupTargetId("a".repeat(65))).toBe(false);
+    // A backup target is never a filesystem path.
+    expect(isAtlasBackupTargetId("/var/lib/atlas")).toBe(false);
+    expect(isAtlasBackupRunId("00000000-0000-4000-8000-000000000001")).toBe(
+      true,
+    );
+    expect(isAtlasBackupRunId("not-a-uuid")).toBe(false);
   });
 });

@@ -19,6 +19,10 @@ import { FixedAdministrativeRequestAdmission } from "../../src/http/administrati
 import { parseAdministrativePublicOrigin } from "../../src/http/administrative-public-origin.js";
 import { createApp } from "../../src/http/create-app.js";
 import { createServiceManagement } from "../../src/service-management/composition/create-service-management.js";
+import { createBackupManagement } from "../../src/backup-management/composition/create-backup-management.js";
+import { createBackupTarget } from "../../src/backup-management/domain/backup-target.js";
+import type { BackupTarget } from "../../src/backup-management/domain/backup-target.js";
+import { MockBackupAdapter } from "../../src/backup-management/infrastructure/mock-backup-adapter.js";
 import type { ServerHealthSnapshot } from "../../src/server-health/domain/server-health-snapshot.js";
 
 /** Extracts a request URL without relying on default stringification. */
@@ -33,6 +37,7 @@ const UNKNOWN_PRINCIPAL_ID = "00000000-0000-4000-8000-000000000002";
 const HOST = "atlas.example.com";
 const BASE_URL = `https://${HOST}`;
 const SERVICE_ID = "task-manager";
+const BACKUP_TARGET_ID = "atlas-config";
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 
 function health(): ServerHealthSnapshot {
@@ -173,10 +178,46 @@ async function fixture(
         roleAssignmentReader,
       }),
       serviceManagement,
+      backupManagement,
       eventHistory: history,
       clock,
     });
+  // A registered backup target backed by the mock adapter and in-memory
+  // stores. Nothing here touches a real filesystem, a real backup destination
+  // or any real operator data.
+  const backupTarget: BackupTarget = createBackupTarget({
+    id: BACKUP_TARGET_ID,
+    displayName: "Atlas Configuration",
+    kind: "mock",
+    schedule: { mode: "manual" },
+    retention: { keepLastSuccessful: 5 },
+    limits: {
+      maxFiles: 100,
+      maxTotalBytes: 1_000_000,
+      maxFileBytes: 100_000,
+      maxDepth: 8,
+      maxRelativePathBytes: 1_024,
+    },
+  });
+  const backupAdapter = new MockBackupAdapter();
+  const backupManagement = createBackupManagement({
+    targets: [backupTarget],
+    clock,
+    adapters: { mock: backupAdapter },
+    policyStore: {
+      load: (targets) => targets,
+      save: () => undefined,
+    },
+    artifacts: {
+      listManaged: async () => [],
+      removeManaged: async () => undefined,
+    },
+  });
+
   const mutationGate = createAdministrativeServiceMutationGate();
+  // The backup gate is a separate admission slot from the service mutation
+  // gate, exactly as the route security catalog declares.
+  const backupGate = createAdministrativeServiceMutationGate();
   const app = createApp({
     logger: { error: vi.fn() },
     getServerHealth: { execute: vi.fn(async () => health()) },
@@ -191,8 +232,13 @@ async function fixture(
       mutationGate,
       createProtectedAdministration: createProtected,
     },
+    administrativeBackups: {
+      admission,
+      mutationGate: backupGate,
+      createProtectedAdministration: createProtected,
+    },
   });
-  return { app, signAssertion, history };
+  return { app, signAssertion, history, backupAdapter };
 }
 
 async function drain(value: PassThrough): Promise<string> {
@@ -571,6 +617,142 @@ describe("authenticated mutating CLI — service schedule", () => {
 
     expect(result.code).toBe(1);
     expect(errorCodeOf(result.err)).toBe("schedule_invalid");
+  });
+});
+
+/** Audited backup operations, read from the same event history an auditor uses. */
+async function backupOperations(
+  history: Awaited<ReturnType<typeof fixture>>["history"],
+): Promise<readonly string[]> {
+  const page = await history.getAdministrativeEventHistory.execute({
+    limit: 50,
+  });
+  return (page.events as readonly Readonly<{ operation: string }>[])
+    .map((event) => event.operation)
+    .filter((operation) => /backup/u.test(operation));
+}
+
+describe("authenticated mutating CLI — manual backup run", () => {
+  it("runs a registered backup through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    const data = (JSON.parse(result.out) as { data: Record<string, unknown> })
+      .data;
+    expect(data).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      trigger: "manual",
+      status: "succeeded",
+    });
+    // The real adapter ran, once, for exactly this registered target.
+    expect(value.backupAdapter.calls).toEqual([BACKUP_TARGET_ID]);
+    expect(await backupOperations(value.history)).toContain(
+      "run_registered_backup",
+    );
+
+    const viaApi = await fixture(["backup_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .post(`/admin/backups/targets/${BACKUP_TARGET_ID}/runs`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_backup_run" });
+    expect(apiResponse.status).toBe(200);
+    expect(await backupOperations(viaApi.history)).toContain(
+      "run_registered_backup",
+    );
+  });
+
+  it("reads back the run it produced through run-status", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const run = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+    const runId = (JSON.parse(run.out) as { data: { runId: string } }).data
+      .runId;
+
+    const status = await runCli(
+      value.app,
+      ["backups", "run-status", runId, "--json"],
+      assertion,
+    );
+
+    expect(status.code).toBe(0);
+    expect(
+      (JSON.parse(status.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      runId,
+      targetId: BACKUP_TARGET_ID,
+      status: "succeeded",
+    });
+  });
+
+  it("refuses a backup run for a principal without the backups.run permission", async () => {
+    // `auditor` may read backup targets and runs but may not run one.
+    const value = await fixture(["auditor"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(value.backupAdapter.calls).toEqual([]);
+    expect(await backupOperations(value.history)).not.toContain(
+      "run_registered_backup",
+    );
+  });
+
+  it("does not report a failed backup as a completed one", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+    value.backupAdapter.outcome = "copy_failure";
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("backup_operation_failed");
+    expect(result.out).not.toContain("succeeded");
+  });
+
+  it("keeps the backup gate separate from the service mutation gate", async () => {
+    const value = await fixture(["administrator"]);
+    const assertion = await value.signAssertion({});
+
+    // A service mutation and a backup run in the same fixture both succeed:
+    // occupying one gate never blocks the other.
+    const service = await runCli(
+      value.app,
+      ["services", "restart", SERVICE_ID, "--json"],
+      assertion,
+    );
+    const backup = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(service.code).toBe(0);
+    expect(backup.code).toBe(0);
   });
 });
 

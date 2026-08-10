@@ -97,6 +97,16 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
     implemented: true,
   },
   {
+    path: ["backups", "run"],
+    summary: "Run a registered backup target now",
+    implemented: true,
+  },
+  {
+    path: ["backups", "run-status"],
+    summary: "Read a single backup run",
+    implemented: true,
+  },
+  {
     path: ["infra", "status"],
     summary: "Show infrastructure status",
     implemented: false,
