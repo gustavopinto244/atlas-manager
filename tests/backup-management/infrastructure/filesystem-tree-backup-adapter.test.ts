@@ -78,6 +78,71 @@ describe("FilesystemTreeBackupAdapter", () => {
     ).toEqual(["6f5d6f49-6d3b-4f73-8f07-0f1b5ec9d1b2"]);
   });
 
+  it("records manifest digests that match an independent hash of every copied file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "atlas-backup-digest-test-"));
+    sandboxes.push(root);
+    const source = join(root, "source");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(source, "nested"), { recursive: true });
+    // Larger than the 64 KiB streaming buffer, so the digest spans reads.
+    const contents: Readonly<Record<string, string>> = {
+      "empty.txt": "",
+      "small.txt": "backup contents",
+      "nested/large.txt": "x".repeat(200_000),
+    };
+    for (const [name, value] of Object.entries(contents))
+      await writeFile(join(source, name), value);
+
+    const destination = join(root, "destination");
+    const result = await new FilesystemTreeBackupAdapter(destination).run({
+      target: createBackupTarget({
+        id: "filesystem-backup",
+        displayName: "Filesystem backup",
+        kind: "filesystem_tree",
+        sourcePath: source,
+        schedule: { mode: "manual" },
+        retention: { keepLastSuccessful: 1 },
+        limits: {
+          maxFiles: 20,
+          maxTotalBytes: 1_000_000,
+          maxFileBytes: 500_000,
+          maxDepth: 8,
+          maxRelativePathBytes: 256,
+        },
+      }),
+      runId: "0f2d1c3b-5a6e-4d7f-8b9c-0a1b2c3d4e5f",
+      startedAt: "2026-08-02T12:00:00.000Z",
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(result.artifactDirectory, "MANIFEST.json"), "utf8"),
+    ) as Readonly<{
+      files: readonly Readonly<{
+        path: string;
+        size: number;
+        sha256: string;
+      }>[];
+    }>;
+    const { createHash } = await import("node:crypto");
+    expect(manifest.files.map((file) => file.path).sort()).toEqual(
+      Object.keys(contents).sort(),
+    );
+    for (const file of manifest.files) {
+      const published = await readFile(
+        join(result.artifactDirectory, "data", file.path),
+      );
+      expect(published.byteLength, file.path).toBe(file.size);
+      expect(
+        createHash("sha256").update(published).digest("hex"),
+        file.path,
+      ).toBe(file.sha256);
+      expect(
+        createHash("sha256").update(contents[file.path]!).digest("hex"),
+        file.path,
+      ).toBe(file.sha256);
+    }
+  });
+
   it("rejects symbolic links instead of following them", async () => {
     const root = await mkdtemp(join(tmpdir(), "atlas-backup-link-test-"));
     sandboxes.push(root);

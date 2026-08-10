@@ -18,6 +18,13 @@ import {
 
 const COPY_BUFFER_BYTES = 64 * 1024;
 
+interface CopyState {
+  files: number;
+  totalBytes: number;
+  /** Relative path to the SHA-256 computed while streaming the copy. */
+  readonly digests: Map<string, string>;
+}
+
 export class FilesystemTreeBackupAdapter implements BackupAdapter {
   readonly #destinationRoot: string;
 
@@ -63,7 +70,11 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
       candidateCreated = true;
       await mkdir(join(candidate, "data"), { recursive: false, mode: 0o700 });
       await chmod(candidate, 0o700);
-      const copyState = { files: 0, totalBytes: 0 };
+      const copyState: CopyState = {
+        files: 0,
+        totalBytes: 0,
+        digests: new Map<string, string>(),
+      };
       await this.#copyTree(
         source,
         join(candidate, "data"),
@@ -72,7 +83,10 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
         copyState,
       );
       const completedAt = new Date().toISOString();
-      const files = await this.#readCopiedFiles(join(candidate, "data"));
+      const files = await this.#readCopiedFiles(
+        join(candidate, "data"),
+        copyState.digests,
+      );
       const manifest = createBackupManifest({
         schemaVersion: 1,
         targetId: input.target.id,
@@ -119,7 +133,7 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
     destination: string,
     target: BackupTarget,
     parts: string[],
-    state: { files: number; totalBytes: number },
+    state: CopyState,
   ): Promise<void> {
     const entries = (await readdir(source, { withFileTypes: true })).sort(
       (left, right) => Buffer.from(left.name).compare(Buffer.from(right.name)),
@@ -203,8 +217,12 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
             await inputHandle.close();
             await outputHandle.close();
           }
-          if (copied !== info.size || hash.digest("hex").length !== 64)
+          const digest = hash.digest("hex");
+          if (copied !== info.size || digest.length !== 64)
             throw new Error("backup_source_changed");
+          // Recorded for the manifest. Re-reading the copy to recompute this
+          // would double the I/O and hold whole files in memory.
+          state.digests.set(relativePath, digest);
         } else {
           throw new Error("backup_file_unsafe");
         }
@@ -214,7 +232,14 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
     }
   }
 
-  async #readCopiedFiles(dataRoot: string): Promise<BackupManifestFile[]> {
+  // Walks the published tree to revalidate what was actually written, and pairs
+  // each entry with the digest computed during the streaming copy. The tree walk
+  // stays: it is what proves the copy produced only regular files and
+  // directories. Only the redundant whole-file re-read is gone.
+  async #readCopiedFiles(
+    dataRoot: string,
+    digests: ReadonlyMap<string, string>,
+  ): Promise<BackupManifestFile[]> {
     const files: BackupManifestFile[] = [];
     const walk = async (directory: string, parts: string[]): Promise<void> => {
       const entries = (await readdir(directory, { withFileTypes: true })).sort(
@@ -228,21 +253,15 @@ export class FilesystemTreeBackupAdapter implements BackupAdapter {
         try {
           if (info.kind === "directory") await walk(path, next);
           else if (info.kind === "file") {
-            const dataHandle = await open(
-              path,
-              constants.O_RDONLY | constants.O_NOFOLLOW,
-            );
-            let data: Buffer;
-            try {
-              data = await dataHandle.readFile();
-            } finally {
-              await dataHandle.close();
-            }
+            const relativePath = next.join("/");
+            const sha256 = digests.get(relativePath);
+            if (sha256 === undefined)
+              throw new Error("backup_published_artifact_unsafe");
             files.push({
-              path: next.join("/"),
+              path: relativePath,
               size: info.size,
               mode: info.mode & 0o777,
-              sha256: createHash("sha256").update(data).digest("hex"),
+              sha256,
             });
           } else throw new Error("backup_published_artifact_unsafe");
         } finally {
