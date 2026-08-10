@@ -305,11 +305,11 @@ ADRs.
 
 ## Tests required
 
-Implemented in `tests/cli/administrative-client.test.ts`,
+Implemented in `tests/cli/administrative-contract.test.ts`,
 `tests/cli/service-mutations.test.ts`,
 `tests/cli/mutating-transport-security.test.ts`,
 `tests/cli/no-direct-host-mutation.test.ts` and
-`tests/http/administrative-service-mutation-cli-parity.test.ts`:
+`tests/http/authenticated-cli-mutation-integration.test.ts`:
 
 1. missing, invalid, expired, wrong-issuer and wrong-audience credentials each
    yield exit 3 with no local fallback;
