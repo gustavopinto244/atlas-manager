@@ -17,6 +17,10 @@ export type CliErrorCode =
   | "service_operation_failed"
   | "service_operation_unsupported"
   | "schedule_invalid"
+  | "backup_target_not_found"
+  | "backup_run_not_found"
+  | "backup_operation_unsupported"
+  | "backup_operation_failed"
   | "operation_conflict"
   | "insecure_transport"
   | "mutation_outcome_unknown"
@@ -61,6 +65,10 @@ export function exitCodeForCliError(error: AtlasCliError): number {
     case "service_operation_failed":
     case "service_operation_unsupported":
     case "schedule_invalid":
+    case "backup_target_not_found":
+    case "backup_run_not_found":
+    case "backup_operation_unsupported":
+    case "backup_operation_failed":
       return CLI_EXIT_CODES.operationalFailure;
   }
 }

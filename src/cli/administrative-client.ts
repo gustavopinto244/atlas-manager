@@ -72,10 +72,15 @@ export interface AtlasAdministrativeClient {
    * Perform an authenticated administrative mutation through a canonical route
    * descriptor. Returns the raw response envelope so the caller can apply the
    * mutation error mapping; never retries.
+   *
+   * `timeoutOverrideMs` raises the bounded timeout for the small number of
+   * administrative routes that do their work synchronously inside the request
+   * (a manual backup run). It never removes the bound.
    */
   mutate(
     request: AtlasAdministrativeMutationRequest,
     signal: AbortSignal,
+    timeoutOverrideMs?: number,
   ): Promise<AtlasAdministrativeResponse>;
   /** Read variant that surfaces the response envelope instead of throwing on 4xx/5xx. */
   readEnvelope(
@@ -88,6 +93,13 @@ export type AtlasAdministrativeMutationRequest = Readonly<{
   descriptor: AtlasAdministrativeMutationDescriptor;
   /** Concrete request path with template parameters already substituted. */
   path: string;
+  /**
+   * Additional body fields the route's strict body validation requires beyond
+   * the confirmation (for example a schedule or retention `policy`). The
+   * confirmation is always written first and is never overridable by a payload
+   * key, because the confirmation is the route's authorization evidence.
+   */
+  payload?: Readonly<Record<string, unknown>>;
 }>;
 
 export interface AtlasAdministrativeClientOptions {
@@ -196,6 +208,7 @@ export function createAtlasAdministrativeClient(
     mutate: async (
       request: AtlasAdministrativeMutationRequest,
       signal: AbortSignal,
+      timeoutOverrideMs?: number,
     ): Promise<AtlasAdministrativeResponse> => {
       assertMutationAllowed();
       return readEnvelopeFrom(
@@ -203,15 +216,28 @@ export function createAtlasAdministrativeClient(
           request.path,
           {
             method: request.descriptor.method,
-            body: JSON.stringify({
-              confirmation: request.descriptor.confirmation,
-            }),
+            body: JSON.stringify(mutationBody(request)),
           },
           signal,
-          mutationTimeoutMs,
+          timeoutOverrideMs ?? mutationTimeoutMs,
         ),
       );
     },
+  });
+}
+
+/**
+ * The exact JSON body a mutating administrative route accepts: the canonical
+ * confirmation plus whatever additional fields that route's strict body
+ * validation requires. The confirmation is written last so no payload key can
+ * displace it — a payload never decides its own authorization evidence.
+ */
+function mutationBody(
+  request: AtlasAdministrativeMutationRequest,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    ...request.payload,
+    confirmation: request.descriptor.confirmation,
   });
 }
 

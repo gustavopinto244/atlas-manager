@@ -1,21 +1,22 @@
 # CLI plan
 
-## Status (2026-08-10, authenticated mutating CLI milestone)
+## Status (2026-08-10, scheduling and backup CLI mutations milestone)
 
-Source: `src/cli/command-tree.ts` (`AtlasCommand.implemented`). 23 command
-nodes exist; 18 are implemented, 5 are stubbed and return
+Source: `src/cli/command-tree.ts` (`AtlasCommand.implemented`). 36 command
+nodes exist; 31 are implemented, 5 are stubbed and return
 `command_not_implemented`:
 
 | State                                                              | Commands                                                                                                                                                                                                                                                        |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Implemented, read-only                                             | `status`, `health`, `doctor`, `services list`, `services status`, `services logs`, `services schedule show`, `services schedule preview`, `backups list`, `backups status`, `backups runs`, `events`, `machine status`, `machine plan`, `machine schedule show` |
+| Implemented, read-only (this milestone)                            | `backups run-status`, `backups schedule show`, `backups retention show`                                                                                                                                                                                         |
 | Implemented, mutating (ADR-031 authenticated transport)            | `services start`, `services stop`, `services restart`                                                                                                                                                                                                           |
+| Implemented, mutating (this milestone)                             | `services schedule set/always/manual/disable/remove`, `backups run`, `backups schedule set/remove`, `backups retention set/prune`                                                                                                                               |
 | Stubbed, blocked on infrastructure-diagnostics track (not started) | `infra status`, `infra listeners`, `nginx status`, `nginx test`, `tunnel status`                                                                                                                                                                                |
 
-> Correction: the previous revision of this table said "16 are implemented, 7
-> are stubbed". Both numbers were off by one — the list it printed contained 15
-> implemented commands and 8 stubs. Counts here are now derived from
-> `ATLAS_COMMANDS` rather than maintained by hand.
+> Counts are derived from `ATLAS_COMMANDS` by counting entries at the time of
+> writing, never maintained by hand. The five remaining stubs are exactly the
+> infrastructure-diagnostics track; no other command node is stubbed.
 
 `services schedule preview` covers both previews. Invoked with `--from` and
 `--to` alone it performs the pre-existing **persisted-policy** preview
@@ -58,6 +59,39 @@ CLI-specific route.
 - Success is confirmed by an authoritative re-read of
   `GET /admin/services/:id`, never by the HTTP status alone.
 - A refused mutation never falls back to local execution.
+
+### Schedule and backup mutation contract (this milestone)
+
+The slice above reused this transport unchanged, as ADR-031 pre-authorised. It
+added no administrative route, no second authorization stack, and no
+CLI-specific mutation path. Three properties are specific to it:
+
+- **Policy content is never validated client-side.** `--policy` is JSON-parsed
+  only to reject a malformed argument before spending a request. The server's
+  schedule, backup and retention domains remain the single validation
+  authority, and a rejected policy surfaces as `schedule_invalid` rather than
+  as a retryable infrastructure failure.
+- **Removing a schedule is not disabling it.** `services schedule remove`
+  sends no `policy` key at all and deletes the stored override, so the service
+  falls back to its statically configured default policy. The alias
+  subcommands instead persist an explicit override, and `disable` (verb) maps
+  explicitly to the domain mode `disabled` (adjective).
+- **Outcome is read from the result, not the status.** A manual backup run is
+  judged only by the run's own `succeeded` status, and a retention prune only
+  by its `result`: `completed` succeeds, `partial` is a known partial failure
+  (exit 1), and `busy`/`blocked` are genuinely ambiguous (exit 5). The
+  synchronous run route is the one mutation with no separate re-read, because
+  its response _is_ the post-state.
+
+`backups scheduler tick` remains deliberately unexposed. Its `claim_protected`
+replay policy and reentrancy-guarded compare-and-set cursor mark it as
+internal, cron-triggered maintenance whose correctness depends on not being
+invoked ad hoc; a contract test asserts the CLI declares no descriptor for it.
+
+The destructive `backups retention prune` keeps its server-side confirmation
+with no CLI bypass of any kind — no `--force`, `--yes` or `--no-confirm` — and
+tests assert those flags are rejected as unknown options with nothing
+dispatched.
 
 ## Command families
 

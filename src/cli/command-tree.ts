@@ -57,6 +57,31 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
     implemented: true,
   },
   {
+    path: ["services", "schedule", "set"],
+    summary: "Set a service schedule policy",
+    implemented: true,
+  },
+  {
+    path: ["services", "schedule", "always"],
+    summary: "Set a service to always available",
+    implemented: true,
+  },
+  {
+    path: ["services", "schedule", "manual"],
+    summary: "Set a service to manual availability",
+    implemented: true,
+  },
+  {
+    path: ["services", "schedule", "disable"],
+    summary: "Set a service schedule to disabled",
+    implemented: true,
+  },
+  {
+    path: ["services", "schedule", "remove"],
+    summary: "Remove a stored service schedule override",
+    implemented: true,
+  },
+  {
     path: ["backups", "list"],
     summary: "List backup targets",
     implemented: true,
@@ -69,6 +94,46 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["backups", "runs"],
     summary: "List backup runs",
+    implemented: true,
+  },
+  {
+    path: ["backups", "run"],
+    summary: "Run a registered backup target now",
+    implemented: true,
+  },
+  {
+    path: ["backups", "run-status"],
+    summary: "Read a single backup run",
+    implemented: true,
+  },
+  {
+    path: ["backups", "schedule", "show"],
+    summary: "Show a backup schedule",
+    implemented: true,
+  },
+  {
+    path: ["backups", "schedule", "set"],
+    summary: "Set a backup schedule policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "schedule", "remove"],
+    summary: "Remove a backup schedule",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "show"],
+    summary: "Show a backup retention policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "set"],
+    summary: "Set a backup retention policy",
+    implemented: true,
+  },
+  {
+    path: ["backups", "retention", "prune"],
+    summary: "Prune backup artifacts beyond retention",
     implemented: true,
   },
   {

@@ -2,16 +2,35 @@ import {
   AtlasCliInterruptedError,
   AtlasCliNetworkError,
   AtlasCliTimeoutError,
+  ATLAS_MUTATION_TIMEOUT_MS,
   createAtlasAdministrativeClient,
   type AtlasAdministrativeClient,
   type AtlasAdministrativeResponse,
 } from "./administrative-client.js";
 import {
+  ATLAS_SERVICE_SCHEDULE_ALIAS_MODES,
+  backupActionMutation,
+  backupActionPath,
+  backupRetentionMutation,
+  backupRetentionPath,
+  backupRetentionPrunePath,
+  backupRunReadPath,
+  backupScheduleMutation,
+  backupSchedulePath,
+  backupTargetReadPath,
+  isAtlasBackupRunId,
+  isAtlasBackupTargetId,
   isAtlasServiceId,
   serviceActionMutation,
   serviceActionPath,
   serviceReadPath,
+  serviceScheduleMutation,
+  serviceSchedulePath,
+  type AtlasAdministrativeMutationDescriptor,
+  type AtlasBackupRetentionOperation,
+  type AtlasBackupScheduleOperation,
   type AtlasServiceOperation,
+  type AtlasServiceScheduleOperation,
 } from "./administrative-contract.js";
 import { AtlasCliError } from "./errors.js";
 import type { AtlasCliTransport } from "./contracts.js";
@@ -23,23 +42,47 @@ export interface AtlasHttpTransportOptions {
   readonly administrativeAccessToken?: string;
   readonly readTimeoutMs?: number;
   readonly mutationTimeoutMs?: number;
+  /**
+   * Bound for the one administrative mutation that does its work inside the
+   * request (a manual backup run). Defaults to the larger of
+   * `ATLAS_BACKUP_RUN_TIMEOUT_MS` and the configured mutation timeout, so a
+   * deliberately longer global timeout is never silently shortened.
+   */
+  readonly backupRunTimeoutMs?: number;
 }
+
+/**
+ * A synchronous manual backup can legitimately take minutes for a
+ * `filesystem_tree` target, so the general mutation bound would abandon a run
+ * that is still working and force the operator to reconcile an outcome that
+ * was never actually in doubt.
+ */
+export const ATLAS_BACKUP_RUN_TIMEOUT_MS = 300_000;
 
 export function createAtlasHttpTransport(
   options: AtlasHttpTransportOptions = {},
 ): AtlasCliTransport {
   const client = createAtlasAdministrativeClient(options);
+  const backupRunTimeoutMs =
+    options.backupRunTimeoutMs ??
+    Math.max(
+      ATLAS_BACKUP_RUN_TIMEOUT_MS,
+      options.mutationTimeoutMs ?? ATLAS_MUTATION_TIMEOUT_MS,
+    );
   return Object.freeze({
     execute: (command: string, args: readonly string[], signal: AbortSignal) =>
-      executeHttpCommand(client, command, args, signal),
+      executeHttpCommand(client, command, args, signal, { backupRunTimeoutMs }),
   });
 }
+
+type AtlasTransportBounds = Readonly<{ backupRunTimeoutMs: number }>;
 
 async function executeHttpCommand(
   client: AtlasAdministrativeClient,
   command: string,
   args: readonly string[],
   signal: AbortSignal,
+  bounds: AtlasTransportBounds,
 ): Promise<unknown> {
   switch (command) {
     case "health":
@@ -90,12 +133,46 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "services schedule set":
+      return executeServiceScheduleSet(client, args, signal);
+    case "services schedule always":
+    case "services schedule manual":
+    case "services schedule disable":
+      return executeServiceScheduleAlias(
+        client,
+        command.slice("services schedule ".length) as
+          "always" | "manual" | "disable",
+        args,
+        signal,
+      );
+    case "services schedule remove":
+      return executeServiceScheduleRemove(client, args, signal);
     case "backups list":
       return client.read("/admin/backups/targets", signal);
     case "backups status":
       return readOverviewField(client, "backups", signal);
     case "backups runs":
       return client.read("/admin/backups/runs?limit=50", signal);
+    case "backups run":
+      return executeBackupRun(client, args, signal, bounds.backupRunTimeoutMs);
+    case "backups run-status":
+      return executeBackupRunStatus(client, args, signal);
+    case "backups schedule show": {
+      const targetId = requireBackupTargetIdArgument(args);
+      return client.read(backupSchedulePath(targetId), signal);
+    }
+    case "backups schedule set":
+      return executeBackupScheduleSet(client, args, signal);
+    case "backups schedule remove":
+      return executeBackupScheduleRemove(client, args, signal);
+    case "backups retention show": {
+      const targetId = requireBackupTargetIdArgument(args);
+      return client.read(backupRetentionPath(targetId), signal);
+    }
+    case "backups retention set":
+      return executeBackupRetentionSet(client, args, signal);
+    case "backups retention prune":
+      return executeBackupRetentionPrune(client, args, signal);
     case "events": {
       const limit = args.includes("--tail") ? 100 : 20;
       return client.read(`/admin/event-history?limit=${limit}`, signal);
@@ -179,7 +256,11 @@ async function executeServiceAction(
   } catch (error) {
     // A mutation is never retried here. `state_recheck_required` means the
     // operator, not the CLI, decides what happens after an uncertain result.
-    throw mapMutationDispatchError(error, operation, serviceId);
+    throw mapMutationDispatchError(
+      error,
+      `${operation} request for ${serviceId}`,
+      `Re-read authoritative state with: atlas services status ${serviceId}`,
+    );
   }
 
   if (envelope.status < 200 || envelope.status >= 300)
@@ -304,21 +385,28 @@ function readMutationAcknowledgement(body: unknown): boolean | undefined {
   return typeof successful === "boolean" ? successful : undefined;
 }
 
+/**
+ * Classifies a mutation that never produced a response. Delivery is only ever
+ * treated as *not* having happened when the transport proved it; every other
+ * outcome is indeterminate and directs the operator at an authoritative re-read.
+ *
+ * `subject` names the dispatched work ("restart request for task-manager") and
+ * `recheck` is the exact command that resolves the ambiguity.
+ */
 function mapMutationDispatchError(
   error: unknown,
-  operation: AtlasServiceOperation,
-  serviceId: string,
+  subject: string,
+  recheck: string,
 ): Error {
-  const recheck = `Re-read authoritative state with: atlas services status ${serviceId}`;
   if (error instanceof AtlasCliInterruptedError)
     return new AtlasCliError(
       "mutation_interrupted_outcome_unknown",
-      `Interrupted after the ${operation} request for ${serviceId} may have been sent. ${recheck}`,
+      `Interrupted after the ${subject} may have been sent. ${recheck}`,
     );
   if (error instanceof AtlasCliTimeoutError)
     return new AtlasCliError(
       "mutation_outcome_unknown",
-      `The ${operation} request for ${serviceId} timed out and may still have been applied. ${recheck}`,
+      `The ${subject} timed out and may still have been applied. ${recheck}`,
     );
   if (error instanceof AtlasCliNetworkError)
     return error.undelivered
@@ -328,12 +416,12 @@ function mapMutationDispatchError(
         )
       : new AtlasCliError(
           "mutation_outcome_unknown",
-          `The ${operation} request for ${serviceId} failed in transit and may still have been applied. ${recheck}`,
+          `The ${subject} failed in transit and may still have been applied. ${recheck}`,
         );
   if (error instanceof AtlasCliError) return error;
   return new AtlasCliError(
     "mutation_outcome_unknown",
-    `The ${operation} request for ${serviceId} did not complete and may still have been applied. ${recheck}`,
+    `The ${subject} did not complete and may still have been applied. ${recheck}`,
   );
 }
 
@@ -368,6 +456,841 @@ function mapMutationRejection(
   return new AtlasCliError(
     "service_operation_failed",
     `Atlas rejected the service operation (HTTP ${envelope.status}${
+      envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
+    })`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Registered-service schedule mutations (ADR-031)
+// ---------------------------------------------------------------------------
+
+export type AtlasServiceScheduleMutationResult = Readonly<{
+  serviceId: string;
+  operation: AtlasServiceScheduleOperation;
+  result: "completed";
+  /**
+   * Authoritative post-mutation policy mode, or `unknown` when the confirming
+   * re-read failed. For `delete` this is the *fallback* policy the service
+   * reverts to, which is its statically configured default — not necessarily
+   * the mode any alias subcommand would have written.
+   */
+  mode: string;
+  /** Full authoritative policy, when the re-read succeeded. */
+  policy: unknown;
+  authoritativeRead: "ok" | "unavailable";
+}>;
+
+async function executeServiceScheduleSet(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const parsed = readSchedulePolicyArguments(args);
+  return putServiceSchedule(client, parsed.serviceId, parsed.policy, signal);
+}
+
+async function executeServiceScheduleAlias(
+  client: AtlasAdministrativeClient,
+  alias: "always" | "manual" | "disable",
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const serviceId = requireServiceIdArgument(args);
+  // The subcommand word is mapped to a domain mode explicitly; `disable` is
+  // not the same string as the stored mode `disabled`.
+  return putServiceSchedule(
+    client,
+    serviceId,
+    { mode: ATLAS_SERVICE_SCHEDULE_ALIAS_MODES[alias] },
+    signal,
+  );
+}
+
+async function putServiceSchedule(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  policy: unknown,
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  return mutateServiceSchedule(client, serviceId, "update", signal, {
+    // The CLI forwards the policy verbatim and validates none of its content:
+    // the server's schedule domain is the single validation authority, so a
+    // CLI copy of those rules could only ever drift away from it.
+    policy,
+  });
+}
+
+async function executeServiceScheduleRemove(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const serviceId = requireServiceIdArgument(args);
+  // Deliberately no `policy` key at all. Removing a schedule erases the stored
+  // override so the service falls back to its configured default policy; it is
+  // not the same operation as writing mode `disabled`.
+  return mutateServiceSchedule(client, serviceId, "delete", signal, undefined);
+}
+
+async function mutateServiceSchedule(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  operation: AtlasServiceScheduleOperation,
+  signal: AbortSignal,
+  payload: Readonly<Record<string, unknown>> | undefined,
+): Promise<AtlasServiceScheduleMutationResult> {
+  client.assertMutationAllowed();
+
+  // Advisory pre-check, exactly as for service actions. A schedule has no
+  // per-service capability gate — a registered service either exists or does
+  // not — so there is no "unsupported operation" branch here.
+  const precheck = await describeServiceSafely(client, serviceId, signal, true);
+  if (precheck.kind === "denied")
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (precheck.kind === "absent")
+    throw new AtlasCliError(
+      "service_not_found",
+      `Registered service not found: ${serviceId}`,
+    );
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: serviceScheduleMutation(operation),
+        path: serviceSchedulePath(serviceId),
+        ...(payload === undefined ? {} : { payload }),
+      },
+      signal,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `schedule ${operation} request for ${serviceId}`,
+      `Re-read authoritative state with: atlas services schedule show ${serviceId}`,
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapScheduleMutationRejection(envelope, serviceId);
+  if (envelope.malformed)
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unreadable service schedule response",
+    );
+  if (!hasScheduleMutationAcknowledgement(envelope.body, operation))
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unexpected service schedule response",
+    );
+
+  // Success is never claimed from the mutation response alone (ADR-031): the
+  // stored policy is read back from the authoritative schedule route.
+  const authoritative = await describeServiceScheduleSafely(
+    client,
+    serviceId,
+    signal,
+  );
+  return Object.freeze({
+    serviceId,
+    operation,
+    result: "completed" as const,
+    mode: authoritative.kind === "described" ? authoritative.mode : "unknown",
+    policy: authoritative.kind === "described" ? authoritative.policy : null,
+    authoritativeRead:
+      authoritative.kind === "described" ? "ok" : "unavailable",
+  });
+}
+
+type ServiceScheduleDescription =
+  | Readonly<{ kind: "described"; mode: string; policy: unknown }>
+  | Readonly<{ kind: "indeterminate" }>;
+
+/**
+ * Authoritative post-mutation read of the stored schedule. Interruption is
+ * never propagated: the mutation already happened, and only the confirming
+ * read was lost.
+ */
+async function describeServiceScheduleSafely(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  signal: AbortSignal,
+): Promise<ServiceScheduleDescription> {
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.readEnvelope(
+      serviceSchedulePath(serviceId),
+      signal,
+    );
+  } catch {
+    return Object.freeze({ kind: "indeterminate" as const });
+  }
+  if (envelope.status !== 200 || envelope.malformed)
+    return Object.freeze({ kind: "indeterminate" as const });
+  if (typeof envelope.body !== "object" || envelope.body === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const policy = (envelope.body as Record<string, unknown>).policy;
+  if (typeof policy !== "object" || policy === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const mode = (policy as Record<string, unknown>).mode;
+  if (typeof mode !== "string")
+    return Object.freeze({ kind: "indeterminate" as const });
+  return Object.freeze({ kind: "described" as const, mode, policy });
+}
+
+/**
+ * The schedule routes do not answer with a `successful` boolean the way the
+ * service action routes do. A `PUT` answers with the persisted policy itself,
+ * and a `DELETE` answers with `{serviceId, removed: true}`; both are verified
+ * here rather than assumed from the HTTP status.
+ */
+function hasScheduleMutationAcknowledgement(
+  body: unknown,
+  operation: AtlasServiceScheduleOperation,
+): boolean {
+  if (typeof body !== "object" || body === null) return false;
+  const record = body as Record<string, unknown>;
+  if (operation === "delete") return record.removed === true;
+  return typeof record.mode === "string";
+}
+
+function mapScheduleMutationRejection(
+  envelope: AtlasAdministrativeResponse,
+  serviceId: string,
+): AtlasCliError {
+  if (envelope.status === 401 || envelope.status === 403)
+    return new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 404)
+    return new AtlasCliError(
+      "service_not_found",
+      `Registered service not found: ${serviceId}`,
+    );
+  if (envelope.status === 409 || envelope.status === 429)
+    return new AtlasCliError(
+      "operation_conflict",
+      envelope.status === 429
+        ? "Atlas is rate limiting administrative requests; retry shortly"
+        : "Another administrative service operation is in progress",
+    );
+  // The server rejected the policy itself. This is the operator's input being
+  // wrong, not the schedule subsystem failing.
+  if (
+    envelope.status === 400 &&
+    envelope.errorCode === "invalid_service_schedule_request"
+  )
+    return new AtlasCliError(
+      "schedule_invalid",
+      "Atlas rejected the service schedule policy as invalid",
+    );
+  if (envelope.errorCode === "administrative_service_state_recheck_required")
+    return new AtlasCliError(
+      "mutation_outcome_unknown",
+      `Atlas could not confirm the outcome. Re-read authoritative state with: atlas services schedule show ${serviceId}`,
+    );
+  return new AtlasCliError(
+    "service_operation_failed",
+    `Atlas rejected the service schedule mutation (HTTP ${envelope.status}${
+      envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
+    })`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Registered-backup operations (ADR-031)
+// ---------------------------------------------------------------------------
+
+/**
+ * A manual backup run is synchronous server-side: the request blocks until the
+ * run reaches a terminal state and answers with the terminal run record. There
+ * is therefore no queue, no poll, and — unlike every other mutation here — no
+ * separate authoritative re-read, because the response body *is* the
+ * authoritative result (ADR-031 permits this divergence for a synchronous
+ * mutation whose response is itself the post-state).
+ *
+ * Because the work happens inside the request, this one call site raises the
+ * bounded mutation timeout (see `ATLAS_BACKUP_RUN_TIMEOUT_MS`). It never
+ * removes the bound.
+ */
+export type AtlasBackupRunResult = Readonly<{
+  targetId: string;
+  runId: string;
+  trigger: string | undefined;
+  /** Terminal run status, reported exactly as the server recorded it. */
+  status: string;
+  startedAt: string | undefined;
+  completedAt: string | undefined;
+  fileCount: number | undefined;
+  totalBytes: number | undefined;
+  manifestSha256: string | undefined;
+}>;
+
+async function executeBackupRun(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+  timeoutMs: number,
+): Promise<AtlasBackupRunResult> {
+  const targetId = requireBackupTargetIdArgument(args);
+  client.assertMutationAllowed();
+
+  const precheck = await describeBackupTargetSafely(client, targetId, signal);
+  if (precheck.kind === "denied")
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (precheck.kind === "absent")
+    throw new AtlasCliError(
+      "backup_target_not_found",
+      `Registered backup target not found: ${targetId}`,
+    );
+  if (precheck.kind === "described" && !precheck.manualRun)
+    throw new AtlasCliError(
+      "backup_operation_unsupported",
+      `Registered backup target ${targetId} does not support a manual run`,
+    );
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: backupActionMutation("run"),
+        path: backupActionPath("run", targetId),
+      },
+      signal,
+      timeoutMs,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `backup run request for ${targetId}`,
+      `Find the run with: atlas backups runs — then confirm its outcome with: atlas backups run-status <runId>`,
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapBackupRejection(envelope, targetId);
+  if (envelope.malformed)
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      "Atlas returned an unreadable backup run response",
+    );
+  const run = readBackupRunRecord(envelope.body);
+  if (run === undefined)
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      "Atlas returned an unexpected backup run response",
+    );
+  // The status is never reinterpreted. A terminal run that did not succeed is
+  // reported as a failure carrying the server's own status, never as a
+  // completed backup.
+  if (run.status !== "succeeded")
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      `Backup run ${run.runId} for ${targetId} finished with status ${run.status}${
+        run.failureCode === undefined ? "" : ` (${run.failureCode})`
+      }`,
+    );
+  return Object.freeze({
+    targetId,
+    runId: run.runId,
+    trigger: run.trigger,
+    status: run.status,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    fileCount: run.fileCount,
+    totalBytes: run.totalBytes,
+    manifestSha256: run.manifestSha256,
+  });
+}
+
+/** Read-only lookup of a single run. No mutation, no gate, no confirmation. */
+async function executeBackupRunStatus(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<unknown> {
+  const runId = requireSingleArgument(args, "run id");
+  if (!isAtlasBackupRunId(runId))
+    throw new AtlasCliError("invalid_arguments", `Invalid run id: ${runId}`);
+  const envelope = await client.readEnvelope(backupRunReadPath(runId), signal);
+  if (envelope.status === 401 || envelope.status === 403)
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 404)
+    throw new AtlasCliError(
+      "backup_run_not_found",
+      `Backup run not found: ${runId}`,
+    );
+  if (envelope.status !== 200 || envelope.malformed)
+    throw new AtlasCliError(
+      "infrastructure_unavailable",
+      `Atlas endpoint returned HTTP ${envelope.status}`,
+    );
+  return envelope.body;
+}
+
+type BackupTargetDescription =
+  | Readonly<{ kind: "described"; manualRun: boolean; schedule: boolean }>
+  | Readonly<{ kind: "absent" }>
+  | Readonly<{ kind: "denied" }>
+  | Readonly<{ kind: "indeterminate" }>;
+
+/**
+ * Advisory pre-check against the registered target, mirroring how the
+ * dashboard hides a control the target does not offer. Only a definitive
+ * answer stops the command; a degraded read never makes a target unusable.
+ */
+async function describeBackupTargetSafely(
+  client: AtlasAdministrativeClient,
+  targetId: string,
+  signal: AbortSignal,
+): Promise<BackupTargetDescription> {
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.readEnvelope(
+      backupTargetReadPath(targetId),
+      signal,
+    );
+  } catch (error) {
+    if (error instanceof AtlasCliInterruptedError) throw error;
+    return Object.freeze({ kind: "indeterminate" as const });
+  }
+  if (envelope.status === 401 || envelope.status === 403)
+    return Object.freeze({ kind: "denied" as const });
+  if (
+    envelope.status === 404 &&
+    envelope.errorCode === "registered_backup_target_not_found"
+  )
+    return Object.freeze({ kind: "absent" as const });
+  if (
+    envelope.status !== 200 ||
+    envelope.malformed ||
+    typeof envelope.body !== "object" ||
+    envelope.body === null
+  )
+    return Object.freeze({ kind: "indeterminate" as const });
+  const capabilities = (envelope.body as Record<string, unknown>).capabilities;
+  if (typeof capabilities !== "object" || capabilities === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const record = capabilities as Record<string, unknown>;
+  if (
+    typeof record.manualRun !== "boolean" ||
+    typeof record.schedule !== "boolean"
+  )
+    return Object.freeze({ kind: "indeterminate" as const });
+  return Object.freeze({
+    kind: "described" as const,
+    manualRun: record.manualRun,
+    schedule: record.schedule,
+  });
+}
+
+type BackupRunRecord = Readonly<{
+  runId: string;
+  status: string;
+  trigger: string | undefined;
+  startedAt: string | undefined;
+  completedAt: string | undefined;
+  failureCode: string | undefined;
+  fileCount: number | undefined;
+  totalBytes: number | undefined;
+  manifestSha256: string | undefined;
+}>;
+
+/**
+ * The run route answers with the use case's result, `{run, artifactDirectory}`.
+ * The artifact directory is deliberately not surfaced: it is a host filesystem
+ * path, and the CLI's vocabulary is registered identities, never paths.
+ */
+function readBackupRunRecord(body: unknown): BackupRunRecord | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const run = (body as Record<string, unknown>).run;
+  if (typeof run !== "object" || run === null) return undefined;
+  const record = run as Record<string, unknown>;
+  if (typeof record.runId !== "string" || typeof record.status !== "string")
+    return undefined;
+  const artifact =
+    typeof record.artifact === "object" && record.artifact !== null
+      ? (record.artifact as Record<string, unknown>)
+      : undefined;
+  return Object.freeze({
+    runId: record.runId,
+    status: record.status,
+    trigger: optionalString(record.trigger),
+    startedAt: optionalString(record.startedAt),
+    completedAt: optionalString(record.completedAt),
+    failureCode: optionalString(record.failureCode),
+    fileCount: optionalNumber(artifact?.fileCount),
+    totalBytes: optionalNumber(artifact?.totalBytes),
+    manifestSha256: optionalString(artifact?.manifestSha256),
+  });
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+function mapBackupRejection(
+  envelope: AtlasAdministrativeResponse,
+  targetId: string,
+): AtlasCliError {
+  if (envelope.status === 401 || envelope.status === 403)
+    return new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 404)
+    return new AtlasCliError(
+      "backup_target_not_found",
+      `Registered backup target not found: ${targetId}`,
+    );
+  // The backup gate is separate from the service mutation gate, so a busy
+  // backup never reflects a busy service operation and vice versa.
+  if (envelope.status === 409 || envelope.status === 429)
+    return new AtlasCliError(
+      "operation_conflict",
+      envelope.status === 429
+        ? "Atlas is rate limiting administrative requests; retry shortly"
+        : "Another backup operation is in progress",
+    );
+  return new AtlasCliError(
+    "backup_operation_failed",
+    `Atlas rejected the backup operation (HTTP ${envelope.status}${
+      envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
+    })`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Backup schedule and retention mutations (ADR-031)
+// ---------------------------------------------------------------------------
+
+export type AtlasBackupPolicyMutationResult = Readonly<{
+  targetId: string;
+  operation: AtlasBackupScheduleOperation | AtlasBackupRetentionOperation;
+  result: "completed";
+  /** Authoritative stored policy, or `null` when the re-read failed. */
+  policy: unknown;
+  authoritativeRead: "ok" | "unavailable";
+}>;
+
+async function executeBackupScheduleSet(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasBackupPolicyMutationResult> {
+  const parsed = readBackupPolicyArguments(args);
+  return mutateBackupPolicy(client, {
+    targetId: parsed.targetId,
+    descriptor: backupScheduleMutation("update"),
+    operation: "update",
+    path: backupSchedulePath(parsed.targetId),
+    readPath: backupSchedulePath(parsed.targetId),
+    // Forwarded verbatim; the backup domain is the single validation authority.
+    payload: { policy: parsed.policy },
+    requiresScheduleCapability: true,
+    signal,
+  });
+}
+
+async function executeBackupScheduleRemove(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasBackupPolicyMutationResult> {
+  const targetId = requireBackupTargetIdArgument(args);
+  // No `policy` key at all: removal resets the target to its `manual` default.
+  return mutateBackupPolicy(client, {
+    targetId,
+    descriptor: backupScheduleMutation("delete"),
+    operation: "delete",
+    path: backupSchedulePath(targetId),
+    readPath: backupSchedulePath(targetId),
+    payload: undefined,
+    requiresScheduleCapability: true,
+    signal,
+  });
+}
+
+async function executeBackupRetentionSet(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasBackupPolicyMutationResult> {
+  const parsed = readBackupPolicyArguments(args);
+  return mutateBackupPolicy(client, {
+    targetId: parsed.targetId,
+    descriptor: backupRetentionMutation("update"),
+    operation: "update",
+    path: backupRetentionPath(parsed.targetId),
+    readPath: backupRetentionPath(parsed.targetId),
+    payload: { policy: parsed.policy },
+    // Every registered target carries a retention policy, so there is no
+    // capability gate to check here.
+    requiresScheduleCapability: false,
+    signal,
+  });
+}
+
+async function mutateBackupPolicy(
+  client: AtlasAdministrativeClient,
+  input: Readonly<{
+    targetId: string;
+    descriptor: AtlasAdministrativeMutationDescriptor;
+    operation: AtlasBackupScheduleOperation | AtlasBackupRetentionOperation;
+    path: string;
+    readPath: string;
+    payload: Readonly<Record<string, unknown>> | undefined;
+    requiresScheduleCapability: boolean;
+    signal: AbortSignal;
+  }>,
+): Promise<AtlasBackupPolicyMutationResult> {
+  const { targetId, signal } = input;
+  client.assertMutationAllowed();
+
+  const precheck = await describeBackupTargetSafely(client, targetId, signal);
+  if (precheck.kind === "denied")
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (precheck.kind === "absent")
+    throw new AtlasCliError(
+      "backup_target_not_found",
+      `Registered backup target not found: ${targetId}`,
+    );
+  if (
+    input.requiresScheduleCapability &&
+    precheck.kind === "described" &&
+    !precheck.schedule
+  )
+    throw new AtlasCliError(
+      "backup_operation_unsupported",
+      `Registered backup target ${targetId} does not support scheduling`,
+    );
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: input.descriptor,
+        path: input.path,
+        ...(input.payload === undefined ? {} : { payload: input.payload }),
+      },
+      signal,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `backup policy request for ${targetId}`,
+      `Re-read authoritative state with: atlas backups list`,
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapBackupPolicyRejection(envelope, targetId);
+  if (
+    envelope.malformed ||
+    typeof envelope.body !== "object" ||
+    envelope.body === null
+  )
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      "Atlas returned an unreadable backup policy response",
+    );
+
+  // Never claimed from the mutation response alone: the stored policy is read
+  // back from the authoritative route.
+  const authoritative = await readBackupPolicySafely(
+    client,
+    input.readPath,
+    signal,
+  );
+  return Object.freeze({
+    targetId,
+    operation: input.operation,
+    result: "completed" as const,
+    // Explicitly null rather than absent, so the JSON envelope keeps one shape
+    // whether or not the confirming read succeeded.
+    policy: authoritative ?? null,
+    authoritativeRead: authoritative === undefined ? "unavailable" : "ok",
+  });
+}
+
+async function readBackupPolicySafely(
+  client: AtlasAdministrativeClient,
+  path: string,
+  signal: AbortSignal,
+): Promise<unknown> {
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.readEnvelope(path, signal);
+  } catch {
+    return undefined;
+  }
+  if (
+    envelope.status !== 200 ||
+    envelope.malformed ||
+    typeof envelope.body !== "object" ||
+    envelope.body === null
+  )
+    return undefined;
+  return envelope.body;
+}
+
+export type AtlasBackupRetentionPruneResult = Readonly<{
+  targetId: string;
+  operation: "prune";
+  /** The server's own outcome word, never a rephrasing of it. */
+  result: string;
+  processedCount: number;
+  deletedCount: number;
+}>;
+
+async function executeBackupRetentionPrune(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasBackupRetentionPruneResult> {
+  const targetId = requireBackupTargetIdArgument(args);
+  client.assertMutationAllowed();
+
+  const precheck = await describeBackupTargetSafely(client, targetId, signal);
+  if (precheck.kind === "denied")
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (precheck.kind === "absent")
+    throw new AtlasCliError(
+      "backup_target_not_found",
+      `Registered backup target not found: ${targetId}`,
+    );
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: backupRetentionMutation("prune"),
+        path: backupRetentionPrunePath(targetId),
+      },
+      signal,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `retention prune request for ${targetId}`,
+      `Re-read authoritative state with: atlas backups runs`,
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapBackupPolicyRejection(envelope, targetId);
+  const result = readRetentionResult(envelope);
+  if (result === undefined)
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      "Atlas returned an unexpected retention prune response",
+    );
+
+  // Success is judged only by the server's own `result`, never by the HTTP
+  // status: the prune route answers 200 for every outcome it can reach.
+  if (result.result === "busy" || result.result === "blocked")
+    // Genuinely ambiguous: the prune did not run to completion and the
+    // operator cannot tell from here how much, if anything, was deleted.
+    throw new AtlasCliError(
+      "mutation_outcome_unknown",
+      `Atlas reported the retention prune for ${targetId} as ${result.result}; it may have deleted some artifacts. Re-read authoritative state with: atlas backups runs`,
+    );
+  if (result.result !== "completed")
+    // A partial prune is a known partial failure, not an ambiguity: the server
+    // already reported exactly how much it processed and deleted.
+    throw new AtlasCliError(
+      "backup_operation_failed",
+      `Atlas reported the retention prune for ${targetId} as ${result.result} after processing ${result.processedCount} and deleting ${result.deletedCount}`,
+    );
+  return Object.freeze({
+    targetId,
+    operation: "prune" as const,
+    result: result.result,
+    processedCount: result.processedCount,
+    deletedCount: result.deletedCount,
+  });
+}
+
+function readRetentionResult(
+  envelope: AtlasAdministrativeResponse,
+):
+  | Readonly<{ result: string; processedCount: number; deletedCount: number }>
+  | undefined {
+  if (
+    envelope.malformed ||
+    typeof envelope.body !== "object" ||
+    envelope.body === null
+  )
+    return undefined;
+  const record = envelope.body as Record<string, unknown>;
+  if (
+    typeof record.result !== "string" ||
+    typeof record.processedCount !== "number" ||
+    typeof record.deletedCount !== "number"
+  )
+    return undefined;
+  return Object.freeze({
+    result: record.result,
+    processedCount: record.processedCount,
+    deletedCount: record.deletedCount,
+  });
+}
+
+function mapBackupPolicyRejection(
+  envelope: AtlasAdministrativeResponse,
+  targetId: string,
+): AtlasCliError {
+  if (envelope.status === 401 || envelope.status === 403)
+    return new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 404)
+    return new AtlasCliError(
+      "backup_target_not_found",
+      `Registered backup target not found: ${targetId}`,
+    );
+  if (envelope.status === 409 || envelope.status === 429)
+    return new AtlasCliError(
+      "operation_conflict",
+      envelope.status === 429
+        ? "Atlas is rate limiting administrative requests; retry shortly"
+        : "Another backup operation is in progress",
+    );
+  // The operator's policy was rejected. Retrying it unchanged can never help,
+  // so this must not be reported as a transient infrastructure problem.
+  if (
+    envelope.status === 400 &&
+    envelope.errorCode === "invalid_backup_request"
+  )
+    return new AtlasCliError(
+      "schedule_invalid",
+      "Atlas rejected the backup policy as invalid",
+    );
+  return new AtlasCliError(
+    "backup_operation_failed",
+    `Atlas rejected the backup operation (HTTP ${envelope.status}${
       envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
     })`,
   );
@@ -513,6 +1436,126 @@ function requireArgument(args: readonly string[], name: string): string {
     throw new AtlasCliError("invalid_arguments", `${name} is required`);
   }
   return value;
+}
+
+/** A single positional argument with no options of any kind. */
+function requireSingleArgument(args: readonly string[], name: string): string {
+  const value = args[0];
+  if (value === undefined || value.length === 0)
+    throw new AtlasCliError("invalid_arguments", `${name} is required`);
+  if (value.startsWith("-"))
+    throw new AtlasCliError("invalid_arguments", `Unknown option: ${value}`);
+  if (args.length > 1)
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Unexpected argument: ${String(args[1])}`,
+    );
+  return value;
+}
+
+/**
+ * A backup target is a *registered target id* and nothing else. There is
+ * deliberately no source or destination option: a backup may only ever read
+ * and write the locations its registered target declares, under the limits
+ * that target carries.
+ */
+function requireBackupTargetIdArgument(args: readonly string[]): string {
+  const value = requireSingleArgument(args, "backup target id");
+  if (!isAtlasBackupTargetId(value))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Invalid backup target id: ${value}`,
+    );
+  return value;
+}
+
+/**
+ * `<target-id> --policy '<json>'` for backup schedule and retention writes.
+ *
+ * As with service schedules, the JSON is parsed only so a typo fails as a
+ * usage error before a request is spent. Its content is never inspected here.
+ */
+function readBackupPolicyArguments(args: readonly string[]): Readonly<{
+  targetId: string;
+  policy: unknown;
+}> {
+  const targetId = args[0];
+  if (targetId === undefined || targetId.length === 0)
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "backup target id is required",
+    );
+  if (targetId.startsWith("-"))
+    throw new AtlasCliError("invalid_arguments", `Unknown option: ${targetId}`);
+  if (!isAtlasBackupTargetId(targetId))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Invalid backup target id: ${targetId}`,
+    );
+  const rest = args.slice(1);
+  if (rest.length !== 2 || rest[0] !== "--policy")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      rest.length > 0 && rest[0] !== "--policy" && rest[0]?.startsWith("-")
+        ? `Unknown option: ${String(rest[0])}`
+        : "Option --policy <json> is required",
+    );
+  try {
+    return Object.freeze({
+      targetId,
+      policy: JSON.parse(rest[1] as string) as unknown,
+    });
+  } catch {
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "Option --policy requires valid JSON",
+    );
+  }
+}
+
+/**
+ * `schedule set <serviceId> --policy '<json>'`.
+ *
+ * The JSON is parsed here only so that a typo fails as a usage error before a
+ * request is spent. Its *content* is never inspected: the server's schedule
+ * domain decides what a valid policy is.
+ */
+function readSchedulePolicyArguments(args: readonly string[]): Readonly<{
+  serviceId: string;
+  policy: unknown;
+}> {
+  const serviceId = args[0];
+  if (serviceId === undefined || serviceId.length === 0)
+    throw new AtlasCliError("invalid_arguments", "service id is required");
+  if (serviceId.startsWith("-"))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Unknown option: ${serviceId}`,
+    );
+  if (!isAtlasServiceId(serviceId))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Invalid service id: ${serviceId}`,
+    );
+  const rest = args.slice(1);
+  if (rest.length !== 2 || rest[0] !== "--policy")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      rest.length > 0 && rest[0] !== "--policy" && rest[0]?.startsWith("-")
+        ? `Unknown option: ${String(rest[0])}`
+        : "Option --policy <json> is required",
+    );
+  try {
+    return Object.freeze({
+      serviceId,
+      policy: JSON.parse(rest[1] as string) as unknown,
+    });
+  } catch {
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "Option --policy requires valid JSON",
+    );
+  }
 }
 
 /**

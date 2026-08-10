@@ -52,10 +52,12 @@ mutation is audited with the same principal as a dashboard mutation.
 1. Add a persistent registered-service policy store and policy mutation use
    cases distinct from temporary availability overrides.
 2. Add schedule show/update/remove and preview APIs. — done.
-3. Add CLI schedule commands. — `schedule show` and both previews (persisted and
-   candidate) are delivered; the mutation commands
-   (`set`/`always`/`manual`/`disable`/`remove`) are the next slice and reuse the
-   ADR-031 transport unchanged.
+3. Add CLI schedule commands. — done. `schedule show` and both previews
+   (persisted and candidate) shipped earlier; the mutation commands
+   (`set`/`always`/`manual`/`disable`/`remove`) now reuse the ADR-031 transport
+   unchanged, with no new administrative route. `remove` deletes the stored
+   override and falls back to the configured default policy — it is not the
+   same operation as writing mode `disabled`.
 4. Add reusable weekly editor and timeline components.
 5. Add next-transition data to service detail and overview.
 
@@ -64,7 +66,11 @@ dashboard; reconciliation regression suites remain unchanged and green.
 
 ## Phase E — backups and events
 
-1. Add CLI read/mutation commands mapped to existing capabilities.
+1. Add CLI read/mutation commands mapped to existing capabilities. — CLI side
+   done: `backups run`, `backups run-status`, `backups schedule show/set/remove`
+   and `backups retention show/set/prune`, all on existing routes.
+   `backups scheduler tick` stays unexposed by design (claim-protected,
+   cron-triggered maintenance).
 2. Replace raw dashboard backup forms with typed controls.
 3. Add Events page, tail/pagination UX and audit visibility.
 4. Ensure every newly introduced mutation emits administrative history.

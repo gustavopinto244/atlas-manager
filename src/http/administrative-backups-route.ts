@@ -18,6 +18,7 @@ import {
   mapBackupRun,
   mapBackupTarget,
 } from "./administrative-backup-response.js";
+import { BackupTargetValidationError } from "../backup-management/domain/backup-target.js";
 import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_BACKUPS_PREFIX = "/admin/backups";
@@ -512,6 +513,15 @@ function mapError(error: unknown): HttpError {
   if (error instanceof HttpError) return error;
   const access = mapAdministrativeAccessControlError(error);
   if (access !== undefined) return access;
+  // A rejected schedule or retention policy is the caller's input being wrong.
+  // Reporting it as an unavailable backup subsystem would tell the operator to
+  // retry something that can never succeed unchanged.
+  if (error instanceof BackupTargetValidationError)
+    return new HttpError(
+      400,
+      "invalid_backup_request",
+      "Invalid backup request",
+    );
   if (
     error instanceof Error &&
     /^(registered_backup_target_not_found|backup_run_not_found)$/u.test(

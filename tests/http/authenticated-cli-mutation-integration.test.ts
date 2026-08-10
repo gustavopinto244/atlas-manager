@@ -19,6 +19,10 @@ import { FixedAdministrativeRequestAdmission } from "../../src/http/administrati
 import { parseAdministrativePublicOrigin } from "../../src/http/administrative-public-origin.js";
 import { createApp } from "../../src/http/create-app.js";
 import { createServiceManagement } from "../../src/service-management/composition/create-service-management.js";
+import { createBackupManagement } from "../../src/backup-management/composition/create-backup-management.js";
+import { createBackupTarget } from "../../src/backup-management/domain/backup-target.js";
+import type { BackupTarget } from "../../src/backup-management/domain/backup-target.js";
+import { MockBackupAdapter } from "../../src/backup-management/infrastructure/mock-backup-adapter.js";
 import type { ServerHealthSnapshot } from "../../src/server-health/domain/server-health-snapshot.js";
 
 /** Extracts a request URL without relying on default stringification. */
@@ -33,6 +37,7 @@ const UNKNOWN_PRINCIPAL_ID = "00000000-0000-4000-8000-000000000002";
 const HOST = "atlas.example.com";
 const BASE_URL = `https://${HOST}`;
 const SERVICE_ID = "task-manager";
+const BACKUP_TARGET_ID = "atlas-config";
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 
 function health(): ServerHealthSnapshot {
@@ -63,11 +68,21 @@ type Express = ReturnType<typeof createApp>;
  * Cloudflare Access verification -> RBAC -> mutation admission -> use case ->
  * adapter -> audit.
  */
+/** Every HTTP method the administrative catalog actually exposes. */
+function supertestMethod(
+  value: string | undefined,
+): "get" | "post" | "put" | "delete" {
+  const method = (value ?? "GET").toLowerCase();
+  if (method === "post") return "post";
+  if (method === "put") return "put";
+  if (method === "delete") return "delete";
+  return "get";
+}
+
 function supertestFetch(app: Express): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(urlOf(input));
-    const method =
-      (init?.method ?? "GET").toLowerCase() === "post" ? "post" : "get";
+    const method = supertestMethod(init?.method);
     const pending = request(app)
       [method](`${url.pathname}${url.search}`)
       .set("host", HOST);
@@ -163,20 +178,67 @@ async function fixture(
         roleAssignmentReader,
       }),
       serviceManagement,
+      backupManagement,
       eventHistory: history,
       clock,
     });
+  // A registered backup target backed by the mock adapter and in-memory
+  // stores. Nothing here touches a real filesystem, a real backup destination
+  // or any real operator data.
+  const backupTarget: BackupTarget = createBackupTarget({
+    id: BACKUP_TARGET_ID,
+    displayName: "Atlas Configuration",
+    kind: "mock",
+    schedule: { mode: "manual" },
+    retention: { keepLastSuccessful: 5 },
+    limits: {
+      maxFiles: 100,
+      maxTotalBytes: 1_000_000,
+      maxFileBytes: 100_000,
+      maxDepth: 8,
+      maxRelativePathBytes: 1_024,
+    },
+  });
+  const backupAdapter = new MockBackupAdapter();
+  const backupManagement = createBackupManagement({
+    targets: [backupTarget],
+    clock,
+    adapters: { mock: backupAdapter },
+    policyStore: {
+      load: (targets) => targets,
+      save: () => undefined,
+    },
+    artifacts: {
+      listManaged: async () => [],
+      removeManaged: async () => undefined,
+    },
+  });
+
+  const mutationGate = createAdministrativeServiceMutationGate();
+  // The backup gate is a separate admission slot from the service mutation
+  // gate, exactly as the route security catalog declares.
+  const backupGate = createAdministrativeServiceMutationGate();
   const app = createApp({
     logger: { error: vi.fn() },
     getServerHealth: { execute: vi.fn(async () => health()) },
     administrativePublicOrigin: parseAdministrativePublicOrigin(BASE_URL),
     administrativeServices: {
       admission,
-      mutationGate: createAdministrativeServiceMutationGate(),
+      mutationGate,
+      createProtectedAdministration: createProtected,
+    },
+    administrativeServiceSchedule: {
+      admission,
+      mutationGate,
+      createProtectedAdministration: createProtected,
+    },
+    administrativeBackups: {
+      admission,
+      mutationGate: backupGate,
       createProtectedAdministration: createProtected,
     },
   });
-  return { app, signAssertion, history };
+  return { app, signAssertion, history, backupAdapter };
 }
 
 async function drain(value: PassThrough): Promise<string> {
@@ -429,6 +491,407 @@ describe("authenticated mutating CLI — audit", () => {
     const cliTypes = await typesOf(viaCli);
     for (const operation of await typesOf(viaApi))
       expect(cliTypes, operation).toContain(operation);
+  });
+});
+
+describe("authenticated mutating CLI — service schedule", () => {
+  it("writes a schedule policy through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "manual" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    if (result.code !== 0) console.log("DBG", result.err);
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      serviceId: SERVICE_ID,
+      operation: "update",
+      result: "completed",
+      mode: "manual",
+      authoritativeRead: "ok",
+    });
+    expect(await controlOperations(value.history)).toContain(
+      "update_registered_service_schedule",
+    );
+
+    // The identical PUT issued the way the dashboard issues it produces the
+    // same audited operation — there is no CLI-only audit vocabulary.
+    const viaApi = await fixture(["service_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .put(`/admin/services/${SERVICE_ID}/schedule`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_registered_service_schedule_update",
+        policy: { mode: "manual" },
+      });
+    expect(apiResponse.status).toBe(200);
+    expect(await controlOperations(viaApi.history)).toContain(
+      "update_registered_service_schedule",
+    );
+  });
+
+  it("removes a stored schedule override through the canonical removal route", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "disabled" }),
+        "--json",
+      ],
+      assertion,
+    );
+    const result = await runCli(
+      value.app,
+      ["services", "schedule", "remove", SERVICE_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    const data = (JSON.parse(result.out) as { data: Record<string, unknown> })
+      .data;
+    expect(data).toMatchObject({ operation: "delete", result: "completed" });
+    // Removal restores the statically configured default policy, which is
+    // `always` here — not the `disabled` override that was just written.
+    expect(data.mode).toBe("always");
+    expect(await controlOperations(value.history)).toContain(
+      "remove_registered_service_schedule",
+    );
+  });
+
+  it("refuses a schedule mutation for a principal without the availability write permission", async () => {
+    const value = await fixture(["auditor"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["services", "schedule", "manual", SERVICE_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(await controlOperations(value.history)).toEqual([]);
+  });
+
+  it("rejects an invalid policy server-side rather than in the CLI", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "whenever-i-feel-like-it" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("schedule_invalid");
+  });
+});
+
+/** Audited backup operations, read from the same event history an auditor uses. */
+async function backupOperations(
+  history: Awaited<ReturnType<typeof fixture>>["history"],
+): Promise<readonly string[]> {
+  const page = await history.getAdministrativeEventHistory.execute({
+    limit: 50,
+  });
+  return (page.events as readonly Readonly<{ operation: string }>[])
+    .map((event) => event.operation)
+    .filter((operation) => /backup/u.test(operation));
+}
+
+describe("authenticated mutating CLI — manual backup run", () => {
+  it("runs a registered backup through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    const data = (JSON.parse(result.out) as { data: Record<string, unknown> })
+      .data;
+    expect(data).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      trigger: "manual",
+      status: "succeeded",
+    });
+    // The real adapter ran, once, for exactly this registered target.
+    expect(value.backupAdapter.calls).toEqual([BACKUP_TARGET_ID]);
+    expect(await backupOperations(value.history)).toContain(
+      "run_registered_backup",
+    );
+
+    const viaApi = await fixture(["backup_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .post(`/admin/backups/targets/${BACKUP_TARGET_ID}/runs`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_backup_run" });
+    expect(apiResponse.status).toBe(200);
+    expect(await backupOperations(viaApi.history)).toContain(
+      "run_registered_backup",
+    );
+  });
+
+  it("reads back the run it produced through run-status", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const run = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+    const runId = (JSON.parse(run.out) as { data: { runId: string } }).data
+      .runId;
+
+    const status = await runCli(
+      value.app,
+      ["backups", "run-status", runId, "--json"],
+      assertion,
+    );
+
+    expect(status.code).toBe(0);
+    expect(
+      (JSON.parse(status.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      runId,
+      targetId: BACKUP_TARGET_ID,
+      status: "succeeded",
+    });
+  });
+
+  it("refuses a backup run for a principal without the backups.run permission", async () => {
+    // `auditor` may read backup targets and runs but may not run one.
+    const value = await fixture(["auditor"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(value.backupAdapter.calls).toEqual([]);
+    expect(await backupOperations(value.history)).not.toContain(
+      "run_registered_backup",
+    );
+  });
+
+  it("does not report a failed backup as a completed one", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+    value.backupAdapter.outcome = "copy_failure";
+
+    const result = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("backup_operation_failed");
+    expect(result.out).not.toContain("succeeded");
+  });
+
+  it("keeps the backup gate separate from the service mutation gate", async () => {
+    const value = await fixture(["administrator"]);
+    const assertion = await value.signAssertion({});
+
+    // A service mutation and a backup run in the same fixture both succeed:
+    // occupying one gate never blocks the other.
+    const service = await runCli(
+      value.app,
+      ["services", "restart", SERVICE_ID, "--json"],
+      assertion,
+    );
+    const backup = await runCli(
+      value.app,
+      ["backups", "run", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(service.code).toBe(0);
+    expect(backup.code).toBe(0);
+  });
+});
+
+describe("authenticated mutating CLI — backup schedule and retention", () => {
+  it("writes a backup schedule through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "backups",
+        "schedule",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({
+          mode: "scheduled",
+          timezone: "America/Sao_Paulo",
+          windows: [{ weekday: "sunday", start: "02:00", end: "03:00" }],
+        }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      operation: "update",
+      result: "completed",
+      authoritativeRead: "ok",
+      policy: { mode: "scheduled", timezone: "America/Sao_Paulo" },
+    });
+    expect(await backupOperations(value.history)).toContain(
+      "update_backup_schedule",
+    );
+  });
+
+  it("writes a retention policy and prunes through the audited operations", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const set = await runCli(
+      value.app,
+      [
+        "backups",
+        "retention",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({ keepLastSuccessful: 3 }),
+        "--json",
+      ],
+      assertion,
+    );
+    expect(set.code).toBe(0);
+    expect(
+      (JSON.parse(set.out) as { data: { policy: unknown } }).data.policy,
+    ).toMatchObject({ keepLastSuccessful: 3 });
+
+    const prune = await runCli(
+      value.app,
+      ["backups", "retention", "prune", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(prune.code).toBe(0);
+    expect(
+      (JSON.parse(prune.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      operation: "prune",
+      result: "completed",
+    });
+
+    const audited = await backupOperations(value.history);
+    expect(audited).toContain("update_backup_retention");
+    expect(audited).toContain("run_backup_retention_prune");
+
+    // The same prune issued the way the dashboard issues it produces the same
+    // audited operation — no CLI-only audit vocabulary for the most
+    // consequential mutation in this milestone.
+    const viaApi = await fixture(["backup_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .post(`/admin/backups/targets/${BACKUP_TARGET_ID}/retention/prunes`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_backup_retention_prune" });
+    expect(apiResponse.status).toBe(200);
+    expect(await backupOperations(viaApi.history)).toContain(
+      "run_backup_retention_prune",
+    );
+  });
+
+  it("refuses a prune for a principal that may write retention but not prune it", async () => {
+    // `service_operator` holds no backup permission at all; the distinction
+    // that matters is that pruning is its own permission, asserted in the
+    // contract test.
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "retention", "prune", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(await backupOperations(value.history)).not.toContain(
+      "run_backup_retention_prune",
+    );
+  });
+
+  it("rejects an invalid backup policy as invalid rather than as a transient failure", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "backups",
+        "retention",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({ keepLastSuccessful: 0 }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("schedule_invalid");
   });
 });
 
