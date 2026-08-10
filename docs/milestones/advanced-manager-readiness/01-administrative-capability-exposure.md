@@ -74,9 +74,9 @@ ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED=true
 SERVICE_AVAILABILITY_POLICY_FILE=<dedicated persistent path>
 ```
 
-`ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED` is a derived runtime activation:
-it becomes active only when service availability HTTP is enabled and the
-persistent policy file is configured.
+`ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY` is a derived runtime activation,
+not an environment variable: it becomes active only when service availability
+HTTP is enabled and the persistent policy file is configured.
 
 The following remain invariant during this milestone:
 

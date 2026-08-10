@@ -194,7 +194,7 @@ export function createApp({
         : ["ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED"]),
       ...(administrativeServiceSchedule === undefined
         ? []
-        : ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]),
+        : ["ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY"]),
       ...(administrativeOverview === undefined
         ? []
         : ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]),

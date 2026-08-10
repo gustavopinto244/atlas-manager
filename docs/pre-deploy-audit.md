@@ -95,7 +95,7 @@ files, given the machine's 8 GB RAM limit.
 | HIGH-02 | High     | `src/backup-management/infrastructure/filesystem-tree-backup-adapter.ts:237`                  | Backup manifest loads each file wholly into RAM; limit permits 20 GiB per file                     | [CONFIRMED] |
 | HIGH-03 | High     | `deployment/internal/hostinspection/inspection.go:476`                                        | Qualification demands Node exactly `v24.18.0` at `/usr/bin/node`; undocumented                     | [CONFIRMED] |
 | MED-01  | Medium   | `src/main.ts:276`, `src/http/create-administrative-runtime.ts:363`                            | Application version hardcoded to `"1.0.0-rc.8"` while the package is `1.0.0-rc.11`                 | [CONFIRMED] |
-| MED-02  | Medium   | `src/http/administrative-route-security-catalog.ts:54,307`                                    | Contract flag `ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED` does not exist as a variable          | [CONFIRMED] |
+| MED-02  | Low      | `src/http/administrative-route-security-catalog.ts:54,307`                                    | Derived activation named like an environment variable that does not exist (see correction below)   | [CONFIRMED] |
 | MED-03  | Medium   | `.env.example`                                                                                | 6 variables read by the code are absent from `.env.example`                                        | [CONFIRMED] |
 | MED-04  | Medium   | `src/config/environment.ts:455-473`                                                           | `ADMINISTRATIVE_DASHBOARD_ENABLED` does not require the APIs the dashboard consumes                | [CONFIRMED] |
 | MED-05  | Medium   | `src/http/create-app.ts:121-134,211-214`                                                      | `/health/*` sits outside the security envelope and is unauthenticated; no Nginx config in the repo | [CONFIRMED] |
@@ -322,6 +322,19 @@ but `SERVICE_AVAILABILITY_POLICY_FILE` is unset, the dashboard's weekly editor
 (`src/dashboard/weekly-schedule-editor.ts`, which calls
 `/admin/services/:id/schedule`) receives 404 with no startup configuration
 signal. The operator has no way to enable that flag by its documented name.
+
+**Correction, recorded while remediating.** This finding was overstated. The
+derived activation is intentional and was already documented in
+`docs/milestones/advanced-manager-readiness/01-administrative-capability-exposure.md`,
+and the runtime emits the flag exactly when it registers the routes, so the
+system is internally consistent. Two remediation attempts failed against that
+consistency: moving the routes under the availability flag breaks the default
+availability-without-policy-file configuration, because
+`reconcileAdministrativeRouteRegistrations` requires the active flag set to
+determine the registered route set exactly. The real defect is only the name:
+an `_HTTP_ENABLED` suffix on something that is not an environment variable. It
+was renamed to `ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY`; severity in
+hindsight is Low, not Medium.
 
 ---
 

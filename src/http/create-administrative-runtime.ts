@@ -167,7 +167,7 @@ export function createAdministrativeRuntime(
       : []),
     ...(config.administrativeServiceAvailabilityHttpEnabled &&
     config.serviceAvailabilityPolicyFilePath !== undefined
-      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]
+      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
       ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
