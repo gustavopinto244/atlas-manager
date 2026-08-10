@@ -10,6 +10,7 @@ import {
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderInfrastructureDiagnostics } from "./infrastructure-diagnostics-view.js";
+import { renderSettings } from "./settings-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
 import {
   controlOperationsFor,
@@ -40,6 +41,7 @@ const backups = document.querySelector<HTMLElement>("#backups");
 const infrastructure = document.querySelector<HTMLElement>(
   "#infrastructure-placeholder",
 );
+const settings = document.querySelector<HTMLElement>("#settings-placeholder");
 const powerControls = document.querySelector<HTMLElement>("#power-controls");
 const environmentLabel = document.querySelector<HTMLElement>(
   "#dashboard-environment",
@@ -887,6 +889,22 @@ async function loadInfrastructure(): Promise<SectionLoadResult> {
   });
 }
 
+async function loadSettings(): Promise<SectionLoadResult> {
+  const result = await apiClient.read(
+    "/admin/event-history/retention",
+    isRecord,
+  );
+  if (result.outcome !== "success") return failed(result);
+  const value = result.value;
+  return Object.freeze({
+    kind: "ready" as const,
+    render: () => {
+      if (settings === null) return;
+      renderSettings(document, settings, value, refresh);
+    },
+  });
+}
+
 function createSection(
   capability: string,
   content: HTMLElement | null,
@@ -913,6 +931,7 @@ const dashboardSections = [
   createSection("Events", audit, loadEvents),
   createSection("Backups", backups, loadBackups),
   createSection("Infrastructure", infrastructure, loadInfrastructure),
+  createSection("Settings", settings, loadSettings),
 ].filter((section): section is DashboardSection => section !== undefined);
 
 const coordinator = new DashboardRefreshCoordinator(dashboardSections);

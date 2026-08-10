@@ -18,9 +18,16 @@ a live region announces the page on navigation.
 ## Pages
 
 The navigation shell exposes Overview, Services, Schedules, Machine, Backups,
-Events, Infrastructure and Settings. Overview, Services, Schedules, Backups
-and Infrastructure are backed by current API payloads. Settings remains an
-explicit placeholder until its read API is delivered.
+Events, Infrastructure and Settings. All eight pages are backed by current
+API payloads. Settings exposes the one server-owned policy that is currently
+administrable independent of any other page: event-history retention
+(`GET`/`PUT /admin/event-history/retention`), with the same RBAC,
+confirmation and audit contract as every other administrative mutation. Other
+configuration an operator can change (backup schedules/retention, service
+schedules/availability) is rendered on the page that owns the data it
+governs rather than being duplicated onto Settings; see
+`docs/reviews/operator-experience-settings-audit.md` for the full
+classification of what was and was not judged administrable.
 
 Overview presents cards for registered services, power safety, machine
 expectation, backup activity and observation time. These cards are projections

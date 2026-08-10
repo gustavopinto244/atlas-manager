@@ -55,7 +55,7 @@ export function initializeDashboardNavigation(
     document,
     "settings-placeholder",
     "Settings",
-    "Settings remain server-owned and protected by the administrative API.",
+    "Loading settings from the administrative API…",
   );
 
   initializeMobileNavigationToggle(document);
