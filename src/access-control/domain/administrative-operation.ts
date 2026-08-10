@@ -28,6 +28,7 @@ export const ADMINISTRATIVE_OPERATIONS = Object.freeze([
   "read_operations_overview",
   "read_administrative_dashboard",
   "read_administrative_security_posture",
+  "read_infrastructure_diagnostics",
   "read_registered_backup_targets",
   "read_registered_backup_target",
   "read_backup_runs",
@@ -84,6 +85,7 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
     "backups.targets.read",
     "backups.runs.read",
     "security.posture.read",
+    "infrastructure.diagnostics.read",
   ] as AdministrativePermission[]),
   service_operator: Object.freeze([
     "services.read",
@@ -159,6 +161,7 @@ export const ADMINISTRATIVE_ROLE_PERMISSIONS: Readonly<
     "event_history.exports.create",
     "event_history.exports.download",
     "event_history.exports.prune",
+    "infrastructure.diagnostics.read",
   ] as AdministrativePermission[]),
 });
 
@@ -191,6 +194,7 @@ const OPERATION_PERMISSIONS: Readonly<
   read_operations_overview: "operations.read",
   read_administrative_dashboard: "dashboard.read",
   read_administrative_security_posture: "security.posture.read",
+  read_infrastructure_diagnostics: "infrastructure.diagnostics.read",
   read_registered_backup_targets: "backups.targets.read",
   read_registered_backup_target: "backups.targets.read",
   read_backup_runs: "backups.runs.read",
