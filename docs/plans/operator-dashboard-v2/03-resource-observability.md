@@ -1,5 +1,47 @@
 # Slice 3: resource observability
 
+## Status
+
+Delivered (branch `agent/operator-dashboard-v2-slice-3`):
+
+- `ServiceResourceObservation` domain model matching this document's own
+  sketch exactly (`src/service-management/domain/service-resource-observation.ts`).
+- `Pm2ServiceResourceReader` reuses the existing bounded `pm2 jlist` executor
+  (same security boundary as the status reader) and parses the `monit`/
+  `pm_uptime` fields it already receives but previously ignored -- no new
+  process execution.
+- `DockerServiceResourceReader` wires the existing (previously unused)
+  `NodeDockerContainerStatsExecutor` plus the inspect executor's `startedAt`
+  for uptime -- both already bounded, no-shell.
+- `MockServiceResourceReader` and `ComposeServiceResourceReader` both return
+  `unsupported` deliberately, per this document's own item 4; Compose
+  aggregation semantics (item 24 -- per-member vs. a documented formula) are
+  not designed yet and remain a follow-up, not an oversight.
+- `GET /admin/services/:serviceId/resources`, read-only, same security
+  envelope as the existing logs route (RBAC via the existing `services.read`
+  permission, no new role).
+- Dashboard: compact CPU/memory/uptime on each service card
+  (`src/dashboard/service-resources.ts`); bounded 30s polling of the Services
+  section only, paused via `visibilitychange`; a resource-fetch failure for
+  one service renders "Resources: unavailable" on that card without failing
+  the section or hiding status/controls (per-service reads already resolve
+  to a result object rather than throwing).
+
+**Known gap, not fixed here**: `docs/contracts/atlas-manager-administrative-api.json`'s
+`catalogSha256` field has no computing or verifying script anywhere in this
+repository (confirmed by grep) and was already flagged as unverified in
+`docs/pre-deploy-audit.md` before rc.11. `routeCount` and `routeIds` were
+updated to the real 46-route catalog; `catalogSha256` was left as its
+pre-existing stale value rather than have this session fabricate a
+plausible-looking hash using a guessed algorithm.
+
+**Not delivered**: Compose per-member/aggregate resource semantics; a
+resource sparkline (deferred per this document's own "only if it can be kept
+simple" guidance, and there's no persisted history to sparkline from in this
+slice); Docker container health surfaced (out of scope for this document's
+domain model, which does not include a health field -- see the domain design
+section below).
+
 ## Objective
 
 Expose authoritative CPU, memory and uptime observations through a

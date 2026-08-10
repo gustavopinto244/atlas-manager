@@ -15,6 +15,7 @@ import {
   supportsLogs,
   statusChipModifier,
 } from "./service-operations.js";
+import { resourceObservationSummary } from "./service-resources.js";
 import {
   AdministrativeApiClient,
   hasRecordArray,
@@ -227,11 +228,15 @@ function renderServices(value: unknown): void {
       `Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
     );
     article.append(dependencies);
+    const resources = document.createElement("p");
+    resources.className = "service-resources";
+    addText(resources, resourceObservationSummary(service.resources));
+    article.append(resources);
     const unavailableFields = document.createElement("p");
     unavailableFields.className = "field-unavailable";
     addText(
       unavailableFields,
-      "Readiness, uptime, next transition, dependents and resource usage are not yet reported by this build.",
+      "Readiness, next transition and dependents are not yet reported by this build.",
     );
     article.append(unavailableFields);
     for (const operation of controlOperationsFor(service)) {
@@ -654,10 +659,22 @@ async function loadOverview(): Promise<SectionLoadResult> {
 async function loadServices(): Promise<SectionLoadResult> {
   const result = await readServicesOnce();
   if (result.outcome !== "success") return failed(result);
-  const value = result.value;
-  const list = readServiceList(value);
+  const list = readServiceList(result.value);
+  const withResources = await Promise.all(
+    list.map(async (service) => {
+      const servicePath = encodeURIComponent(String(service.id));
+      const resources = await apiClient.read(
+        `/admin/services/${servicePath}/resources`,
+        isRecord,
+      );
+      return {
+        ...service,
+        resources: resources.outcome === "success" ? resources.value : null,
+      };
+    }),
+  );
   const render = () => {
-    renderServices(value);
+    renderServices({ services: withResources });
   };
   return list.length === 0
     ? Object.freeze({
@@ -851,3 +868,29 @@ function createPreviewWindow(): Readonly<{
 // The coordinator settles every section independently and reports failures in
 // each section's own live region, so this can no longer reject as a whole.
 void refresh();
+
+// Resource observations (CPU/memory/uptime) are the only card content that
+// meaningfully changes between operator-triggered refreshes, so only the
+// Services section is polled automatically -- not every card individually,
+// and not while the tab is hidden.
+const SERVICES_POLL_INTERVAL_MS = 30_000;
+let servicesPollTimer: ReturnType<typeof setInterval> | undefined;
+
+function startServicesPolling(): void {
+  if (servicesPollTimer !== undefined) return;
+  servicesPollTimer = setInterval(() => {
+    void coordinator.refreshCapability("Services");
+  }, SERVICES_POLL_INTERVAL_MS);
+}
+
+function stopServicesPolling(): void {
+  if (servicesPollTimer === undefined) return;
+  clearInterval(servicesPollTimer);
+  servicesPollTimer = undefined;
+}
+
+if (document.visibilityState !== "hidden") startServicesPolling();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") stopServicesPolling();
+  else startServicesPolling();
+});
