@@ -1,6 +1,13 @@
 import type { ServiceAvailabilityOverride } from "../../service-scheduling/domain/service-availability-override.js";
 import type { ServiceAvailabilityPolicy } from "../../service-scheduling/domain/service-availability-policy.js";
 import { evaluateServiceAvailabilityWithOverride } from "../../service-scheduling/domain/service-availability-override-evaluator.js";
+import { calculateServiceAvailabilityPolicyTransitions } from "../../service-scheduling/domain/service-availability-policy-transition-calculator.js";
+import type { ServiceAvailabilityPolicyTransition } from "../../service-scheduling/domain/service-availability-policy-transition.js";
+
+// Bounds how many upcoming transitions ride along on an interval evaluation
+// -- this is an operator-facing "what happens next" hint, not the full
+// transition list, so it stays small regardless of interval length.
+const MAX_RENDERED_TRANSITIONS = 5;
 
 export type RegisteredServiceAvailabilityIntervalOutcome =
   "not_required" | "required";
@@ -10,6 +17,7 @@ export interface RegisteredServiceAvailabilityInterval {
   readonly endsAt: string;
   readonly outcome: RegisteredServiceAvailabilityIntervalOutcome;
   readonly firstRequiredAt?: string;
+  readonly transitions?: readonly ServiceAvailabilityPolicyTransition[];
 }
 export class RegisteredServiceAvailabilityIntervalValidationError extends Error {
   public override readonly name =
@@ -45,12 +53,14 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
     );
   const start = Date.parse(startsAt);
   const end = Date.parse(endsAt);
+  const transitions = computeUpcomingTransitions(policy, startsAt, endsAt);
   if (policy.mode === "disabled" || policy.mode === "manual")
     return Object.freeze({
       serviceId,
       startsAt,
       endsAt,
       outcome: "not_required" as const,
+      ...withTransitions(transitions),
     });
   if (override !== null && start < Date.parse(override.expiresAt)) {
     if (override.kind === "keep_available")
@@ -60,6 +70,7 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
         endsAt,
         outcome: "required" as const,
         firstRequiredAt: startsAt,
+        ...withTransitions(transitions),
       });
     const after = Math.max(start, Date.parse(override.expiresAt));
     const required = findRequiredAt(policy, after, end, override, false);
@@ -69,6 +80,7 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
           startsAt,
           endsAt,
           outcome: "not_required" as const,
+          ...withTransitions(transitions),
         })
       : Object.freeze({
           serviceId,
@@ -76,6 +88,7 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
           endsAt,
           outcome: "required" as const,
           firstRequiredAt: new Date(required).toISOString(),
+          ...withTransitions(transitions),
         });
   }
   if (policy.mode === "always")
@@ -85,6 +98,7 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
       endsAt,
       outcome: "required" as const,
       firstRequiredAt: startsAt,
+      ...withTransitions(transitions),
     });
   const required = findRequiredAt(policy, start, end, null, true);
   return required === null
@@ -93,6 +107,7 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
         startsAt,
         endsAt,
         outcome: "not_required" as const,
+        ...withTransitions(transitions),
       })
     : Object.freeze({
         serviceId,
@@ -100,7 +115,51 @@ export function evaluateRegisteredServiceAvailabilityForInterval(
         endsAt,
         outcome: "required" as const,
         firstRequiredAt: new Date(required).toISOString(),
+        ...withTransitions(transitions),
       });
+}
+
+function withTransitions(
+  transitions: readonly ServiceAvailabilityPolicyTransition[],
+): Readonly<{
+  transitions?: readonly ServiceAvailabilityPolicyTransition[];
+}> {
+  return transitions.length === 0 ? {} : { transitions };
+}
+
+// Reuses the same policy-transition calculator the standalone transitions
+// endpoint is built on, bounded to a small preview so an interval response
+// stays a "what's coming up" hint rather than a full transition dump. Any
+// rejection from the calculator (e.g. sub-minute alignment after rounding)
+// degrades to an empty list instead of failing the whole interval read --
+// this field is supplementary, the outcome/firstRequiredAt fields remain
+// authoritative.
+function computeUpcomingTransitions(
+  policy: ServiceAvailabilityPolicy,
+  startsAt: string,
+  endsAt: string,
+): readonly ServiceAvailabilityPolicyTransition[] {
+  if (policy.mode !== "scheduled") return [];
+  try {
+    const from = floorToMinute(new Date(startsAt));
+    const to = ceilToMinute(new Date(endsAt));
+    if (to.getTime() <= from.getTime()) return [];
+    return calculateServiceAvailabilityPolicyTransitions(
+      policy,
+      from,
+      to,
+    ).slice(0, MAX_RENDERED_TRANSITIONS);
+  } catch {
+    return [];
+  }
+}
+
+function floorToMinute(date: Date): Date {
+  return new Date(Math.floor(date.getTime() / 60_000) * 60_000);
+}
+
+function ceilToMinute(date: Date): Date {
+  return new Date(Math.ceil(date.getTime() / 60_000) * 60_000);
 }
 
 function findRequiredAt(

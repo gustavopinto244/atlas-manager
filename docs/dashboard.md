@@ -59,10 +59,21 @@ silently.
 
 The Schedules page renders the current availability response as a weekly
 timeline, including the current effective state and current local time
-formatted in the policy's own timezone. It uses the server-provided weekday,
+formatted in the policy's own timezone, the active override and its expiry
+when one is set, and a bounded list of following transitions alongside the
+preview's "First required at" value. It uses the server-provided weekday,
 time and timezone values. It does not validate or persist a new base policy
 in the browser. The Logs action performs a protected read and renders the
 returned payload as text without interpreting it as markup.
+
+The Backups page has a "Run now" action per target, alongside the existing
+schedule/retention forms and "Prune retention" button, using the same
+confirmation-form pattern and the already-existing, RBAC- and confirmation-
+gated run route.
+
+The Events page fetches one page of history at a time and offers a "Load
+more" button that appends the next page (via the response's
+`nextAfterSequence` cursor) rather than replacing what is already rendered.
 
 Each service timeline also includes the reusable weekly schedule editor:
 mode, IANA timezone, seven day rows with an explicit enable checkbox

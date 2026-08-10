@@ -19,6 +19,87 @@ Use `--json` when another tool needs the result. Do not parse human output.
 The CLI never forges Cloudflare Access assertions; administrative reads require
 an authorized transport.
 
+## Additional read-only commands
+
+Beyond the routine set above, the CLI exposes a full read surface. See
+[`docs/cli.md`](cli.md) for the complete, authoritative list; the operationally
+relevant ones not already covered above:
+
+```text
+atlas services logs <service-id>       # protected log read, adapter-owned
+
+atlas backups list                     # registered backup targets
+atlas backups status                   # backup subsystem summary
+atlas backups runs                     # recent run history
+atlas backups run-status <run-id>      # a single run's terminal result
+atlas backups schedule show <target-id>
+atlas backups retention show <target-id>
+
+atlas machine status                   # authoritative operating policy
+atlas machine plan                     # machine power plan
+atlas machine schedule show            # read-only; no machine schedule mutation exists
+
+atlas events                           # recent administrative event history
+atlas events --tail                    # a larger single page (100 vs. 20); not streaming
+```
+
+## Mutating commands
+
+Every mutating command requires an externally issued Cloudflare Access
+assertion in `ATLAS_CLOUDFLARE_ACCESS_JWT` and calls the same protected
+administrative route the dashboard calls — same RBAC, same exact
+confirmation, same mutation gate, same audit event with the same principal.
+None of these commands accept a bypass flag (`--force`, `--yes`,
+`--no-confirm`): the server-side confirmation token is the only accepted
+authorization. See [`docs/cli.md`](cli.md#mutating-commands) for the full
+behavioral contract (no retries, no fallback to PM2/Docker/systemd,
+transport-security requirements, authoritative re-read semantics).
+
+```text
+atlas services start <service-id>
+atlas services stop <service-id>
+atlas services restart <service-id>
+
+atlas services schedule set <service-id> --policy '<json>'
+atlas services schedule always <service-id>
+atlas services schedule manual <service-id>
+atlas services schedule disable <service-id>
+atlas services schedule remove <service-id>
+
+atlas backups run <target-id>
+atlas backups schedule set <target-id> --policy '<json>'
+atlas backups schedule remove <target-id>
+atlas backups retention set <target-id> --policy '<json>'
+atlas backups retention prune <target-id>
+```
+
+Operational notes:
+
+- `services start/stop/restart` only accept a registered service id — never a
+  PM2/container/unit name. After a successful mutation the CLI re-reads
+  `GET /admin/services/<id>` and reports the real state; a lost or timed-out
+  response is reported as `mutation_outcome_unknown` (exit 5), never retried
+  and never claimed as failed. Run `atlas services status <id>` to resolve it.
+- `services schedule remove` is **not** the same as `services schedule
+disable`: `remove` deletes the stored override entirely, falling back to
+  the service's statically configured default policy (which may not be
+  `always`); `disable` writes an explicit stored `disabled` policy.
+- `backups run <target-id>` is synchronous — it blocks until the run is
+  terminal and that response is the authoritative result (bounded at five
+  minutes, never unbounded). If the outcome is lost, use `atlas backups runs`
+  and `atlas backups run-status <run-id>` to recover it.
+- `backups retention prune` is the most consequential command here. Its exit
+  code reflects the server's own `result`, not the HTTP status: `completed`
+  (0), `partial` (1, with counts for how much ran), `busy`/`blocked` (5, may
+  have partially deleted artifacts).
+- `backups scheduler tick` is deliberately **not** exposed as an operator
+  command — it is cron-triggered maintenance whose correctness depends on not
+  being invoked ad hoc.
+- There is no machine schedule mutation command (`machine schedule show` is
+  read-only); machine schedule persistence is explicitly out of scope pending
+  a dedicated ADR (see `docs/reviews/operator-experience-final-gap-audit.md`
+  item 9).
+
 ## Infrastructure diagnostics
 
 These are the primary troubleshooting path. They ask the running Atlas server

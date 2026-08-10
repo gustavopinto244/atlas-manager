@@ -62,11 +62,44 @@ preparation/execution states.
   service card plus the dedicated Schedules section already surface every
   field that has real backing data, and a second page would either duplicate
   that or show fields with no data behind them.
-- Active override and expiry are not shown on the schedule timeline; no
-  current read endpoint returns the override object on its own (only via the
-  mutation endpoints), which is a small backend gap, not a frontend one.
+- Scheduler health/cursor visibility: the reconciliation scheduler's cursor
+  (`ServiceAvailabilityReconciliationSchedulerCursor`) has no route or
+  CLI/dashboard view. Closing it needs a new route, a new `CHECK_ID`, a new
+  `create-administrative-runtime.ts` config field and a `readLastTick()` fix
+  — not a presentation-only change, so it stays open. See
+  `docs/reviews/operator-experience-final-gap-audit.md` item 4.
 - CLI schedule _mutation_ commands (`set`/`always`/`manual`/`disable`/`remove`)
   and CLI backup mutation commands (`run`, `run-status`, `schedule
 set`/`remove`, `retention set`/`prune`) are built: they reuse the ADR-031
   authenticated transport with zero new administrative routes. This item is
   closed as of `feat/operator-cli-schedule-backup-mutations` (#318).
+- CLI `events --tail` currently only widens the single page (100 rows instead
+  of 20); it does not wire `afterSequence` for true multi-page reads or a
+  live tail. The dashboard's Events page gained "Load more" pagination in the
+  Operator Experience Phase 0-1 tranche (below); the CLI side is unchanged.
+
+### Closed in the Operator Experience Phase 0-1 tranche
+
+Following the source-only #320 milestone (which classified real gaps but
+implemented no code fixes), this follow-up tranche closed four of the five
+`REAL_GAP` items that turned out to be small and additive over already-
+existing backend/domain (see
+`docs/reviews/operator-experience-final-gap-audit.md` for the full
+before/after evidence per item):
+
+- **Active override + expiry** are now shown on the schedule timeline.
+  `GetRegisteredServiceEffectiveAvailability.executeWithOverride()` (additive;
+  `execute()` is unchanged) surfaces the active, non-expired override, and
+  `services.availability.read` now returns an `override: {kind, expiresAt} |
+null` field.
+- **Following transitions** (not just the single next one) are now included
+  as a bounded list on both the persisted-policy and candidate-policy
+  preview responses, and rendered under "First required at" in the schedule
+  view.
+- **Backups "Run now"** is now a dashboard button, reusing the existing
+  `POST /admin/backups/targets/:targetId/runs` route (already RBAC- and
+  confirmation-gated, already CLI-exposed) and the existing confirmation-form
+  pattern used for "Prune retention." Run-status polling was not added.
+- **Events pagination** — the dashboard Events page now has a "Load more"
+  button using the already-existing `hasMore`/`nextAfterSequence` response
+  fields; no route or schema change.

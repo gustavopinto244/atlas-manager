@@ -65,6 +65,47 @@ describe("dashboard schedule view", () => {
     );
   });
 
+  it("renders the following transitions beneath the preview line", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "scheduled" },
+      preview: {
+        outcome: "required",
+        firstRequiredAt: "2026-08-08T08:00:00.000Z",
+        transitions: [
+          {
+            kind: "became_available",
+            scheduledFor: "2026-08-08T08:00:00.000Z",
+          },
+          {
+            kind: "became_unavailable",
+            scheduledFor: "2026-08-08T17:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(parent.textContent).toContain(
+      "Becomes available: 2026-08-08T08:00:00.000Z",
+    );
+    expect(parent.textContent).toContain(
+      "Becomes unavailable: 2026-08-08T17:00:00.000Z",
+    );
+  });
+
+  it("omits the transitions list when none are provided", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "always" },
+      preview: {
+        outcome: "required",
+        firstRequiredAt: "2026-08-08T08:00:00.000Z",
+      },
+    });
+
+    expect(parent.textContent).not.toContain("Becomes");
+  });
+
   it("shows the current effective state and local time when available", () => {
     const parent = new FakeElement();
     renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
@@ -74,6 +115,33 @@ describe("dashboard schedule view", () => {
 
     expect(parent.textContent).toContain("Current state: available");
     expect(parent.textContent).toContain("Local time:");
+  });
+
+  it("shows an active override with its expiry", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "manual" },
+      effectiveAvailability: "available",
+      override: {
+        kind: "keep_available",
+        expiresAt: "2026-08-08T08:00:00.000Z",
+      },
+    });
+
+    expect(parent.textContent).toContain(
+      "Active override: keep_available · Expires at: 2026-08-08T08:00:00.000Z",
+    );
+  });
+
+  it("omits the override line when there is no active override", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "manual" },
+      effectiveAvailability: "available",
+      override: null,
+    });
+
+    expect(parent.textContent).not.toContain("Active override:");
   });
 
   it("omits the current-state line when effectiveAvailability is absent", () => {

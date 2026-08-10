@@ -290,6 +290,10 @@ describe("administrative control-plane routes", () => {
           policy: { mode: "always" },
           effectiveAvailability: "available",
           observedAt: "2026-01-01T00:00:00.000Z",
+          override: {
+            kind: "keep_available",
+            expiresAt: "2026-01-02T00:00:00.000Z",
+          },
         })),
       },
       getRegisteredServiceAvailabilityPreview: {
@@ -311,9 +315,16 @@ describe("administrative control-plane routes", () => {
       ...base(),
       administrativeServiceAvailability: dependencies,
     });
-    expect(
-      (await request(app).get("/admin/services/atlas-api/availability")).status,
-    ).toBe(200);
+    const availabilityRead = await request(app).get(
+      "/admin/services/atlas-api/availability",
+    );
+    expect(availabilityRead.status).toBe(200);
+    expect((availabilityRead.body as Record<string, unknown>).override).toEqual(
+      {
+        kind: "keep_available",
+        expiresAt: "2026-01-02T00:00:00.000Z",
+      },
+    );
     const preview = await request(app).get(
       "/admin/services/atlas-api/availability/preview?startsAt=2026-01-01T08:00:00.000Z&endsAt=2026-01-01T18:00:00.000Z",
     );
