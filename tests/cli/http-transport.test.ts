@@ -82,7 +82,8 @@ describe("Atlas HTTP CLI transport", () => {
         { name: "administrative_security_posture", status: "pass" },
       ],
     });
-    expect(fetchImplementation).toHaveBeenCalledTimes(4);
+    // Four legacy checks plus the one infrastructure diagnostics read.
+    expect(fetchImplementation).toHaveBeenCalledTimes(5);
   });
 
   it("reads the protected machine plan through the overview endpoint", async () => {

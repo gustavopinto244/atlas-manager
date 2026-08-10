@@ -9,6 +9,7 @@ import {
   renderMachinePreview as renderMachinePreviewView,
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
+import { renderInfrastructureDiagnostics } from "./infrastructure-diagnostics-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
 import {
   controlOperationsFor,
@@ -165,7 +166,7 @@ function displayValue(value: unknown, fallback: string): string {
     : fallback;
 }
 
-function renderInfrastructure(value: unknown): void {
+function renderInfrastructure(value: unknown, diagnostics: unknown): void {
   if (infrastructure === null) return;
   infrastructure.replaceChildren();
   const heading = document.createElement("h2");
@@ -200,6 +201,10 @@ function renderInfrastructure(value: unknown): void {
   if (flags.childElementCount === 0)
     addText(flags, "Feature flag state unavailable.");
   infrastructure.append(flags);
+  // Rendered after the posture, from a separate read. A refused or unavailable
+  // diagnostics capability costs this block only -- the security posture above
+  // is already on the page.
+  renderInfrastructureDiagnostics(document, infrastructure, diagnostics);
 }
 
 function renderServices(value: unknown): void {
@@ -789,10 +794,20 @@ async function loadInfrastructure(): Promise<SectionLoadResult> {
   const result = await apiClient.read("/admin/security/status", isRecord);
   if (result.outcome !== "success") return failed(result);
   const value = result.value;
+  // The diagnostics report always answers 200 when reachable and authorized,
+  // even with failing checks, so a non-success outcome here means the read
+  // itself failed -- not that infrastructure is unhealthy. Either way it must
+  // not fail the section: the posture above is still worth showing.
+  const diagnostics = await apiClient.read(
+    "/admin/infrastructure/diagnostics",
+    isRecord,
+  );
+  const diagnosticsValue =
+    diagnostics.outcome === "success" ? diagnostics.value : undefined;
   return Object.freeze({
     kind: "ready" as const,
     render: () => {
-      renderInfrastructure(value);
+      renderInfrastructure(value, diagnosticsValue);
     },
   });
 }

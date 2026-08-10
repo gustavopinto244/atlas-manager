@@ -57,6 +57,9 @@ export interface ProtectedAdministrationCompositionInput {
   readonly securityPostureReader?: Readonly<{
     execute(): Promise<unknown>;
   }>;
+  readonly infrastructureDiagnosticsReader?: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
 }
 
 export interface ProtectedAdministrationCapabilities {
@@ -136,6 +139,9 @@ export interface ProtectedAdministrationCapabilities {
     execute(): Promise<unknown>;
   }>;
   readonly getAdministrativeSecurityPosture: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly getInfrastructureDiagnostics: Readonly<{
     execute(): Promise<unknown>;
   }>;
   readonly getRegisteredBackupTargets: Readonly<{
@@ -302,6 +308,16 @@ export function createProtectedAdministration(
         if (input.securityPostureReader === undefined)
           throw new Error("administrative_security_status_unavailable");
         return input.securityPostureReader.execute();
+      }),
+  });
+  const getInfrastructureDiagnostics = Object.freeze({
+    execute: () =>
+      runner.run("read_infrastructure_diagnostics", () => {
+        if (input.infrastructureDiagnosticsReader === undefined)
+          throw new Error(
+            "administrative_infrastructure_diagnostics_unavailable",
+          );
+        return input.infrastructureDiagnosticsReader.execute();
       }),
   });
   const requireServices = (): ServiceManagementCapabilities => {
@@ -947,6 +963,7 @@ export function createProtectedAdministration(
     runMachinePowerSchedulerTick,
     getAdministrativeEventHistory,
     getAdministrativeSecurityPosture,
+    getInfrastructureDiagnostics,
     getRegisteredServices,
     getRegisteredService,
     getRegisteredServiceLogs,

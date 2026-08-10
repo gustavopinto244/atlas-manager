@@ -53,6 +53,10 @@ import {
   registerAdministrativeSecurityStatusRoute,
   type AdministrativeSecurityStatusRouteDependencies,
 } from "./administrative-security-status-route.js";
+import {
+  registerAdministrativeInfrastructureDiagnosticsRoute,
+  type AdministrativeInfrastructureDiagnosticsRouteDependencies,
+} from "./administrative-infrastructure-diagnostics-route.js";
 import { createAdministrativeSecurityEnvelope } from "./administrative-security-envelope.js";
 import { setAdministrativeSecurityHeaders } from "./administrative-http.js";
 import type { AdministrativePublicOrigin } from "./administrative-public-origin.js";
@@ -76,6 +80,7 @@ export interface CreateAppDependencies {
   administrativeBackups?: AdministrativeBackupsRouteDependencies;
   administrativeEventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
   administrativeSecurityStatus?: AdministrativeSecurityStatusRouteDependencies;
+  administrativeInfrastructureDiagnostics?: AdministrativeInfrastructureDiagnosticsRouteDependencies;
   administrativePublicOrigin?: AdministrativePublicOrigin;
   administrativeRouteCatalogStatus?: Readonly<{
     markReconciled(): void;
@@ -96,6 +101,7 @@ export function createApp({
   administrativeBackups,
   administrativeEventHistoryOperations,
   administrativeSecurityStatus,
+  administrativeInfrastructureDiagnostics,
   administrativePublicOrigin,
   administrativeRouteCatalogStatus,
 }: CreateAppDependencies): Express {
@@ -114,7 +120,8 @@ export function createApp({
     administrativeDashboard !== undefined ||
     administrativeBackups !== undefined ||
     administrativeEventHistoryOperations !== undefined ||
-    administrativeSecurityStatus !== undefined
+    administrativeSecurityStatus !== undefined ||
+    administrativeInfrastructureDiagnostics !== undefined
   ) {
     app.disable("etag");
     app.disable("x-powered-by");
@@ -168,6 +175,11 @@ export function createApp({
       app,
       administrativeSecurityStatus,
     );
+  if (administrativeInfrastructureDiagnostics !== undefined)
+    registerAdministrativeInfrastructureDiagnosticsRoute(
+      app,
+      administrativeInfrastructureDiagnostics,
+    );
 
   reconcileAdministrativeRouteRegistrations(
     app,
@@ -205,6 +217,9 @@ export function createApp({
       ...(administrativeSecurityStatus === undefined
         ? []
         : ["ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED"]),
+      ...(administrativeInfrastructureDiagnostics === undefined
+        ? []
+        : ["ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED"]),
     ]),
   );
   administrativeRouteCatalogStatus?.markReconciled();

@@ -17,9 +17,10 @@ The foundation provides:
 
 The command tree is intentionally visible before each command is implemented.
 Unimplemented commands return `command_not_implemented` and a non-zero exit
-code; they never claim success. Of 36 command nodes, 31 are implemented; the
-five remaining stubs (`infra status`, `infra listeners`, `nginx status`,
-`nginx test`, `tunnel status`) belong to the infrastructure-diagnostics track.
+code; they never claim success. **Every command node is now implemented** —
+ADR-032 completed the last five stubs (`infra status`, `infra listeners`,
+`nginx status`, `nginx test`, `tunnel status`), and a regression test asserts
+no declared-but-unimplemented command remains.
 
 ## Available read-only commands
 
@@ -44,6 +45,11 @@ atlas events --tail
 atlas machine status
 atlas machine plan
 atlas machine schedule show
+atlas infra status
+atlas infra listeners
+atlas nginx status
+atlas nginx test
+atlas tunnel status
 ```
 
 The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a
@@ -56,10 +62,50 @@ already has a real Cloudflare Access JWT, it may be supplied in memory through
 `Cf-Access-Jwt-Assertion`. Never put it in `ATLAS_BASE_URL`, command arguments
 or shell history.
 
-`atlas doctor` is read-only and never invokes a repair action. Its current
-checks cover `/health/live`, `/health/server`, administrative overview and the
-protected security posture endpoint; a failed administrative check is reported
-individually rather than hidden behind a generic failure.
+`atlas doctor` is read-only and never invokes a repair action. Its checks cover
+`/health/live`, `/health/server`, administrative overview, the protected
+security posture endpoint and — appended — every infrastructure diagnostic
+check. A failed check is reported individually rather than hidden behind a
+generic failure.
+
+## Infrastructure diagnostics (ADR-032)
+
+`atlas infra status`, `atlas infra listeners`, `atlas nginx status`,
+`atlas nginx test` and `atlas tunnel status` are views over one protected read:
+`GET /admin/infrastructure/diagnostics`. Each command filters the report's
+`checks[]` by check-id prefix and derives a status for that subset alone, so a
+cloudflared outage never fails `atlas nginx test`.
+
+They require the `infrastructure.diagnostics.read` permission (`auditor`,
+`administrator`) and the
+`ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED` activation flag.
+
+Every check reports one of `ok`, `degraded`, `down`, `disabled` or
+`unavailable`. `unavailable` means the diagnostic could not be determined —
+commonly a missing privilege, flagged as `requiresPrivilege` — and is
+deliberately distinct from `down`. `disabled` means intentionally switched off
+and never counts as unhealthy.
+
+**Diagnostics are read-only, permanently.** There is no `--fix` and no restart,
+reload, enable or disable in any of these commands. The CLI never executes a
+host tool; it only makes an authenticated HTTP request, which is why `atlas`
+always diagnoses the Atlas host and never the operator's workstation.
+
+`nginx status`/`nginx test` run `nginx -t`: they confirm the configuration
+parses, not that requests are routed correctly. See `docs/operator-runbook.md`.
+
+### Exit codes for diagnostics — a behaviour change
+
+`atlas doctor` previously always exited 0. `atlas doctor`, `atlas status` and
+the five commands above now exit **5** (`partialFailure`, reusing the existing
+`infrastructure_unavailable` mapping) when the relevant overall status is
+`down` or `unavailable`. `degraded` exits 0 with a warning on stderr;
+`disabled` and `ok` exit 0. The full report is always printed before the exit
+code is decided.
+
+For `doctor` and `status` only, a diagnostics capability that is unreachable or
+not enabled degrades to `disabled` and still exits 0, so those two commands
+keep working on deployments that never set the flag.
 
 Schedule preview defaults to the next 24 hours and previews the **persisted**
 policy. Use `--from <canonical-timestamp> --to <canonical-timestamp>` for an

@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
+import { ATLAS_COMMANDS } from "../../src/cli/command-tree.js";
 import { runAtlasCli } from "../../src/cli/main.js";
 
 function stream(): PassThrough {
@@ -66,13 +67,23 @@ describe("atlas CLI entrypoint", () => {
     expect(result.error.code).toBe("unknown_command");
   });
 
+  // ADR-032 completed the last five stubs, so no command reaches the
+  // not-implemented branch any more. The branch itself still guards the
+  // command tree: an entry declared without an implementation must never be
+  // reported as a success.
   it("does not claim an unimplemented command succeeded", async () => {
     const output = stream();
     const errors = stream();
 
     await expect(
-      runAtlasCli(["infra", "status"], undefined, output, errors),
+      runAtlasCli(["definitely", "not", "real"], undefined, output, errors),
     ).resolves.toBe(2);
-    expect(await content(errors)).toContain("command_not_implemented");
+    expect(await content(errors)).toContain("unknown_command");
+  });
+
+  it("leaves no command declared but unimplemented", () => {
+    expect(
+      ATLAS_COMMANDS.filter((command) => !command.implemented),
+    ).toHaveLength(0);
   });
 });

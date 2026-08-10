@@ -306,6 +306,9 @@ const environmentObjectSchema = z.object({
   ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED: z
     .enum(["true", "false"], { error: "must be exactly true or false" })
     .default("false"),
+  ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED: z
+    .enum(["true", "false"], { error: "must be exactly true or false" })
+    .default("false"),
   ADMINISTRATIVE_PUBLIC_ORIGIN: administrativePublicOriginSchema.optional(),
   REGISTERED_BACKUP_TARGETS_JSON: z.string().default("[]"),
   BACKUP_RUN_HISTORY_FILE: persistenceFilePathSchema.optional(),
@@ -465,6 +468,9 @@ const environmentSchema = environmentObjectSchema.superRefine(
       environment.ADMINISTRATIVE_BACKUP_HTTP_ENABLED === "true";
     const securityStatusHttpEnabled =
       environment.ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED === "true";
+    const infrastructureDiagnosticsHttpEnabled =
+      environment.ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED ===
+      "true";
     const backupSchedulerEnabled =
       environment.BACKUP_SCHEDULER_ENABLED === "true";
     const administrativeHttpEnabled =
@@ -477,7 +483,8 @@ const environmentSchema = environmentObjectSchema.superRefine(
       overviewHttpEnabled ||
       dashboardEnabled ||
       backupHttpEnabled ||
-      securityStatusHttpEnabled;
+      securityStatusHttpEnabled ||
+      infrastructureDiagnosticsHttpEnabled;
     const effectCapableSurfaceEnabled =
       wakeAlarmHttpEnabled ||
       shutdownHttpEnabled ||
@@ -971,6 +978,7 @@ export interface EnvironmentConfig {
   readonly administrativeEventHistoryHttpEnabled: boolean;
   readonly administrativePublicOrigin?: AdministrativePublicOrigin;
   readonly administrativeSecurityStatusHttpEnabled?: boolean;
+  readonly administrativeInfrastructureDiagnosticsHttpEnabled?: boolean;
   readonly administrativeEventHistoryOperationsHttpEnabled?: boolean;
   readonly administrativeWakeAlarmHttpEnabled: boolean;
   readonly administrativeShutdownHttpEnabled: boolean;
@@ -1065,6 +1073,10 @@ export function parseEnvironment(
       : { administrativePublicOrigin }),
     ...(parsedEnvironment.ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED === "true"
       ? { administrativeSecurityStatusHttpEnabled: true }
+      : {}),
+    ...(parsedEnvironment.ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED ===
+    "true"
+      ? { administrativeInfrastructureDiagnosticsHttpEnabled: true }
       : {}),
     ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED ===
     "true"

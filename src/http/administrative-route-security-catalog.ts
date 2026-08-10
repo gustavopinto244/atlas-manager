@@ -61,6 +61,7 @@ const ADMINISTRATIVE_ACTIVATION_FLAGS = new Set([
   "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED",
   "ADMINISTRATIVE_BACKUP_HTTP_ENABLED",
   "ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED",
+  "ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED",
 ]);
 
 const JSON_BODY = Object.freeze({
@@ -565,6 +566,13 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "/admin/security/status",
       "ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED",
       "read_administrative_security_posture",
+    ),
+    read(
+      "infrastructure.diagnostics.read",
+      "GET",
+      "/admin/infrastructure/diagnostics",
+      "ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED",
+      "read_infrastructure_diagnostics",
     ),
   ] as const);
 

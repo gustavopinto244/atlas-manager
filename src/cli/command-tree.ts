@@ -139,27 +139,27 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["infra", "status"],
     summary: "Show infrastructure status",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["infra", "listeners"],
     summary: "Show expected listeners",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["nginx", "status"],
     summary: "Show Nginx status",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["nginx", "test"],
     summary: "Validate Nginx configuration",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["tunnel", "status"],
     summary: "Show tunnel status",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["events"],

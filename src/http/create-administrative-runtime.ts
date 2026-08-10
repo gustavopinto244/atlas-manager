@@ -35,6 +35,14 @@ import type { BackupManagementCapabilities } from "../backup-management/composit
 import type { AdministrativeBackupsRouteDependencies } from "./administrative-backups-route.js";
 import type { AdministrativeEventHistoryOperationsRouteDependencies } from "./administrative-event-history-operations-route.js";
 import type { AdministrativeSecurityStatusRouteDependencies } from "./administrative-security-status-route.js";
+import type { AdministrativeInfrastructureDiagnosticsRouteDependencies } from "./administrative-infrastructure-diagnostics-route.js";
+import {
+  createInfrastructureDiagnosticsRuntime,
+  type InfrastructureDiagnosticsCompositionInput,
+} from "../infrastructure-diagnostics/composition/create-infrastructure-diagnostics-runtime.js";
+import { NodePm2ProcessListExecutor } from "../service-management/infrastructure/pm2-process-list-executor.js";
+import { FileBackupSchedulerCursorStore } from "../backup-management/infrastructure/file-backup-scheduler-state.js";
+import { FileMachinePowerSchedulerCursorStore } from "../power-management/infrastructure/file-machine-power-scheduler-cursor-store.js";
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
 import { GetMachinePowerPlan } from "../power-management/application/get-machine-power-plan.js";
 import type { MachinePowerPlan } from "../power-management/domain/machine-power-plan.js";
@@ -59,6 +67,7 @@ export interface AdministrativeRuntime {
   readonly backups?: AdministrativeBackupsRouteDependencies;
   readonly eventHistoryOperations?: AdministrativeEventHistoryOperationsRouteDependencies;
   readonly securityStatus?: AdministrativeSecurityStatusRouteDependencies;
+  readonly infrastructureDiagnostics?: AdministrativeInfrastructureDiagnosticsRouteDependencies;
   readonly routeCatalogStatus: Readonly<{ markReconciled(): void }>;
 }
 
@@ -72,6 +81,11 @@ export interface AdministrativeRuntimeCompositionDependencies extends Configured
   readonly getServerHealth?: GetServerHealthCapability;
   readonly applicationVersion?: string;
   readonly backupManagement?: BackupManagementCapabilities;
+  /**
+   * Host adapters for the diagnostics report. Overridden by tests so no test
+   * ever spawns a real subprocess or reads real host state (ADR-032 §11).
+   */
+  readonly infrastructureDiagnosticsHostAdapters?: InfrastructureDiagnosticsCompositionInput["hostAdapters"];
 }
 
 export function createAdministrativeRuntime(
@@ -178,6 +192,9 @@ export function createAdministrativeRuntime(
     ...(config.administrativeSecurityStatusHttpEnabled
       ? ["ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED"]
       : []),
+    ...(config.administrativeInfrastructureDiagnosticsHttpEnabled
+      ? ["ADMINISTRATIVE_INFRASTRUCTURE_DIAGNOSTICS_HTTP_ENABLED"]
+      : []),
   ];
   const enabledRouteIds = expectedAdministrativeRouteIds(
     enabledActivationFlags,
@@ -225,6 +242,43 @@ export function createAdministrativeRuntime(
       });
     },
   });
+  const infrastructureDiagnostics = createInfrastructureDiagnosticsRuntime({
+    clock,
+    // Only Atlas's own configured port. There is deliberately no second
+    // hardcoded listener (ADR-032 section 8).
+    expectedListener: Object.freeze({
+      port: config.port,
+      binding: config.host === "127.0.0.1" ? "loopback" : "specific",
+    } as const),
+    ...(compositionDependencies.getServerHealth === undefined
+      ? {}
+      : { serverHealthReader: compositionDependencies.getServerHealth }),
+    pm2ProcessListExecutor: new NodePm2ProcessListExecutor(),
+    ...(config.backupSchedulerCursorFilePath === undefined
+      ? {}
+      : {
+          backupSchedulerCursorReader: new FileBackupSchedulerCursorStore(
+            config.backupSchedulerCursorFilePath,
+          ),
+        }),
+    ...(config.machinePowerSchedulerCursorFilePath === undefined
+      ? {}
+      : {
+          powerSchedulerCursorReader: new FileMachinePowerSchedulerCursorStore(
+            config.machinePowerSchedulerCursorFilePath,
+          ),
+        }),
+    eventHistoryReadinessReader:
+      eventHistory.checkAdministrativeEventHistoryReadiness,
+    powerPostureReader: powerSafetyReader,
+    ...(compositionDependencies.infrastructureDiagnosticsHostAdapters ===
+    undefined
+      ? {}
+      : {
+          hostAdapters:
+            compositionDependencies.infrastructureDiagnosticsHostAdapters,
+        }),
+  });
   const needsPowerManagement =
     config.administrativeWakeAlarmHttpEnabled ||
     config.administrativeShutdownHttpEnabled;
@@ -271,6 +325,8 @@ export function createAdministrativeRuntime(
         ? {}
         : { machineShutdownConfirmationReader: confirmationReader }),
       securityPostureReader,
+      infrastructureDiagnosticsReader:
+        infrastructureDiagnostics.getInfrastructureDiagnostics,
     });
   };
 
@@ -404,6 +460,16 @@ export function createAdministrativeRuntime(
     ...(config.administrativeSecurityStatusHttpEnabled === true
       ? {
           securityStatus: Object.freeze({
+            admission,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...(config.administrativeInfrastructureDiagnosticsHttpEnabled === true
+      ? {
+          infrastructureDiagnostics: Object.freeze({
             admission,
             createProtectedAdministration: (
               reader: CloudflareAccessAssertionReader,

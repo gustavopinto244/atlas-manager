@@ -31,7 +31,21 @@ import {
   serviceSchedulePath,
 } from "../../src/cli/administrative-contract.js";
 import { SERVICE_AVAILABILITY_MODES } from "../../src/service-scheduling/domain/service-availability-mode.js";
+import {
+  ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX,
+  ATLAS_DIAGNOSTIC_NGINX_CONFIG_CHECK_ID,
+  ATLAS_INFRASTRUCTURE_DIAGNOSTICS_PATH,
+  ATLAS_INFRASTRUCTURE_DIAGNOSTICS_ROUTE_ID,
+  atlasDiagnosticOverallStatus,
+} from "../../src/cli/administrative-contract.js";
 import { ADMINISTRATIVE_ROUTE_SECURITY_CATALOG } from "../../src/http/administrative-route-security-catalog.js";
+import {
+  CHECK_ID,
+  CHECK_ID_PREFIX,
+  CHECK_ORDER,
+} from "../../src/infrastructure-diagnostics/domain/check-ids.js";
+import { DIAGNOSTIC_STATUSES } from "../../src/infrastructure-diagnostics/domain/diagnostic-status.js";
+import { deriveOverallStatus } from "../../src/infrastructure-diagnostics/domain/diagnostic-report.js";
 
 function descriptorFor(routeId: string) {
   const descriptor = ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.find(
@@ -340,5 +354,58 @@ describe("CLI administrative contract binding — backup policy mutations", () =
       ...Object.values(ATLAS_BACKUP_RETENTION_MUTATIONS),
     ].map((entry) => entry.routeId);
     expect(declared).not.toContain("backups.scheduler.tick");
+  });
+});
+
+describe("CLI infrastructure diagnostics contract binding (ADR-032)", () => {
+  it("binds the diagnostics path and route id to the catalog", () => {
+    const canonical = descriptorFor(ATLAS_INFRASTRUCTURE_DIAGNOSTICS_ROUTE_ID);
+    expect(ATLAS_INFRASTRUCTURE_DIAGNOSTICS_PATH).toBe(canonical.pathTemplate);
+    expect(canonical.method).toBe("GET");
+    // A diagnostics route that ever acquired a mutation policy would be a
+    // silent upgrade of a read-only capability. It must fail here first.
+    expect(canonical.replayPolicy).toBe("read_only");
+    expect(canonical.confirmationPolicy).toBe("none");
+    expect(canonical.gatePolicy).toBe("none");
+    expect(canonical.requestPolicy.body).toBe("none");
+    expect(canonical.permission).toBe("infrastructure.diagnostics.read");
+  });
+
+  it("mirrors the server's check-id namespace", () => {
+    expect(ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX).toEqual(CHECK_ID_PREFIX);
+    expect(ATLAS_DIAGNOSTIC_NGINX_CONFIG_CHECK_ID).toBe(CHECK_ID.nginxConfig);
+    for (const prefix of Object.values(ATLAS_DIAGNOSTIC_CHECK_ID_PREFIX))
+      expect(
+        CHECK_ORDER.some((id) => id.startsWith(prefix)),
+        prefix,
+      ).toBe(true);
+  });
+
+  /**
+   * The CLI cannot import the domain at runtime (the operator package ships
+   * only `dist/cli`), so it carries a copy of the precedence rule. This is what
+   * stops that copy from becoming a second, divergent opinion about whether the
+   * system is healthy: every combination of statuses must agree exactly.
+   */
+  it("agrees with the server's overall-status derivation for every status combination", () => {
+    const statuses = [...DIAGNOSTIC_STATUSES];
+    const observedAt = "2026-01-01T00:00:00.000Z";
+    for (const first of statuses)
+      for (const second of statuses)
+        for (const third of statuses) {
+          const checks = [first, second, third].map((status, index) => ({
+            id: CHECK_ORDER[index]!,
+            status,
+            observedAt,
+          }));
+          expect(
+            atlasDiagnosticOverallStatus(checks),
+            `${first}/${second}/${third}`,
+          ).toBe(deriveOverallStatus(checks));
+        }
+  });
+
+  it("agrees with the server on an empty selection", () => {
+    expect(atlasDiagnosticOverallStatus([])).toBe(deriveOverallStatus([]));
   });
 });

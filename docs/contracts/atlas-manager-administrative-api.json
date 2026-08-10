@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
-  "routeCount": 47,
-  "catalogSha256": "912e575b5415b25b2d51c6bdcdb1a1acb1c1878734349091cd4678bbdfe32396",
+  "routeCount": 48,
+  "catalogSha256": "43ac2efe231e744068bd630547e1537a4adb07d6b7e79143326f6310ced5968d",
   "routeIds": [
     "dashboard.read",
     "dashboard.asset.read",
@@ -51,7 +51,8 @@
     "event_history.export.read",
     "event_history.export.download",
     "event_history.exports.prune",
-    "security.status.read"
+    "security.status.read",
+    "infrastructure.diagnostics.read"
   ],
   "contractGeneration": "deterministic",
   "security": {
