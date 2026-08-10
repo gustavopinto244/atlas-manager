@@ -20,14 +20,16 @@ for the full, source-derived inventory. Summary:
   by `tests/http/administrative-api-contract.test.ts` (not a static count —
   see that test before trusting any other number in this directory).
 - Completed capability tracks: security/contracts repair, CLI foundation
-  and 16 of 23 read-only command nodes, dashboard shell/navigation
+  and 31 of 36 command nodes, dashboard shell/navigation
   (Operator Dashboard v2 Slice 2), service resource observability
   (Slice 3), and registered-service scheduling — persistent policy store,
   candidate-draft preview, weekly editor overhaul, timeline current-state
   display (Slice 4).
-- Remaining implementation: mutating CLI schedule and backup commands
-  (unblocked — ADR-031's authenticated transport is accepted and in use by
-  `services start/stop/restart`; these are a mechanical follow-up slice),
+  Scheduling and backup CLI mutations are delivered: `services schedule
+set/always/manual/disable/remove`, `backups run`, `backups run-status`,
+  `backups schedule set/remove` and `backups retention set/prune`, all reusing
+  the ADR-031 transport with zero new administrative routes.
+- Remaining implementation:
   infrastructure diagnostics (CLI/dashboard), machine schedule mutation
   (blocked on a dedicated policy-store ADR), Compose resource aggregation
   semantics, active-override display on the schedule timeline.

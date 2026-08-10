@@ -17,7 +17,7 @@ The foundation provides:
 
 The command tree is intentionally visible before each command is implemented.
 Unimplemented commands return `command_not_implemented` and a non-zero exit
-code; they never claim success. Of 23 command nodes, 18 are implemented; the
+code; they never claim success. Of 36 command nodes, 31 are implemented; the
 five remaining stubs (`infra status`, `infra listeners`, `nginx status`,
 `nginx test`, `tunnel status`) belong to the infrastructure-diagnostics track.
 
@@ -36,6 +36,9 @@ atlas services schedule preview <service-id>
 atlas backups list
 atlas backups status
 atlas backups runs
+atlas backups run-status <run-id>
+atlas backups schedule show <target-id>
+atlas backups retention show <target-id>
 atlas events
 atlas events --tail
 atlas machine status
@@ -76,9 +79,21 @@ atlas services schedule preview task-manager \
 atlas services start <service-id>
 atlas services stop <service-id>
 atlas services restart <service-id>
+
+atlas services schedule set <service-id> --policy '<json>'
+atlas services schedule always <service-id>
+atlas services schedule manual <service-id>
+atlas services schedule disable <service-id>
+atlas services schedule remove <service-id>
+
+atlas backups run <target-id>
+atlas backups schedule set <target-id> --policy '<json>'
+atlas backups schedule remove <target-id>
+atlas backups retention set <target-id> --policy '<json>'
+atlas backups retention prune <target-id>
 ```
 
-These are the first mutating commands, delivered under ADR-031. They require an
+These are the mutating commands, delivered under ADR-031. They require an
 externally issued Cloudflare Access assertion in
 `ATLAS_CLOUDFLARE_ACCESS_JWT`, and they call the same protected administrative
 routes the dashboard calls — same RBAC, same exact confirmation, same mutation
@@ -112,6 +127,64 @@ What the CLI does, and deliberately does not do:
 - **No fallback.** If the administrative request is refused, the CLI stops. It
   never runs PM2, Docker or systemd instead.
 
+### Scheduling
+
+`services schedule set` forwards `--policy` to the server verbatim. The CLI
+parses the JSON only to catch a malformed argument before spending a request;
+it never validates the policy's content, so the server's schedule domain stays
+the single validation authority and a rejected policy returns
+`schedule_invalid`.
+
+The alias subcommands each write one explicit **stored** policy override:
+`always`, `manual`, and `disable` — which writes the domain mode `disabled`,
+since the verb an operator types and the adjective the domain stores are not
+the same word.
+
+`services schedule remove` is **not** the same as `disable`. It sends no
+`policy` at all, deleting the stored override so the service falls back to its
+statically configured default policy — which may be any mode, not necessarily
+`always`. Every schedule mutation is followed by an authoritative re-read of
+`GET /admin/services/<id>/schedule`.
+
+Backup schedules use the same `set --policy` / `remove` shape, and deliberately
+have **no** `always`/`manual`/`disable` aliases: backup modes are
+`manual|scheduled|disabled`, with no `always`, so partial alias parity would be
+more confusing than one uniform form.
+
+### Backups
+
+`atlas backups run <target-id>` runs a registered target now. The only accepted
+argument is a registered target id — there is deliberately no `--source`,
+`--destination` or path option of any kind, so a backup can only ever read and
+write the locations its registered target declares.
+
+The run route is synchronous: it blocks until the run is terminal, so the
+response is itself the authoritative result and there is no separate re-read.
+Success is judged only by the run's own `succeeded` status, never by the HTTP
+status — a terminal run that did not succeed is reported as a failure carrying
+the server's status verbatim. Because the work happens inside the request, this
+one call site raises the bounded timeout to at least five minutes; it never
+removes the bound. If the outcome is lost, the CLI points you at
+`atlas backups runs` and `atlas backups run-status <run-id>`.
+
+`atlas backups retention prune` is the most consequential command here, and its
+outcome is read from the server's own `result`, never from the HTTP status:
+
+| `result`    | Exit | Meaning                                                      |
+| ----------- | ---- | ------------------------------------------------------------ |
+| `completed` | 0    | the prune ran to completion                                  |
+| `partial`   | 1    | a known partial failure; the counts say exactly how much ran |
+| `busy`      | 5    | did not complete; it may have deleted some artifacts         |
+| `blocked`   | 5    | did not complete; it may have deleted some artifacts         |
+
+The prune keeps its server-side confirmation, and there is **no** CLI bypass:
+no `--force`, no `--yes`, no `--no-confirm`. The canonical confirmation the
+route requires is the only accepted authorization.
+
+`backups scheduler tick` is deliberately **not** exposed. Its claim-protected
+replay policy and compare-and-set cursor make it cron-triggered maintenance
+whose correctness depends on not being invoked ad hoc.
+
 ## Security boundary
 
 The CLI must not forge Cloudflare Access assertions or bypass administrative
@@ -140,9 +213,14 @@ Stable error codes for mutating commands:
 | `service_not_found`                    | 1    | no registered service with that id                            |
 | `service_operation_unsupported`        | 1    | the service does not support that operation                   |
 | `service_operation_failed`             | 1    | Atlas rejected or could not complete the operation            |
+| `schedule_invalid`                     | 1    | the server rejected the schedule or retention policy          |
+| `backup_target_not_found`              | 1    | no registered backup target with that id                      |
+| `backup_run_not_found`                 | 1    | no backup run with that id                                    |
+| `backup_operation_unsupported`         | 1    | the target does not support that backup operation             |
+| `backup_operation_failed`              | 1    | the backup or prune did not succeed                           |
 | `insecure_transport`                   | 2    | `ATLAS_BASE_URL` is plaintext HTTP to a non-loopback host     |
 | `administrative_access_denied`         | 3    | missing, invalid or unauthorized credential                   |
-| `operation_conflict`                   | 4    | another service mutation is in progress, or rate limited      |
+| `operation_conflict`                   | 4    | another mutation is in progress, or rate limited              |
 | `mutation_outcome_unknown`             | 5    | may or may not have been applied; re-read authoritative state |
 | `interrupted`                          | 130  | cancelled before anything was sent                            |
 | `mutation_interrupted_outcome_unknown` | 130  | cancelled after the mutation may have been sent               |

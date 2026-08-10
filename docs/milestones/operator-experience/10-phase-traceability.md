@@ -58,9 +58,23 @@ are implemented against that transport. The row's previous wording —
 also misread ADR-028's status; see correction C1 in
 [`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md).
 
-| Decision                                                                           | Blocks                                 | Required artifact                         |
-| ---------------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- |
-| Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                             |
+| Decision                                                                       | Blocks | Required artifact |
+| ------------------------------------------------------------------------------ | ------ | ----------------- |
+| Re-reconciled 2026-08-10 by the scheduling and backup CLI mutations milestone. |
+| It required **no new ADR**: ADR-031 pre-authorised reusing its transport for   |
+| schedule and backup mutations as a mechanical follow-up slice, and the slice   |
+| held every invariant that authorisation depended on — zero new administrative  |
+| routes (the catalog stays at 47 descriptors), confirmations bound to the       |
+| canonical catalog by contract test, RBAC and audit entirely server-owned, no   |
+| automatic retry, and ambiguous outcomes mapped to an indeterminate class       |
+| distinct from both success and failure.                                        |
+
+`backups scheduler tick` was classified and deliberately left unexposed rather
+than silently omitted: its `claim_protected` replay policy and
+reentrancy-guarded compare-and-set cursor make it internal, cron-triggered
+maintenance, not an interactive operator command.
+
+| Machine policy persistence and precedence | machine schedule mutation | dedicated ADR |
 | Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice |
 
 ## Resolved decisions

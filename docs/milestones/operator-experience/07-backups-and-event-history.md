@@ -9,8 +9,19 @@ The dashboard currently exposes these through primitive forms.
 
 ## Backup delivery
 
-- CLI: list, status, runs and run target first; schedule/retention commands only
-  when their complete side effects and confirmations are documented.
+- CLI: delivered — `backups list/status/runs` (read), `backups run` (manual
+  run), `backups run-status <run-id>`, `backups schedule show/set/remove` and
+  `backups retention show/set/prune`. All reuse the ADR-031 authenticated
+  transport against existing routes; the milestone added no backup route.
+  Their side effects and confirmations are documented in `docs/cli.md`.
+- `backups scheduler tick` stays deliberately **unexposed** by the CLI. Its
+  `claim_protected` replay policy and reentrancy-guarded compare-and-set cursor
+  make it internal, cron-triggered maintenance whose correctness depends on not
+  being invoked ad hoc; a contract test asserts no CLI descriptor exists for it.
+- A manual run is synchronous and is judged only by the run's own `succeeded`
+  status; a retention prune is judged only by its `result`, where `partial` is a
+  known partial failure and `busy`/`blocked` are indeterminate outcomes. The
+  destructive prune keeps its confirmation with no CLI bypass flag.
 - Dashboard: Backups page with target status, recent runs, schedule, retention,
   busy state and explicit destructive prune UX.
 - Overview: scheduler state, latest success/failure and interrupted runs.

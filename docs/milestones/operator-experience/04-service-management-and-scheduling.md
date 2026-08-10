@@ -77,8 +77,15 @@ Return at least:
 - `atlas services schedule remove <id>`
 - `atlas services schedule preview <id> ...`
 
-CLI weekday syntax is converted to the canonical domain input; it is not a
-second schedule language.
+All of the above are delivered. CLI weekday syntax is converted to the
+canonical domain input; it is not a second schedule language, and the CLI
+validates no policy content at all — the server's schedule domain is the single
+validation authority.
+
+`schedule remove` deletes the stored override so the service falls back to its
+statically configured default policy. It is deliberately _not_ equivalent to
+`schedule disable`, which persists an explicit `disabled` override; and the
+subcommand word `disable` maps explicitly to the domain mode `disabled`.
 
 ## Dashboard mapping
 
