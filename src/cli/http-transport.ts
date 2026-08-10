@@ -7,11 +7,15 @@ import {
   type AtlasAdministrativeResponse,
 } from "./administrative-client.js";
 import {
+  ATLAS_SERVICE_SCHEDULE_ALIAS_MODES,
   isAtlasServiceId,
   serviceActionMutation,
   serviceActionPath,
   serviceReadPath,
+  serviceScheduleMutation,
+  serviceSchedulePath,
   type AtlasServiceOperation,
+  type AtlasServiceScheduleOperation,
 } from "./administrative-contract.js";
 import { AtlasCliError } from "./errors.js";
 import type { AtlasCliTransport } from "./contracts.js";
@@ -90,6 +94,20 @@ async function executeHttpCommand(
         signal,
       );
     }
+    case "services schedule set":
+      return executeServiceScheduleSet(client, args, signal);
+    case "services schedule always":
+    case "services schedule manual":
+    case "services schedule disable":
+      return executeServiceScheduleAlias(
+        client,
+        command.slice("services schedule ".length) as
+          "always" | "manual" | "disable",
+        args,
+        signal,
+      );
+    case "services schedule remove":
+      return executeServiceScheduleRemove(client, args, signal);
     case "backups list":
       return client.read("/admin/backups/targets", signal);
     case "backups status":
@@ -179,7 +197,11 @@ async function executeServiceAction(
   } catch (error) {
     // A mutation is never retried here. `state_recheck_required` means the
     // operator, not the CLI, decides what happens after an uncertain result.
-    throw mapMutationDispatchError(error, operation, serviceId);
+    throw mapMutationDispatchError(
+      error,
+      `${operation} request for ${serviceId}`,
+      `Re-read authoritative state with: atlas services status ${serviceId}`,
+    );
   }
 
   if (envelope.status < 200 || envelope.status >= 300)
@@ -304,21 +326,28 @@ function readMutationAcknowledgement(body: unknown): boolean | undefined {
   return typeof successful === "boolean" ? successful : undefined;
 }
 
+/**
+ * Classifies a mutation that never produced a response. Delivery is only ever
+ * treated as *not* having happened when the transport proved it; every other
+ * outcome is indeterminate and directs the operator at an authoritative re-read.
+ *
+ * `subject` names the dispatched work ("restart request for task-manager") and
+ * `recheck` is the exact command that resolves the ambiguity.
+ */
 function mapMutationDispatchError(
   error: unknown,
-  operation: AtlasServiceOperation,
-  serviceId: string,
+  subject: string,
+  recheck: string,
 ): Error {
-  const recheck = `Re-read authoritative state with: atlas services status ${serviceId}`;
   if (error instanceof AtlasCliInterruptedError)
     return new AtlasCliError(
       "mutation_interrupted_outcome_unknown",
-      `Interrupted after the ${operation} request for ${serviceId} may have been sent. ${recheck}`,
+      `Interrupted after the ${subject} may have been sent. ${recheck}`,
     );
   if (error instanceof AtlasCliTimeoutError)
     return new AtlasCliError(
       "mutation_outcome_unknown",
-      `The ${operation} request for ${serviceId} timed out and may still have been applied. ${recheck}`,
+      `The ${subject} timed out and may still have been applied. ${recheck}`,
     );
   if (error instanceof AtlasCliNetworkError)
     return error.undelivered
@@ -328,12 +357,12 @@ function mapMutationDispatchError(
         )
       : new AtlasCliError(
           "mutation_outcome_unknown",
-          `The ${operation} request for ${serviceId} failed in transit and may still have been applied. ${recheck}`,
+          `The ${subject} failed in transit and may still have been applied. ${recheck}`,
         );
   if (error instanceof AtlasCliError) return error;
   return new AtlasCliError(
     "mutation_outcome_unknown",
-    `The ${operation} request for ${serviceId} did not complete and may still have been applied. ${recheck}`,
+    `The ${subject} did not complete and may still have been applied. ${recheck}`,
   );
 }
 
@@ -368,6 +397,247 @@ function mapMutationRejection(
   return new AtlasCliError(
     "service_operation_failed",
     `Atlas rejected the service operation (HTTP ${envelope.status}${
+      envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
+    })`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Registered-service schedule mutations (ADR-031)
+// ---------------------------------------------------------------------------
+
+export type AtlasServiceScheduleMutationResult = Readonly<{
+  serviceId: string;
+  operation: AtlasServiceScheduleOperation;
+  result: "completed";
+  /**
+   * Authoritative post-mutation policy mode, or `unknown` when the confirming
+   * re-read failed. For `delete` this is the *fallback* policy the service
+   * reverts to, which is its statically configured default — not necessarily
+   * the mode any alias subcommand would have written.
+   */
+  mode: string;
+  /** Full authoritative policy, when the re-read succeeded. */
+  policy: unknown;
+  authoritativeRead: "ok" | "unavailable";
+}>;
+
+async function executeServiceScheduleSet(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const parsed = readSchedulePolicyArguments(args);
+  return putServiceSchedule(client, parsed.serviceId, parsed.policy, signal);
+}
+
+async function executeServiceScheduleAlias(
+  client: AtlasAdministrativeClient,
+  alias: "always" | "manual" | "disable",
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const serviceId = requireServiceIdArgument(args);
+  // The subcommand word is mapped to a domain mode explicitly; `disable` is
+  // not the same string as the stored mode `disabled`.
+  return putServiceSchedule(
+    client,
+    serviceId,
+    { mode: ATLAS_SERVICE_SCHEDULE_ALIAS_MODES[alias] },
+    signal,
+  );
+}
+
+async function putServiceSchedule(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  policy: unknown,
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  return mutateServiceSchedule(client, serviceId, "update", signal, {
+    // The CLI forwards the policy verbatim and validates none of its content:
+    // the server's schedule domain is the single validation authority, so a
+    // CLI copy of those rules could only ever drift away from it.
+    policy,
+  });
+}
+
+async function executeServiceScheduleRemove(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasServiceScheduleMutationResult> {
+  const serviceId = requireServiceIdArgument(args);
+  // Deliberately no `policy` key at all. Removing a schedule erases the stored
+  // override so the service falls back to its configured default policy; it is
+  // not the same operation as writing mode `disabled`.
+  return mutateServiceSchedule(client, serviceId, "delete", signal, undefined);
+}
+
+async function mutateServiceSchedule(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  operation: AtlasServiceScheduleOperation,
+  signal: AbortSignal,
+  payload: Readonly<Record<string, unknown>> | undefined,
+): Promise<AtlasServiceScheduleMutationResult> {
+  client.assertMutationAllowed();
+
+  // Advisory pre-check, exactly as for service actions. A schedule has no
+  // per-service capability gate — a registered service either exists or does
+  // not — so there is no "unsupported operation" branch here.
+  const precheck = await describeServiceSafely(client, serviceId, signal, true);
+  if (precheck.kind === "denied")
+    throw new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (precheck.kind === "absent")
+    throw new AtlasCliError(
+      "service_not_found",
+      `Registered service not found: ${serviceId}`,
+    );
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: serviceScheduleMutation(operation),
+        path: serviceSchedulePath(serviceId),
+        ...(payload === undefined ? {} : { payload }),
+      },
+      signal,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `schedule ${operation} request for ${serviceId}`,
+      `Re-read authoritative state with: atlas services schedule show ${serviceId}`,
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapScheduleMutationRejection(envelope, serviceId);
+  if (envelope.malformed)
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unreadable service schedule response",
+    );
+  if (!hasScheduleMutationAcknowledgement(envelope.body, operation))
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unexpected service schedule response",
+    );
+
+  // Success is never claimed from the mutation response alone (ADR-031): the
+  // stored policy is read back from the authoritative schedule route.
+  const authoritative = await describeServiceScheduleSafely(
+    client,
+    serviceId,
+    signal,
+  );
+  return Object.freeze({
+    serviceId,
+    operation,
+    result: "completed" as const,
+    mode: authoritative.kind === "described" ? authoritative.mode : "unknown",
+    policy: authoritative.kind === "described" ? authoritative.policy : null,
+    authoritativeRead:
+      authoritative.kind === "described" ? "ok" : "unavailable",
+  });
+}
+
+type ServiceScheduleDescription =
+  | Readonly<{ kind: "described"; mode: string; policy: unknown }>
+  | Readonly<{ kind: "indeterminate" }>;
+
+/**
+ * Authoritative post-mutation read of the stored schedule. Interruption is
+ * never propagated: the mutation already happened, and only the confirming
+ * read was lost.
+ */
+async function describeServiceScheduleSafely(
+  client: AtlasAdministrativeClient,
+  serviceId: string,
+  signal: AbortSignal,
+): Promise<ServiceScheduleDescription> {
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.readEnvelope(
+      serviceSchedulePath(serviceId),
+      signal,
+    );
+  } catch {
+    return Object.freeze({ kind: "indeterminate" as const });
+  }
+  if (envelope.status !== 200 || envelope.malformed)
+    return Object.freeze({ kind: "indeterminate" as const });
+  if (typeof envelope.body !== "object" || envelope.body === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const policy = (envelope.body as Record<string, unknown>).policy;
+  if (typeof policy !== "object" || policy === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const mode = (policy as Record<string, unknown>).mode;
+  if (typeof mode !== "string")
+    return Object.freeze({ kind: "indeterminate" as const });
+  return Object.freeze({ kind: "described" as const, mode, policy });
+}
+
+/**
+ * The schedule routes do not answer with a `successful` boolean the way the
+ * service action routes do. A `PUT` answers with the persisted policy itself,
+ * and a `DELETE` answers with `{serviceId, removed: true}`; both are verified
+ * here rather than assumed from the HTTP status.
+ */
+function hasScheduleMutationAcknowledgement(
+  body: unknown,
+  operation: AtlasServiceScheduleOperation,
+): boolean {
+  if (typeof body !== "object" || body === null) return false;
+  const record = body as Record<string, unknown>;
+  if (operation === "delete") return record.removed === true;
+  return typeof record.mode === "string";
+}
+
+function mapScheduleMutationRejection(
+  envelope: AtlasAdministrativeResponse,
+  serviceId: string,
+): AtlasCliError {
+  if (envelope.status === 401 || envelope.status === 403)
+    return new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 404)
+    return new AtlasCliError(
+      "service_not_found",
+      `Registered service not found: ${serviceId}`,
+    );
+  if (envelope.status === 409 || envelope.status === 429)
+    return new AtlasCliError(
+      "operation_conflict",
+      envelope.status === 429
+        ? "Atlas is rate limiting administrative requests; retry shortly"
+        : "Another administrative service operation is in progress",
+    );
+  // The server rejected the policy itself. This is the operator's input being
+  // wrong, not the schedule subsystem failing.
+  if (
+    envelope.status === 400 &&
+    envelope.errorCode === "invalid_service_schedule_request"
+  )
+    return new AtlasCliError(
+      "schedule_invalid",
+      "Atlas rejected the service schedule policy as invalid",
+    );
+  if (envelope.errorCode === "administrative_service_state_recheck_required")
+    return new AtlasCliError(
+      "mutation_outcome_unknown",
+      `Atlas could not confirm the outcome. Re-read authoritative state with: atlas services schedule show ${serviceId}`,
+    );
+  return new AtlasCliError(
+    "service_operation_failed",
+    `Atlas rejected the service schedule mutation (HTTP ${envelope.status}${
       envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
     })`,
   );
@@ -513,6 +783,51 @@ function requireArgument(args: readonly string[], name: string): string {
     throw new AtlasCliError("invalid_arguments", `${name} is required`);
   }
   return value;
+}
+
+/**
+ * `schedule set <serviceId> --policy '<json>'`.
+ *
+ * The JSON is parsed here only so that a typo fails as a usage error before a
+ * request is spent. Its *content* is never inspected: the server's schedule
+ * domain decides what a valid policy is.
+ */
+function readSchedulePolicyArguments(args: readonly string[]): Readonly<{
+  serviceId: string;
+  policy: unknown;
+}> {
+  const serviceId = args[0];
+  if (serviceId === undefined || serviceId.length === 0)
+    throw new AtlasCliError("invalid_arguments", "service id is required");
+  if (serviceId.startsWith("-"))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Unknown option: ${serviceId}`,
+    );
+  if (!isAtlasServiceId(serviceId))
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Invalid service id: ${serviceId}`,
+    );
+  const rest = args.slice(1);
+  if (rest.length !== 2 || rest[0] !== "--policy")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      rest.length > 0 && rest[0] !== "--policy" && rest[0]?.startsWith("-")
+        ? `Unknown option: ${String(rest[0])}`
+        : "Option --policy <json> is required",
+    );
+  try {
+    return Object.freeze({
+      serviceId,
+      policy: JSON.parse(rest[1] as string) as unknown,
+    });
+  } catch {
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "Option --policy requires valid JSON",
+    );
+  }
 }
 
 /**

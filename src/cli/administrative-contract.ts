@@ -82,6 +82,73 @@ export function serviceReadPath(serviceId: string): string {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Registered-service schedule mutations
+// ---------------------------------------------------------------------------
+
+export type AtlasServiceScheduleOperation = "update" | "delete";
+
+export const ATLAS_SERVICE_SCHEDULE_OPERATIONS: readonly AtlasServiceScheduleOperation[] =
+  Object.freeze(["update", "delete"]);
+
+const SERVICE_SCHEDULE_MUTATIONS: Readonly<
+  Record<AtlasServiceScheduleOperation, AtlasAdministrativeMutationDescriptor>
+> = Object.freeze({
+  update: Object.freeze({
+    routeId: "services.schedule.update",
+    method: "PUT",
+    pathTemplate: "/admin/services/:serviceId/schedule",
+    confirmation: "confirm_registered_service_schedule_update",
+  }),
+  delete: Object.freeze({
+    routeId: "services.schedule.delete",
+    method: "DELETE",
+    pathTemplate: "/admin/services/:serviceId/schedule",
+    confirmation: "confirm_registered_service_schedule_removal",
+  }),
+});
+
+export const ATLAS_SERVICE_SCHEDULE_MUTATIONS = SERVICE_SCHEDULE_MUTATIONS;
+
+/** Path template of the authoritative schedule read used after a mutation. */
+export const ATLAS_SERVICE_SCHEDULE_READ_PATH_TEMPLATE =
+  "/admin/services/:serviceId/schedule";
+
+/**
+ * The alias subcommands (`always`, `manual`, `disable`) each write one explicit
+ * *stored* policy override. They are re-declared here rather than imported from
+ * `src/service-scheduling/domain`: the operator package ships only `dist/cli`,
+ * and the CLI may not import server domain code at all.
+ *
+ * Note that the CLI subcommand word and the domain mode are not always the same
+ * string — `disable` (a verb the operator types) writes mode `disabled` (the
+ * adjective the domain stores) — so the mapping is explicit, never assumed.
+ *
+ * None of these is the same thing as `services schedule remove`, which deletes
+ * the stored override entirely and lets the service fall back to its static
+ * environment-configured default policy.
+ */
+export const ATLAS_SERVICE_SCHEDULE_ALIAS_MODES: Readonly<
+  Record<"always" | "manual" | "disable", string>
+> = Object.freeze({
+  always: "always",
+  manual: "manual",
+  disable: "disabled",
+});
+
+export function serviceScheduleMutation(
+  operation: AtlasServiceScheduleOperation,
+): AtlasAdministrativeMutationDescriptor {
+  return SERVICE_SCHEDULE_MUTATIONS[operation];
+}
+
+export function serviceSchedulePath(serviceId: string): string {
+  return ATLAS_SERVICE_SCHEDULE_READ_PATH_TEMPLATE.replace(
+    ":serviceId",
+    encodeURIComponent(serviceId),
+  );
+}
+
 /**
  * Registered-service identifier grammar, mirroring the server's `isServiceId`.
  * Applied in the CLI only to reject obvious usage errors before spending a

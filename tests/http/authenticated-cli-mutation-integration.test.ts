@@ -63,11 +63,21 @@ type Express = ReturnType<typeof createApp>;
  * Cloudflare Access verification -> RBAC -> mutation admission -> use case ->
  * adapter -> audit.
  */
+/** Every HTTP method the administrative catalog actually exposes. */
+function supertestMethod(
+  value: string | undefined,
+): "get" | "post" | "put" | "delete" {
+  const method = (value ?? "GET").toLowerCase();
+  if (method === "post") return "post";
+  if (method === "put") return "put";
+  if (method === "delete") return "delete";
+  return "get";
+}
+
 function supertestFetch(app: Express): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(urlOf(input));
-    const method =
-      (init?.method ?? "GET").toLowerCase() === "post" ? "post" : "get";
+    const method = supertestMethod(init?.method);
     const pending = request(app)
       [method](`${url.pathname}${url.search}`)
       .set("host", HOST);
@@ -166,13 +176,19 @@ async function fixture(
       eventHistory: history,
       clock,
     });
+  const mutationGate = createAdministrativeServiceMutationGate();
   const app = createApp({
     logger: { error: vi.fn() },
     getServerHealth: { execute: vi.fn(async () => health()) },
     administrativePublicOrigin: parseAdministrativePublicOrigin(BASE_URL),
     administrativeServices: {
       admission,
-      mutationGate: createAdministrativeServiceMutationGate(),
+      mutationGate,
+      createProtectedAdministration: createProtected,
+    },
+    administrativeServiceSchedule: {
+      admission,
+      mutationGate,
       createProtectedAdministration: createProtected,
     },
   });
@@ -429,6 +445,132 @@ describe("authenticated mutating CLI — audit", () => {
     const cliTypes = await typesOf(viaCli);
     for (const operation of await typesOf(viaApi))
       expect(cliTypes, operation).toContain(operation);
+  });
+});
+
+describe("authenticated mutating CLI — service schedule", () => {
+  it("writes a schedule policy through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "manual" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    if (result.code !== 0) console.log("DBG", result.err);
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      serviceId: SERVICE_ID,
+      operation: "update",
+      result: "completed",
+      mode: "manual",
+      authoritativeRead: "ok",
+    });
+    expect(await controlOperations(value.history)).toContain(
+      "update_registered_service_schedule",
+    );
+
+    // The identical PUT issued the way the dashboard issues it produces the
+    // same audited operation — there is no CLI-only audit vocabulary.
+    const viaApi = await fixture(["service_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .put(`/admin/services/${SERVICE_ID}/schedule`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_registered_service_schedule_update",
+        policy: { mode: "manual" },
+      });
+    expect(apiResponse.status).toBe(200);
+    expect(await controlOperations(viaApi.history)).toContain(
+      "update_registered_service_schedule",
+    );
+  });
+
+  it("removes a stored schedule override through the canonical removal route", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "disabled" }),
+        "--json",
+      ],
+      assertion,
+    );
+    const result = await runCli(
+      value.app,
+      ["services", "schedule", "remove", SERVICE_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    const data = (JSON.parse(result.out) as { data: Record<string, unknown> })
+      .data;
+    expect(data).toMatchObject({ operation: "delete", result: "completed" });
+    // Removal restores the statically configured default policy, which is
+    // `always` here — not the `disabled` override that was just written.
+    expect(data.mode).toBe("always");
+    expect(await controlOperations(value.history)).toContain(
+      "remove_registered_service_schedule",
+    );
+  });
+
+  it("refuses a schedule mutation for a principal without the availability write permission", async () => {
+    const value = await fixture(["auditor"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["services", "schedule", "manual", SERVICE_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(await controlOperations(value.history)).toEqual([]);
+  });
+
+  it("rejects an invalid policy server-side rather than in the CLI", async () => {
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "services",
+        "schedule",
+        "set",
+        SERVICE_ID,
+        "--policy",
+        JSON.stringify({ mode: "whenever-i-feel-like-it" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("schedule_invalid");
   });
 });
 
