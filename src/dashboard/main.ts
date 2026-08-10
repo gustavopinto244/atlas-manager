@@ -96,8 +96,12 @@ function renderOverview(value: unknown): void {
     displayValue(record.observedAt, "unavailable"),
     "infrastructure",
   );
+  // The overview envelope nests the version under "application"; reading it
+  // from the root reported "unavailable" on every build regardless of the
+  // configured value. There is no sourceCommit field in the contract, so the
+  // dashboard no longer claims one.
   const metadata = document.createElement("p");
-  metadata.textContent = `Version: ${displayValue(record.applicationVersion, "unavailable")} · source: ${displayValue(record.sourceCommit, "unavailable")}`;
+  metadata.textContent = `Version: ${displayValue(readRecord(record.application).version, "unavailable")}`;
   root.append(grid, metadata);
   if (powerControls !== null)
     void powerControlsController.render(

@@ -3,6 +3,7 @@ import {
   parseEnvironment,
   type EnvironmentConfig,
 } from "./config/environment.js";
+import { APPLICATION_VERSION } from "./config/application-version.js";
 import { createApp } from "./http/create-app.js";
 import { createAdministrativeRuntime } from "./http/create-administrative-runtime.js";
 import {
@@ -273,7 +274,7 @@ function start(): void {
             ...(eventHistory === undefined ? {} : { eventHistory }),
             ...(powerManagement === undefined ? {} : { powerManagement }),
             getServerHealth,
-            applicationVersion: "1.0.0-rc.8",
+            applicationVersion: APPLICATION_VERSION,
             ...(backupManagement === undefined ? {} : { backupManagement }),
           })
         : undefined;
