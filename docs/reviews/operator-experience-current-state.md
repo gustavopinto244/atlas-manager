@@ -40,6 +40,17 @@ HTTP through the existing administrative boundary. `services start`,
 `services stop` and `services restart` are implemented against it. The rows
 below reflect the corrected state.
 
+### C3 — CLI command counts were both wrong (recorded 2026-08-10)
+
+The 2026-08-10 snapshot reported `CLI_IMPLEMENTED_COMMANDS = 16` and
+`CLI_STUB_COMMANDS = 7`, which sum to 23 but did not match the lists printed
+beside them: the implemented list contained 15 entries and there were 8 stubs.
+The same off-by-one appeared in
+`docs/milestones/operator-experience/02-cli.md`. Both were maintained by hand.
+Counts are now derived from `ATLAS_COMMANDS` in `src/cli/command-tree.ts`, and
+`tests/cli/administrative-contract.test.ts` plus the command-tree tests keep the
+implemented set honest.
+
 ### C2 — ADR-027 formally accepted (recorded 2026-08-10)
 
 The 2026-08-10 snapshot recommended that the maintainer accept ADR-027 and
@@ -70,18 +81,18 @@ slices) → 46 (Slice 3, `services.resources.read`) → 47 (Slice 4,
 
 Source: `src/cli/command-tree.ts`.
 
-| Field                      | Value                                                                                                                                                                                                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLI_COMMAND_NODES`        | 23                                                                                                                                                                                                                                                                  |
-| `CLI_IMPLEMENTED_COMMANDS` | 16: `status`, `health`, `doctor`, `services list`, `services status`, `services logs`, `services schedule show`, `services schedule preview`, `backups list`, `backups status`, `backups runs`, `events`, `machine status`, `machine plan`, `machine schedule show` |
-| `CLI_STUB_COMMANDS`        | 7: `services start`/`stop`/`restart` (blocked on the CLI identity ADR, ADR-028 — see "Unresolved decisions" below), `infra status`/`listeners`, `nginx status`/`test`, `tunnel status` (infrastructure-diagnostics track not started)                               |
+| Field                      | Value                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLI_COMMAND_NODES`        | 23                                                                                                                                                                                                                                                                                                                                             |
+| `CLI_IMPLEMENTED_COMMANDS` | 18: `status`, `health`, `doctor`, `services list`, `services status`, `services start`, `services stop`, `services restart`, `services logs`, `services schedule show`, `services schedule preview`, `backups list`, `backups status`, `backups runs`, `events`, `machine status`, `machine plan`, `machine schedule show` (see correction C3) |
+| `CLI_STUB_COMMANDS`        | 5: `infra status`/`listeners`, `nginx status`/`test`, `tunnel status` (infrastructure-diagnostics track not started)                                                                                                                                                                                                                           |
 
-`services schedule preview` here is the **persisted-policy** preview
-(`GET /admin/services/:id/availability/preview`), which existed before this
-reconciliation. The Slice 4 addition — previewing a **candidate/draft**
-policy without saving it (`GET /admin/services/:id/schedule/preview`) — has
-no CLI command yet; see the Slice 4 gap analysis for why this was deferred
-rather than added in the same pass.
+`services schedule preview` now covers both previews. Without `--policy` it is
+the **persisted-policy** preview
+(`GET /admin/services/:id/availability/preview`); with
+`--policy <json>` it is the Slice 4 **candidate/draft** preview
+(`GET /admin/services/:id/schedule/preview`), which does not persist anything.
+Both are read-only. The default invocation is unchanged.
 
 ## Dashboard
 

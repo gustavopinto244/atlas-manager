@@ -35,18 +35,40 @@ delivery/configuration. Required regression:
 - `/admin/event-history` satisfies lifecycle protected-route probes;
 - no trusted-Host-only shortcut exists.
 
-## CLI identity boundary
+## CLI identity boundary — resolved (2026-08-10)
 
-The CLI must not fabricate `Cf-Access-Jwt-Assertion`. Candidate approaches must
-be evaluated in a dedicated ADR:
+The CLI must not fabricate `Cf-Access-Jwt-Assertion`. This remains absolutely
+true and is regression-guarded.
 
-1. normal Cloudflare Access human/service authentication against the protected
-   API;
+The dedicated ADR this section required has been written and accepted. The
+candidate approaches were evaluated in
+[`docs/reviews/mutating-cli-threat-model.md`](../../reviews/mutating-cli-threat-model.md)
+across twenty-five threat dimensions:
+
+1. **normal Cloudflare Access authentication against the protected API —
+   chosen** (ADR-031);
 2. a separate local OS-level administrative boundary with explicit identity
-   mapping, socket/file permissions and audit source;
-3. read-only local diagnostics plus protected-API mutations.
+   mapping, socket/file permissions and audit source — **rejected**: it needs a
+   second authorization system, degrades the audit principal from a verified
+   administrative identity to a locally maintained uid mapping, breaks mutual
+   exclusion with dashboard mutations, eliminates remote operation, and adds a
+   permanent local privilege-escalation surface;
+3. read-only local diagnostics plus protected-API mutations — subsumed by (1).
 
-Until accepted, only read-only CLI capabilities may be implemented.
+The constraint "until accepted, only read-only CLI capabilities may be
+implemented" is discharged. `services start`, `services stop` and
+`services restart` are implemented over the accepted transport with end-to-end
+security tests in `tests/http/authenticated-cli-mutation-integration.test.ts`.
+
+Credential rules the CLI must keep obeying:
+
+- the assertion is read from `ATLAS_CLOUDFLARE_ACCESS_JWT` only — never `argv`;
+- it travels only in the `Cf-Access-Jwt-Assertion` header — never a URL, cookie
+  or body;
+- it is never logged, printed, embedded in an error, or emitted in JSON;
+- it is never sent to a plaintext non-loopback origin, and never followed
+  through a redirect;
+- nothing is persisted to disk.
 
 ## Current API baseline
 
