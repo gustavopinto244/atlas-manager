@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createAtlasHttpTransport } from "../../src/cli/http-transport.js";
 
+/** Extracts a request URL without relying on default stringification. */
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
 function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -231,10 +238,10 @@ describe("Atlas CLI schedule preview", () => {
       ),
     ).resolves.toEqual({ source: "candidate_preview" });
     const [url] = fetchImplementation.mock.calls[0]!;
-    expect(String(url)).toContain(
+    expect(urlOf(url)).toContain(
       "/admin/services/task-manager/schedule/preview?",
     );
-    expect(String(url)).toContain(
+    expect(urlOf(url)).toContain(
       `policy=${encodeURIComponent(CANDIDATE_POLICY)}`,
     );
   });
@@ -252,8 +259,8 @@ describe("Atlas CLI schedule preview", () => {
     );
 
     const [url] = fetchImplementation.mock.calls[0]!;
-    expect(String(url)).toContain("/availability/preview?");
-    expect(String(url)).not.toContain("/schedule/preview");
+    expect(urlOf(url)).toContain("/availability/preview?");
+    expect(urlOf(url)).not.toContain("/schedule/preview");
   });
 
   it("rejects an unknown preview option", async () => {
