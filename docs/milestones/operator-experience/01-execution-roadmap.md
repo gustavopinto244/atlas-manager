@@ -130,10 +130,10 @@ detail and file-level evidence: `docs/reviews/operator-experience-final-gap-audi
 - Administrative route catalog (48 descriptors, contract-tested).
 - CLI: 36/36 command nodes implemented, 0 stubs.
 - Authenticated mutating CLI over ADR-031 (`services
-  start/stop/restart`).
+start/stop/restart`).
 - Scheduling and backup CLI mutations (`services schedule
-  set/always/manual/disable/remove`, `backups run/run-status/schedule
-  set|remove/retention set|prune`).
+set/always/manual/disable/remove`, `backups run/run-status/schedule
+set|remove/retention set|prune`).
 - Infrastructure diagnostics: CLI (`infra`, `nginx`, `tunnel`, extended
   `status`/`doctor`) and dashboard Infrastructure page (ADR-032).
 - Dashboard shell/navigation, service resource observability, persisted

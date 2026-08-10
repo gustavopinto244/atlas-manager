@@ -152,16 +152,16 @@ low-risk fix. See Phase 3 of this reconciliation for the resulting decision.
 
 ## Summary table
 
-| # | Item | Classification |
-| - | ---- | -------------- |
-| 1 | Next-transition presentation | DONE |
-| 2 | Active override + expiry presentation | REAL_GAP |
-| 3 | Following transitions (list) | REAL_GAP |
-| 4 | Scheduler health/cursor visibility | REAL_GAP |
-| 5 | Backups dashboard UX (manual run) | REAL_GAP |
-| 6 | Events pagination/tail | REAL_GAP |
-| 7 | Compose resource aggregation | DEFERRED_BY_DESIGN |
-| 8 | Separate service detail page | REAL_GAP |
-| 9 | Machine schedule mutation | OUT_OF_SCOPE_FOR_1_0 |
-| 10 | Task Manager registration | BLOCKED_EXTERNAL |
-| 11 | Atlas live acceptance | BLOCKED_EXTERNAL |
+| #   | Item                                  | Classification       |
+| --- | ------------------------------------- | -------------------- |
+| 1   | Next-transition presentation          | DONE                 |
+| 2   | Active override + expiry presentation | REAL_GAP             |
+| 3   | Following transitions (list)          | REAL_GAP             |
+| 4   | Scheduler health/cursor visibility    | REAL_GAP             |
+| 5   | Backups dashboard UX (manual run)     | REAL_GAP             |
+| 6   | Events pagination/tail                | REAL_GAP             |
+| 7   | Compose resource aggregation          | DEFERRED_BY_DESIGN   |
+| 8   | Separate service detail page          | REAL_GAP             |
+| 9   | Machine schedule mutation             | OUT_OF_SCOPE_FOR_1_0 |
+| 10  | Task Manager registration             | BLOCKED_EXTERNAL     |
+| 11  | Atlas live acceptance                 | BLOCKED_EXTERNAL     |
