@@ -307,6 +307,57 @@ section[hidden] {
   content: "\2715 ";
 }
 
+/*
+ * A diagnostic that could not be determined -- a permission gap, a missing
+ * binary, a timeout. Deliberately distinct from --unavailable: "I could not
+ * look" must not read as "this is broken", or an operator chases an outage
+ * that may not exist.
+ */
+.status-chip--indeterminate {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.status-chip--indeterminate::before {
+  content: "? ";
+}
+
+/*
+ * An intentionally-disabled capability. Neutral by design and explicitly not
+ * alarm-adjacent: power effects switched off is the documented safe posture,
+ * not a fault.
+ */
+.status-chip--disabled {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.status-chip--disabled::before {
+  content: "\2013 ";
+}
+
+.diagnostic-checks {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-2) 0;
+}
+
+.diagnostic-check {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.diagnostic-check-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+}
+
+.diagnostic-check-detail {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
 .field-unavailable {
   color: var(--text-muted);
   font-style: italic;
