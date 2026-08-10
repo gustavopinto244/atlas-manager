@@ -216,123 +216,130 @@ const machineOperatingPolicySchema = z
     }
   });
 
-const environmentSchema = z
-  .object({
-    HOST: z
-      .string()
-      .min(1, { error: "must not be empty" })
-      .default("127.0.0.1"),
-    PORT: z.coerce
-      .number({ error: "must be a number" })
-      .int({ error: "must be an integer" })
-      .min(1, { error: "must be between 1 and 65535" })
-      .max(65_535, { error: "must be between 1 and 65535" })
-      .default(3000),
-    LOG_LEVEL: z
-      .enum(LOG_LEVELS, {
-        error: `must be one of: ${LOG_LEVELS.join(", ")}`,
-      })
-      .default("info"),
-    POWER_MANAGEMENT_BACKEND: z
-      .enum(POWER_MANAGEMENT_BACKENDS, {
-        error: "must be exactly mock or linux_helper",
-      })
-      .default("mock"),
-    MACHINE_POWER_SCHEDULER_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    BACKUP_SCHEDULER_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    MACHINE_POWER_EFFECTS_ACTIVATION: z
-      .enum(["disabled", "linux_helper"], {
-        error: "must be exactly disabled or linux_helper",
-      })
-      .default("disabled"),
-    MACHINE_POWER_EFFECTS_CONFIRMATION: z.string().optional(),
-    LINUX_POWER_HELPER_EXPECTED_SHA256: z.string().optional(),
-    MACHINE_OPERATING_POLICY: machineOperatingPolicySchema,
-    SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
-      persistenceFilePathSchema.optional(),
-    SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
-      persistenceFilePathSchema.optional(),
-    SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
-    SERVICE_AVAILABILITY_POLICY_FILE: persistenceFilePathSchema.optional(),
-    CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
-    CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED: z
-      .enum(["true", "false"], { error: "must be exactly true or false" })
-      .default("false"),
-    ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_DASHBOARD_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_BACKUP_HTTP_ENABLED: z
-      .enum(["true", "false"], {
-        error: "must be exactly true or false",
-      })
-      .default("false"),
-    ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED: z
-      .enum(["true", "false"], { error: "must be exactly true or false" })
-      .default("false"),
-    ADMINISTRATIVE_PUBLIC_ORIGIN: administrativePublicOriginSchema.optional(),
-    REGISTERED_BACKUP_TARGETS_JSON: z.string().default("[]"),
-    BACKUP_RUN_HISTORY_FILE: persistenceFilePathSchema.optional(),
-    BACKUP_SCHEDULER_CURSOR_FILE: persistenceFilePathSchema.optional(),
-    BACKUP_OCCURRENCE_CLAIM_FILE: persistenceFilePathSchema.optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_FILE:
-      administrativeEventHistoryFileSchema.optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY:
-      persistenceFilePathSchema.optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS: z.string().optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES: z.string().optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY: z.string().optional(),
-    ADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED: z
-      .enum(["true", "false"], { error: "must be exactly true or false" })
-      .default("false"),
-    ADMINISTRATIVE_ROLE_ASSIGNMENTS:
-      administrativeRoleAssignmentsSchema.optional(),
-    MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
-      administrativeEventHistoryFileSchema.optional(),
-    MACHINE_POWER_SCHEDULER_CURSOR_FILE:
-      administrativeEventHistoryFileSchema.optional(),
-  })
-  .superRefine((environment, context) => {
+const environmentObjectSchema = z.object({
+  HOST: z.string().min(1, { error: "must not be empty" }).default("127.0.0.1"),
+  PORT: z.coerce
+    .number({ error: "must be a number" })
+    .int({ error: "must be an integer" })
+    .min(1, { error: "must be between 1 and 65535" })
+    .max(65_535, { error: "must be between 1 and 65535" })
+    .default(3000),
+  LOG_LEVEL: z
+    .enum(LOG_LEVELS, {
+      error: `must be one of: ${LOG_LEVELS.join(", ")}`,
+    })
+    .default("info"),
+  POWER_MANAGEMENT_BACKEND: z
+    .enum(POWER_MANAGEMENT_BACKENDS, {
+      error: "must be exactly mock or linux_helper",
+    })
+    .default("mock"),
+  MACHINE_POWER_SCHEDULER_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  BACKUP_SCHEDULER_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  MACHINE_POWER_EFFECTS_ACTIVATION: z
+    .enum(["disabled", "linux_helper"], {
+      error: "must be exactly disabled or linux_helper",
+    })
+    .default("disabled"),
+  MACHINE_POWER_EFFECTS_CONFIRMATION: z.string().optional(),
+  LINUX_POWER_HELPER_EXPECTED_SHA256: z.string().optional(),
+  MACHINE_OPERATING_POLICY: machineOperatingPolicySchema,
+  SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE:
+    persistenceFilePathSchema.optional(),
+  SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE:
+    persistenceFilePathSchema.optional(),
+  SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
+  SERVICE_AVAILABILITY_POLICY_FILE: persistenceFilePathSchema.optional(),
+  CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
+  CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_EVENT_HISTORY_OPERATIONS_HTTP_ENABLED: z
+    .enum(["true", "false"], { error: "must be exactly true or false" })
+    .default("false"),
+  ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_DASHBOARD_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_BACKUP_HTTP_ENABLED: z
+    .enum(["true", "false"], {
+      error: "must be exactly true or false",
+    })
+    .default("false"),
+  ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED: z
+    .enum(["true", "false"], { error: "must be exactly true or false" })
+    .default("false"),
+  ADMINISTRATIVE_PUBLIC_ORIGIN: administrativePublicOriginSchema.optional(),
+  REGISTERED_BACKUP_TARGETS_JSON: z.string().default("[]"),
+  BACKUP_RUN_HISTORY_FILE: persistenceFilePathSchema.optional(),
+  BACKUP_SCHEDULER_CURSOR_FILE: persistenceFilePathSchema.optional(),
+  BACKUP_OCCURRENCE_CLAIM_FILE: persistenceFilePathSchema.optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_FILE:
+    administrativeEventHistoryFileSchema.optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY: persistenceFilePathSchema.optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_EVENTS: z.string().optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_MAX_SEGMENT_BYTES: z.string().optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_RETENTION_POLICY: z.string().optional(),
+  ADMINISTRATIVE_EVENT_HISTORY_AUTOMATIC_RETENTION_ENABLED: z
+    .enum(["true", "false"], { error: "must be exactly true or false" })
+    .default("false"),
+  ADMINISTRATIVE_ROLE_ASSIGNMENTS:
+    administrativeRoleAssignmentsSchema.optional(),
+  MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE:
+    administrativeEventHistoryFileSchema.optional(),
+  MACHINE_POWER_SCHEDULER_CURSOR_FILE:
+    administrativeEventHistoryFileSchema.optional(),
+});
+
+/**
+ * Every environment variable the runtime reads. Exported so a test can assert
+ * that .env.example documents all of them: an undocumented variable is
+ * invisible to an operator, and the two mandatory Linux power-effects variables
+ * were missing from every configuration example.
+ */
+export const ENVIRONMENT_VARIABLE_NAMES: readonly string[] = Object.freeze(
+  Object.keys(environmentObjectSchema.shape).sort(),
+);
+
+const environmentSchema = environmentObjectSchema.superRefine(
+  (environment, context) => {
     const hasTeamName = environment.CLOUDFLARE_ACCESS_TEAM_NAME !== undefined;
     const hasAudience = environment.CLOUDFLARE_ACCESS_AUDIENCE !== undefined;
     if (hasTeamName !== hasAudience) {
@@ -937,7 +944,8 @@ const environmentSchema = z
         });
       }
     }
-  });
+  },
+);
 
 function isValidPersistenceFilePath(value: string): boolean {
   return value.length > 0 && value.trim() === value && isAbsolute(value);

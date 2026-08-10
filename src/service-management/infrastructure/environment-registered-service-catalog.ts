@@ -12,7 +12,9 @@ import {
   DependencyValidationError,
 } from "../domain/dependency-graph.js";
 
-const REGISTERED_SERVICES_VARIABLE = "REGISTERED_SERVICES_JSON";
+// Read here rather than through the central environment schema. Exported so the
+// .env.example inventory test can account for it.
+export const REGISTERED_SERVICES_VARIABLE = "REGISTERED_SERVICES_JSON";
 const MAX_REGISTERED_SERVICES_JSON_BYTES = 65_536;
 const MAX_REGISTERED_SERVICES = 100;
 const requiredEntryFields = Object.freeze([
