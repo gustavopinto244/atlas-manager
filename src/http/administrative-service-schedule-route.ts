@@ -16,8 +16,10 @@ import { HttpError } from "./errors/http-error.js";
 import { parseStrictJson } from "../config/strict-json.js";
 import { RegisteredServiceNotFoundError } from "../service-management/application/registered-service-not-found-error.js";
 import { ServiceAvailabilityPolicyValidationError } from "../service-scheduling/domain/service-availability-policy-validation-error.js";
+import { ServiceAvailabilityModeValidationError } from "../service-scheduling/domain/service-availability-mode.js";
 import { ServiceScheduleValidationError } from "../service-scheduling/domain/service-schedule-validation-error.js";
 import { ServiceScheduleTimezoneValidationError } from "../service-scheduling/domain/service-schedule-timezone.js";
+import { RegisteredServiceAvailabilityIntervalValidationError } from "../service-management/domain/registered-service-availability-interval.js";
 import { registerAdministrativeRoute } from "./administrative-route-security-catalog.js";
 
 export const ADMINISTRATIVE_SERVICE_SCHEDULE_ROUTE =
@@ -33,6 +35,16 @@ export interface ProtectedAdministrativeServiceSchedule {
   }>;
   readonly removeRegisteredServiceSchedule: Readonly<{
     execute(serviceId: string): Promise<unknown>;
+  }>;
+  readonly previewRegisteredServiceSchedule: Readonly<{
+    execute(
+      serviceId: string,
+      input: {
+        readonly policy: unknown;
+        readonly startsAt: string;
+        readonly endsAt: string;
+      },
+    ): Promise<unknown>;
   }>;
 }
 
@@ -56,6 +68,102 @@ export function registerAdministrativeServiceScheduleRoutes(
       "services.schedule.delete",
     ],
     createHandler(dependencies),
+  );
+  registerAdministrativeRoute(
+    app,
+    ["services.schedule.preview"],
+    createPreviewHandler(dependencies),
+  );
+}
+
+function createPreviewHandler(
+  dependencies: AdministrativeServiceScheduleRouteDependencies,
+): RequestHandler {
+  return (request, response, next) => {
+    setAdministrativeSecurityHeaders(response);
+    const releaseAdmission = dependencies.admission.tryAdmit();
+    if (releaseAdmission === undefined) {
+      response.setHeader("Retry-After", "1");
+      next(
+        new HttpError(
+          429,
+          "administrative_request_limited",
+          "Administrative request limit exceeded",
+        ),
+      );
+      return;
+    }
+    void processPreview(request, response, dependencies)
+      .catch((error) => next(mapError(error)))
+      .finally(releaseAdmission);
+  };
+}
+
+async function processPreview(
+  request: Request,
+  response: Response,
+  dependencies: AdministrativeServiceScheduleRouteDependencies,
+): Promise<void> {
+  if (request.method !== "GET") {
+    response.setHeader("Allow", "GET");
+    throw new HttpError(405, "method_not_allowed", "Method Not Allowed");
+  }
+  const serviceId = request.params.serviceId;
+  if (
+    typeof serviceId !== "string" ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(serviceId)
+  )
+    throw new HttpError(
+      404,
+      "registered_service_not_found",
+      "Service not found",
+    );
+  validateAdministrativeRequestTarget(request.url);
+  validateAdministrativeRequestHasNoBody(request);
+  const query = new URL(request.url, "http://atlas.invalid").searchParams;
+  const keys = [...query.keys()];
+  if (
+    keys.length !== 3 ||
+    new Set(keys).size !== 3 ||
+    !keys.includes("startsAt") ||
+    !keys.includes("endsAt") ||
+    !keys.includes("policy")
+  )
+    throw new HttpError(
+      400,
+      "invalid_service_schedule_request",
+      "Invalid service schedule request",
+    );
+  const startsAt = query.get("startsAt");
+  const endsAt = query.get("endsAt");
+  const rawPolicy = query.get("policy");
+  if (startsAt === null || endsAt === null || rawPolicy === null)
+    throw new HttpError(
+      400,
+      "invalid_service_schedule_request",
+      "Invalid service schedule request",
+    );
+  if (Buffer.byteLength(rawPolicy, "utf8") > MAX_BODY_BYTES)
+    throw new HttpError(413, "payload_too_large", "Payload too large");
+  let policy: unknown;
+  try {
+    policy = parseStrictJson(rawPolicy);
+  } catch {
+    throw new HttpError(
+      400,
+      "invalid_service_schedule_request",
+      "Invalid service schedule request",
+    );
+  }
+  const protectedAdministration = dependencies.createProtectedAdministration(
+    createCloudflareAccessAssertionReader(request),
+  );
+  send(
+    response,
+    await protectedAdministration.previewRegisteredServiceSchedule.execute(
+      serviceId,
+      { policy, startsAt, endsAt },
+    ),
   );
 }
 
@@ -246,8 +354,10 @@ function mapError(error: unknown): HttpError {
     );
   if (
     error instanceof ServiceAvailabilityPolicyValidationError ||
+    error instanceof ServiceAvailabilityModeValidationError ||
     error instanceof ServiceScheduleValidationError ||
-    error instanceof ServiceScheduleTimezoneValidationError
+    error instanceof ServiceScheduleTimezoneValidationError ||
+    error instanceof RegisteredServiceAvailabilityIntervalValidationError
   )
     return new HttpError(
       400,

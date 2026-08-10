@@ -156,7 +156,7 @@ function createPm2Process(
 }
 
 describe("createServiceManagement", () => {
-  it("returns exactly the eighteen frozen application capabilities", () => {
+  it("returns exactly the nineteen frozen application capabilities", () => {
     const capabilities = createServiceManagement({});
 
     expect(capabilities.listRegisteredServices).toBeInstanceOf(
@@ -229,6 +229,7 @@ describe("createServiceManagement", () => {
       "cancelRegisteredServiceAvailabilityOverride",
       "getRegisteredServiceEffectiveAvailability",
       "getRegisteredServiceAvailabilityForInterval",
+      "previewRegisteredServiceAvailabilityPolicy",
       "orchestrateRegisteredServicesStop",
       "pruneExpiredRegisteredServiceAvailabilityOverrides",
       "pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims",

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
-  "routeCount": 46,
+  "routeCount": 47,
   "catalogSha256": "cac1e00ddc07e159ffd84198ddaacadb5284d51af9107cb6f9b23ae5eb417a4a",
   "routeIds": [
     "dashboard.read",
@@ -27,6 +27,7 @@
     "services.schedule.read",
     "services.schedule.update",
     "services.schedule.delete",
+    "services.schedule.preview",
     "operations.read",
     "backups.targets.read",
     "backups.target.read",
