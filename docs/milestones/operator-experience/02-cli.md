@@ -1,5 +1,25 @@
 # CLI plan
 
+## Status (2026-08-10)
+
+Source: `src/cli/command-tree.ts` (`AtlasCommand.implemented`). 23 command
+nodes exist; 16 are implemented, 7 are stubbed and return
+`command_not_implemented`:
+
+| State                                                              | Commands                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implemented                                                        | `status`, `health`, `doctor`, `services list`, `services status`, `services logs`, `services schedule show`, `services schedule preview`, `backups list`, `backups status`, `backups runs`, `events`, `machine status`, `machine plan`, `machine schedule show` |
+| Stubbed, blocked on CLI identity ADR (ADR-028)                     | `services start`, `services stop`, `services restart`                                                                                                                                                                                                           |
+| Stubbed, blocked on infrastructure-diagnostics track (not started) | `infra status`, `infra listeners`, `nginx status`, `nginx test`, `tunnel status`                                                                                                                                                                                |
+
+`services schedule preview` above is the pre-existing **persisted-policy**
+preview. Operator Dashboard v2 Slice 4 added a distinct **candidate-draft**
+preview capability (`PreviewRegisteredServiceAvailabilityPolicy`,
+`GET /admin/services/:id/schedule/preview`) that has no CLI command yet.
+Because preview is read-only, it does not need the CLI identity ADR the way
+mutations do; exposing it via `atlas services schedule preview --policy
+<file>` (or similar) is a small, well-scoped follow-up, not a blocked one.
+
 ## Architectural direction
 
 Implement `atlas` in TypeScript/Node and package it with Atlas Manager. This is

@@ -1,11 +1,19 @@
 # Atlas Operator Experience — reconciled source inventory
 
-Snapshot: 2026-08-09
+Snapshot: 2026-08-09, superseded by
+[`docs/reviews/operator-experience-current-state.md`](../reviews/operator-experience-current-state.md)
+(2026-08-10) after Operator Dashboard v2 Slices 1-4 merged. This file is kept
+as the historical snapshot this reconciliation started from; do not treat its
+route count or the rows below as current without cross-checking the newer
+document.
 
 Implementation baseline: `ebd998d` plus the reviewed operator-experience
 slices on `agent/fix-administrative-profile-contract`.
 
-Administrative route catalog: 45 descriptors
+Administrative route catalog: 45 descriptors as of this snapshot; 47 as of
+2026-08-10 (Slice 3 added `services.resources.read`, Slice 4 added
+`services.schedule.preview`) — see the current-state document above for the
+live-verified count.
 
 This inventory records capabilities present in source. “Partial” means that a
 safe subset is implemented; it is not a release or deployment claim.

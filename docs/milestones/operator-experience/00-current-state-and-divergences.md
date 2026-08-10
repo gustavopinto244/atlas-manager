@@ -1,10 +1,13 @@
 # Historical baseline and resolved divergences
 
 > This file records the 2026-08-08 planning baseline. The current source state
-> is maintained in the [reconciled inventory](../operator-experience-inventory.md)
-> and [capability matrix](../../capabilities.md). The authentication exception,
-> CLI absence and 40-route baseline described below have since been resolved or
-> superseded; the current catalog has 45 descriptors.
+> is maintained in
+> [`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md)
+> (source-derived, 2026-08-10) and the [capability matrix](../../capabilities.md).
+> The authentication exception, CLI absence and 40-route baseline described
+> below have since been resolved or superseded; the current catalog has 47
+> descriptors, verified by `tests/http/administrative-api-contract.test.ts`
+> rather than a static number in any document.
 
 ## Verified local source state
 
