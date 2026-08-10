@@ -400,7 +400,7 @@ describe("administrative control-plane routes", () => {
     expect(dashboard.headers["content-security-policy"]).toContain(
       "default-src 'none'",
     );
-    expect(dashboard.text).toContain("Power safety");
+    expect(dashboard.text).toContain("safety-heading");
     expect(dashboard.text).toContain("power-controls");
     const asset = await request(app).get("/assets/styles.css");
     expect(asset.status).toBe(200);

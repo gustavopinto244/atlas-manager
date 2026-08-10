@@ -23,24 +23,28 @@ const SECTION_BY_PAGE: Readonly<Record<DashboardPage, readonly string[]>> =
     settings: ["settings-placeholder"],
   });
 
+const PAGE_LABEL: Readonly<Record<DashboardPage, string>> = Object.freeze(
+  Object.fromEntries(DASHBOARD_PAGES) as Record<DashboardPage, string>,
+);
+
 export function initializeDashboardNavigation(
   document: Document,
   initialPage?: DashboardPage,
 ): void {
-  const main = document.querySelector("main");
-  if (main === null) return;
-  const navigation = document.createElement("nav");
-  navigation.className = "dashboard-navigation";
-  navigation.setAttribute("aria-label", "Administrative sections");
+  const sidebar = document.querySelector<HTMLElement>("#dashboard-sidebar");
+  const main = document.querySelector<HTMLElement>("main");
+  if (sidebar === null || main === null) return;
+
+  sidebar.replaceChildren();
   for (const [page, label] of DASHBOARD_PAGES) {
     const link = document.createElement("a");
     link.href = `#${page}`;
     link.dataset.page = page;
     link.textContent = label;
-    link.addEventListener("click", () => showDashboardPage(document, page));
-    navigation.append(link);
+    link.addEventListener("click", () => closeMobileNavigation(document));
+    sidebar.append(link);
   }
-  main.prepend(navigation);
+
   ensurePlaceholderSection(
     document,
     "infrastructure-placeholder",
@@ -53,9 +57,13 @@ export function initializeDashboardNavigation(
     "Settings",
     "Settings remain server-owned and protected by the administrative API.",
   );
+
+  initializeMobileNavigationToggle(document);
+
   showDashboardPage(
     document,
     initialPage ?? dashboardPageFromHash(document.defaultView?.location.hash),
+    { focusMain: false },
   );
   document.defaultView?.addEventListener("hashchange", () => {
     showDashboardPage(
@@ -68,6 +76,7 @@ export function initializeDashboardNavigation(
 export function showDashboardPage(
   document: Document,
   page: DashboardPage,
+  options?: { readonly focusMain?: boolean },
 ): void {
   const visible = new Set(SECTION_BY_PAGE[page]);
   for (const section of document.querySelectorAll<HTMLElement>(
@@ -77,13 +86,53 @@ export function showDashboardPage(
     section.hidden = !visible.has(id);
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>(
-    ".dashboard-navigation a",
+    "#dashboard-sidebar a",
   )) {
     const active = link.dataset.page === page;
     link.classList.toggle("active", active);
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  closeMobileNavigation(document);
+  if (options?.focusMain !== false) {
+    const main = document.querySelector<HTMLElement>("main");
+    main?.focus();
+  }
+  announcePageChange(document, PAGE_LABEL[page]);
+}
+
+function announcePageChange(document: Document, label: string): void {
+  const status = document.querySelector<HTMLElement>("#status");
+  if (status === null) return;
+  status.textContent = `Viewing ${label}.`;
+}
+
+function initializeMobileNavigationToggle(document: Document): void {
+  const shell = document.querySelector<HTMLElement>(".dashboard-shell");
+  const toggle = document.querySelector<HTMLButtonElement>(
+    ".dashboard-nav-toggle",
+  );
+  const scrim = document.querySelector<HTMLElement>(".dashboard-scrim");
+  if (shell === null || toggle === null) return;
+  toggle.addEventListener("click", () => {
+    const open = !shell.classList.contains("nav-open");
+    shell.classList.toggle("nav-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  });
+  scrim?.addEventListener("click", () => closeMobileNavigation(document));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMobileNavigation(document);
+  });
+}
+
+function closeMobileNavigation(document: Document): void {
+  const shell = document.querySelector<HTMLElement>(".dashboard-shell");
+  const toggle = document.querySelector<HTMLButtonElement>(
+    ".dashboard-nav-toggle",
+  );
+  if (shell === null) return;
+  shell.classList.remove("nav-open");
+  toggle?.setAttribute("aria-expanded", "false");
 }
 
 function ensurePlaceholderSection(

@@ -35,6 +35,15 @@ const infrastructure = document.querySelector<HTMLElement>(
   "#infrastructure-placeholder",
 );
 const powerControls = document.querySelector<HTMLElement>("#power-controls");
+const environmentLabel = document.querySelector<HTMLElement>(
+  "#dashboard-environment",
+);
+const healthLabel = document.querySelector<HTMLElement>("#dashboard-health");
+const lastRefreshLabel = document.querySelector<HTMLElement>(
+  "#dashboard-last-refresh",
+);
+const refreshButton =
+  document.querySelector<HTMLButtonElement>("#dashboard-refresh");
 
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
@@ -101,9 +110,15 @@ function renderOverview(value: unknown): void {
   // from the root reported "unavailable" on every build regardless of the
   // configured value. There is no sourceCommit field in the contract, so the
   // dashboard no longer claims one.
+  const applicationVersion = displayValue(
+    readRecord(record.application).version,
+    "unavailable",
+  );
   const metadata = document.createElement("p");
-  metadata.textContent = `Version: ${displayValue(readRecord(record.application).version, "unavailable")}`;
+  metadata.textContent = `Version: ${applicationVersion}`;
   root.append(grid, metadata);
+  if (environmentLabel !== null)
+    environmentLabel.textContent = `Release: ${applicationVersion}`;
   if (powerControls !== null)
     void powerControlsController.render(
       powerControls,
@@ -762,20 +777,44 @@ function createSection(
   return Object.freeze({ capability, status, load });
 }
 
-const coordinator = new DashboardRefreshCoordinator(
-  [
-    createSection("Overview", root, loadOverview),
-    createSection("Services", services, loadServices),
-    createSection("Schedules", availability, loadSchedules),
-    createSection("Events", audit, loadEvents),
-    createSection("Backups", backups, loadBackups),
-    createSection("Infrastructure", infrastructure, loadInfrastructure),
-  ].filter((section): section is DashboardSection => section !== undefined),
-);
+const dashboardSections = [
+  createSection("Overview", root, loadOverview),
+  createSection("Services", services, loadServices),
+  createSection("Schedules", availability, loadSchedules),
+  createSection("Events", audit, loadEvents),
+  createSection("Backups", backups, loadBackups),
+  createSection("Infrastructure", infrastructure, loadInfrastructure),
+].filter((section): section is DashboardSection => section !== undefined);
+
+const coordinator = new DashboardRefreshCoordinator(dashboardSections);
 
 async function refresh(): Promise<void> {
+  if (refreshButton !== null) refreshButton.disabled = true;
   await coordinator.refresh();
+  reportGlobalHealth();
+  reportLastRefresh();
+  if (refreshButton !== null) refreshButton.disabled = false;
 }
+
+function reportGlobalHealth(): void {
+  if (healthLabel === null) return;
+  const states = dashboardSections.map((section) => section.status.state.kind);
+  const label = states.every((kind) => kind === "ready" || kind === "empty")
+    ? "Healthy"
+    : states.every((kind) => kind === "failed")
+      ? "Unavailable"
+      : "Degraded";
+  healthLabel.textContent = `Health: ${label}`;
+}
+
+function reportLastRefresh(): void {
+  if (lastRefreshLabel === null) return;
+  lastRefreshLabel.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
+}
+
+refreshButton?.addEventListener("click", () => {
+  void refresh();
+});
 
 function createPreviewWindow(): Readonly<{
   startsAt: string;

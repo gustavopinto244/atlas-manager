@@ -22,14 +22,9 @@ if (expected.schemaVersion !== 1 || !Array.isArray(expected.files))
   throw new Error("dashboard_manifest_invalid");
 const names = expected.files.map((file) => file.path);
 if (
-  names.length !== 5 ||
+  names.length !== 3 ||
   new Set(names).size !== names.length ||
-  names.some(
-    (name) =>
-      !/^(?:app|backup|event-history)\.js$|^(?:index\.html|styles\.css)$/u.test(
-        name,
-      ),
-  )
+  names.some((name) => !/^app\.js$|^(?:index\.html|styles\.css)$/u.test(name))
 )
   throw new Error("dashboard_manifest_inventory_invalid");
 
@@ -106,6 +101,6 @@ for (const file of names) {
     throw new Error(`dashboard_bundle_inventory_invalid:${file}`);
 }
 process.stdout.write(
-  JSON.stringify({ result: "passed", fileCount: 5, servedAssetCount: 2 }) +
+  JSON.stringify({ result: "passed", fileCount: 3, servedAssetCount: 2 }) +
     "\n",
 );
