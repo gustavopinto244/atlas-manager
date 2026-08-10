@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 
 import {
   createServerHealthHandler,
@@ -54,6 +54,7 @@ import {
   type AdministrativeSecurityStatusRouteDependencies,
 } from "./administrative-security-status-route.js";
 import { createAdministrativeSecurityEnvelope } from "./administrative-security-envelope.js";
+import { setAdministrativeSecurityHeaders } from "./administrative-http.js";
 import type { AdministrativePublicOrigin } from "./administrative-public-origin.js";
 import {
   expectedAdministrativeRouteIds,
@@ -208,10 +209,29 @@ export function createApp({
   );
   administrativeRouteCatalogStatus?.markReconciled();
 
-  app.get("/health/live", (_request, response) => {
+  // Health endpoints stay unauthenticated on purpose: the documented local curl
+  // checks and any local supervision depend on them, and the process is bound to
+  // the loopback interface whenever administration is enabled. They deliberately
+  // do not get the administrative envelope, whose Host and Origin checks would
+  // reject a loopback request against the public administrative origin.
+  //
+  // They do get the same hardening headers, so /health/server — which reports
+  // host memory, CPU, temperature, load and disk — cannot be cached, framed or
+  // content-sniffed if a proxy ever exposes it by mistake. Keeping it off the
+  // public server block is the reverse proxy's job; see
+  // docs/operations/atlas-manager-nginx.md.
+  const healthHeaders: RequestHandler = (_request, response, next) => {
+    setAdministrativeSecurityHeaders(response);
+    next();
+  };
+  app.get("/health/live", healthHeaders, (_request, response) => {
     response.status(200).json({ status: "ok" });
   });
-  app.get("/health/server", createServerHealthHandler(getServerHealth));
+  app.get(
+    "/health/server",
+    healthHeaders,
+    createServerHealthHandler(getServerHealth),
+  );
 
   app.use(notFoundHandler);
   app.use(createErrorHandler(logger));

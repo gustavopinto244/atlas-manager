@@ -118,6 +118,7 @@ changing administrative features or registered services.
 - [Architecture](docs/architecture.md)
 - [Architecture decisions](docs/adr/)
 - [Service lifecycle](docs/operations/atlas-manager-service-lifecycle.md)
+- [Reverse proxy](docs/operations/atlas-manager-nginx.md)
 - [Operator CLI](docs/cli.md)
 - [Operator runbook](docs/operator-runbook.md)
 - [Installation and reinstallation](docs/installation.md)
