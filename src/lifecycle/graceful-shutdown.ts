@@ -8,6 +8,7 @@ export type ApplicationShutdownReason =
   | Readonly<{
       kind:
         | "http_server_error"
+        | "unhandled_error"
         | "scheduler_incomplete"
         | "scheduler_conflict"
         | "scheduler_failed"

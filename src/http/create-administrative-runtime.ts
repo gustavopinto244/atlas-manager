@@ -15,6 +15,7 @@ import {
 import type { MachineShutdownConfirmationReader } from "../power-management/application/ports/machine-shutdown-readiness-readers.js";
 import type { ServiceManagementCapabilities } from "../service-management/composition/create-service-management.js";
 import type { AdministrativeEventHistoryPage } from "../event-history/domain/administrative-event-history-page.js";
+import { APPLICATION_VERSION } from "../config/application-version.js";
 import {
   FixedAdministrativeRequestAdmission,
   type AdministrativeRequestClock,
@@ -166,7 +167,7 @@ export function createAdministrativeRuntime(
       : []),
     ...(config.administrativeServiceAvailabilityHttpEnabled &&
     config.serviceAvailabilityPolicyFilePath !== undefined
-      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED"]
+      ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
       ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
@@ -360,7 +361,7 @@ export function createAdministrativeRuntime(
               execute: () => Promise.resolve({ status: "ok" }),
             },
             applicationVersion:
-              compositionDependencies.applicationVersion ?? "1.0.0-rc.8",
+              compositionDependencies.applicationVersion ?? APPLICATION_VERSION,
             administration: Object.freeze({
               wakeAlarmEnabled: config.administrativeWakeAlarmHttpEnabled,
               shutdownEnabled: config.administrativeShutdownHttpEnabled,

@@ -53,6 +53,46 @@ for (const file of expected.files) {
   if (!sourceBytes.equals(bundleBytes))
     throw new Error(`dashboard_bundle_bytes_invalid:${file.path}`);
 }
+// The checks above cover <bundle>/dashboard/, which is a reference copy. The
+// process serves application/dist/dashboard/ instead, resolved relative to the
+// compiled route module. Verify the artefact the browser actually receives:
+// it must be byte-identical to the reference asset already validated against
+// the manifest digest, and it must not still be an ES module, because the HTML
+// shell loads it as a classic script.
+const SERVED_ASSETS = Object.freeze({
+  "main.js": "app.js",
+  "styles.css": "styles.css",
+});
+for (const [servedName, assetName] of Object.entries(SERVED_ASSETS)) {
+  const servedPath = join(
+    bundleRoot,
+    "application",
+    "dist",
+    "dashboard",
+    servedName,
+  );
+  let servedInfo;
+  try {
+    servedInfo = await stat(servedPath);
+  } catch {
+    throw new Error(`dashboard_served_asset_missing:${servedName}`);
+  }
+  if (!servedInfo.isFile())
+    throw new Error(`dashboard_served_asset_type_invalid:${servedName}`);
+  const [servedBytes, assetBytes] = await Promise.all([
+    readFile(servedPath),
+    readFile(join(sourceRoot, assetName)),
+  ]);
+  if (!servedBytes.equals(assetBytes))
+    throw new Error(`dashboard_served_asset_bytes_invalid:${servedName}`);
+}
+const servedApp = await readFile(
+  join(bundleRoot, "application", "dist", "dashboard", "main.js"),
+  "utf8",
+);
+if (/^\s*(?:import|export)\s/mu.test(servedApp))
+  throw new Error("dashboard_app_not_bundled");
+
 const bundleManifest = await readFile(
   join(bundleRoot, "MANIFEST.json"),
   "utf8",
@@ -65,4 +105,7 @@ for (const file of names) {
   )
     throw new Error(`dashboard_bundle_inventory_invalid:${file}`);
 }
-process.stdout.write(JSON.stringify({ result: "passed", fileCount: 5 }) + "\n");
+process.stdout.write(
+  JSON.stringify({ result: "passed", fileCount: 5, servedAssetCount: 2 }) +
+    "\n",
+);

@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.0.0-rc.12
+
+- closes deployability and authentication-hardening gates identified by the
+  pre-deployment audit (CRIT-01 plaintext sudo password, MED-06 unhandled errors)
+  and the 2026-08-09 Cloudflare Access authentication loop;
+- distinguishes JWT verification failures internally (signature_invalid,
+  issuer_mismatch, audience_mismatch, claims_invalid, key_unavailable) for
+  self-diagnosing audit trails without temporary diagnostic routes;
+- registers process-level handlers for unhandledRejection and uncaughtException,
+  ensuring graceful shutdown with failure exit codes instead of orphaned
+  processes;
+- delivers reference templates for Nginx administrative server block
+  (deployment/nginx/atlas-manager-admin.conf) and scoped sudoers file
+  (deployment/sudoers/atlas-manager-operator), with regression tests ensuring
+  critical invariants remain checked into the repository;
+- defers Operator Dashboard v2 Slice 1 (Task Manager PM2 registration) to rc.13
+  and PM2/Docker sudoers decisions to operational deployment feedback;
+- retains mock-only power safety and no real host deployment.
+
+## 1.0.0-rc.11
+
+- fixes Cloudflare Access identity readiness against the production JWKS envelope
+  returned by the configured Access team;
+- accepts the required `keys` member and official optional metadata members
+  `public_cert` and `public_certs` in the JWKS parser;
+- rejects unknown envelope fields and validates every signing key as a bounded,
+  unique RS256 RSA key;
+- supports concurrent JWKS refresh coalescing and bounded provider cooldown after
+  failures;
+- keeps power mock-only with physical effects disabled and no Atlas host
+  deployment.
+
+## 1.0.0-rc.10
+
+- aligns Cloudflare Access application-token verification with the assertion
+  format observed at the qualified administrative ingress;
+- accepts the optional JWT protected-header `typ` when absent and requires
+  exactly `JWT` when present;
+- fixes authenticated dashboard requests whose valid Cloudflare Access assertion
+  omits the optional `typ` header;
+- does not weaken Host, Origin, Cloudflare Access, RBAC, audit, admission, or
+  mutation controls;
+- retains mock-only power for qualification and deployment.
+
+## 1.0.0-rc.9
+
+- fixes dashboard-access hotfix for the qualified rc.8 deployment in response to
+  Cloudflare Access redirecting the browser from the Access login domain to the
+  administrative origin;
+- accepts the exact cross-site return shape: `GET /` with `Sec-Fetch-Site:
+  cross-site`, `Sec-Fetch-Mode: navigate`, and `Sec-Fetch-Dest: document`;
+- maintains mandatory authentication after the envelope check with Cloudflare
+  Access assertion verification and backend-authoritative RBAC;
+- keeps Host and Origin validation enabled with cross-site administrative API and
+  mutation requests rejected;
+- requires reproducible byte-identical bundle qualification and mock-only power
+  safety.
+
 ## 1.0.0-rc.8
 
 - assigns a new immutable release identity to the Advanced Manager readiness

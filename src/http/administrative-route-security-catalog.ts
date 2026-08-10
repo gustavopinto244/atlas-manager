@@ -51,7 +51,13 @@ const ADMINISTRATIVE_ACTIVATION_FLAGS = new Set([
   "ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED",
   "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED",
   "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED",
-  "ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED",
+  // Not an environment variable. Unlike every other entry here, this one is a
+  // derived runtime activation: the service schedule routes register when
+  // service availability HTTP is enabled *and* SERVICE_AVAILABILITY_POLICY_FILE
+  // gives them a policy store. The _HTTP_ENABLED suffix it carried before
+  // implied an operator-settable variable that has never existed, which sent
+  // readers looking for it in .env.example.
+  "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
   "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED",
   "ADMINISTRATIVE_BACKUP_HTTP_ENABLED",
   "ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED",
@@ -304,7 +310,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "services.schedule.read",
       "GET",
       "/admin/services/:serviceId/schedule",
-      "ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED",
+      "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
       "read_registered_service_schedule",
     ),
     read(
@@ -336,7 +342,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "services.schedule.update",
       "PUT",
       "/admin/services/:serviceId/schedule",
-      "ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED",
+      "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
       "update_registered_service_schedule",
       "confirm_registered_service_schedule_update",
       "service_mutation",
@@ -345,7 +351,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "services.schedule.delete",
       "DELETE",
       "/admin/services/:serviceId/schedule",
-      "ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED",
+      "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
       "remove_registered_service_schedule",
       "confirm_registered_service_schedule_removal",
       "service_mutation",

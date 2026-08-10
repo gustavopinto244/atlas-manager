@@ -10,6 +10,18 @@ import {
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
+import {
+  AdministrativeApiClient,
+  hasRecordArray,
+  isRecord,
+  type AdministrativeReadResult,
+} from "./api-client.js";
+import { SectionStatusRegion } from "./section-state.js";
+import {
+  DashboardRefreshCoordinator,
+  type DashboardSection,
+  type SectionLoadResult,
+} from "./refresh-coordinator.js";
 
 initializeDashboardNavigation(document);
 
@@ -84,8 +96,12 @@ function renderOverview(value: unknown): void {
     displayValue(record.observedAt, "unavailable"),
     "infrastructure",
   );
+  // The overview envelope nests the version under "application"; reading it
+  // from the root reported "unavailable" on every build regardless of the
+  // configured value. There is no sourceCommit field in the contract, so the
+  // dashboard no longer claims one.
   const metadata = document.createElement("p");
-  metadata.textContent = `Version: ${displayValue(record.applicationVersion, "unavailable")} · source: ${displayValue(record.sourceCommit, "unavailable")}`;
+  metadata.textContent = `Version: ${displayValue(readRecord(record.application).version, "unavailable")}`;
   root.append(grid, metadata);
   if (powerControls !== null)
     void powerControlsController.render(
@@ -168,16 +184,7 @@ function renderInfrastructure(value: unknown): void {
 function renderServices(value: unknown): void {
   if (services === null) return;
   services.replaceChildren();
-  const list =
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray((value as { services?: unknown }).services)
-      ? (value as { services: readonly Record<string, unknown>[] }).services
-      : [];
-  if (list.length === 0) {
-    addText(services, "No registered services.");
-    return;
-  }
+  const list = readServiceList(value);
   for (const service of list) {
     const article = document.createElement("article");
     const heading = document.createElement("h3");
@@ -314,13 +321,9 @@ function renderMachinePlan(value: unknown): void {
   renderMachinePreviewView(document, preview, value);
 }
 
-function renderAvailability(value: unknown): void {
+function renderAvailability(value: readonly unknown[]): void {
   if (availability === null) return;
   availability.replaceChildren();
-  if (!Array.isArray(value) || value.length === 0) {
-    addText(availability, "No service schedules available.");
-    return;
-  }
   for (const entry of value) {
     const article = document.createElement("article");
     const heading = document.createElement("h3");
@@ -343,16 +346,7 @@ function renderAvailability(value: unknown): void {
 function renderBackups(value: unknown, runsValue: unknown): void {
   if (backups === null) return;
   backups.replaceChildren();
-  const list =
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray((value as { targets?: unknown }).targets)
-      ? (value as { targets: readonly Record<string, unknown>[] }).targets
-      : [];
-  if (list.length === 0) {
-    addText(backups, "No registered backup targets.");
-    return;
-  }
+  const list = readRecordArray(value, "targets");
   for (const target of list) {
     const article = document.createElement("article");
     const heading = document.createElement("h3");
@@ -561,72 +555,222 @@ const powerControlsController = new PowerControlsController({
   },
 });
 
-async function refresh(): Promise<void> {
-  const [
-    overview,
-    serviceList,
-    history,
-    integrity,
-    retention,
-    exports,
-    backupTargets,
-    backupRuns,
-    securityPosture,
-  ] = await Promise.all([
-    readJson("/admin/overview"),
-    readJson("/admin/services"),
-    readJson("/admin/event-history?limit=20"),
-    readJson("/admin/event-history/integrity").catch(() => ({
-      outcome: "unavailable",
-    })),
-    readJson("/admin/event-history/retention").catch(() => ({
-      eligibleSegmentCount: 0,
-    })),
-    readJson("/admin/event-history/exports").catch(() => ({ exports: [] })),
-    readJson("/admin/backups/targets").catch(() => ({ targets: [] })),
-    readJson("/admin/backups/runs?limit=20").catch(() => ({ runs: [] })),
-    readJson("/admin/security/status").catch(() => ({ status: "unavailable" })),
-  ]);
-  const serviceValues =
-    typeof serviceList === "object" &&
-    serviceList !== null &&
-    Array.isArray((serviceList as { services?: unknown }).services)
-      ? (serviceList as { services: readonly Record<string, unknown>[] })
-          .services
-      : [];
-  const policies = await Promise.all(
+const apiClient = new AdministrativeApiClient({
+  fetch: (path, init) => fetch(path, init),
+});
+
+function readServiceList(value: unknown): readonly Record<string, unknown>[] {
+  return readRecordArray(value, "services");
+}
+
+function readRecordArray(
+  value: unknown,
+  key: string,
+): readonly Record<string, unknown>[] {
+  return isRecord(value) && Array.isArray(value[key])
+    ? (value[key] as readonly Record<string, unknown>[])
+    : [];
+}
+
+function failed(result: AdministrativeReadResult): SectionLoadResult {
+  return Object.freeze({
+    kind: "failed" as const,
+    outcome: result.outcome === "success" ? "invalid_response" : result.outcome,
+  });
+}
+
+// The services list backs both the Services and Schedules sections. Reading it
+// once per refresh keeps request volume flat against the administrative
+// admission limit; the two sections still settle and fail independently,
+// because each interprets the shared outcome on its own.
+let sharedServiceListToken = 0;
+let sharedServiceList:
+  | Readonly<{ token: number; result: Promise<AdministrativeReadResult> }>
+  | undefined;
+
+function readServicesOnce(): Promise<AdministrativeReadResult> {
+  if (sharedServiceList !== undefined) return sharedServiceList.result;
+  const token = ++sharedServiceListToken;
+  const result = apiClient.read("/admin/services", hasRecordArray("services"));
+  sharedServiceList = Object.freeze({ token, result });
+  void result.finally(() => {
+    if (sharedServiceList?.token === token) sharedServiceList = undefined;
+  });
+  return result;
+}
+
+async function loadOverview(): Promise<SectionLoadResult> {
+  const result = await apiClient.read("/admin/overview", isRecord);
+  if (result.outcome !== "success") return failed(result);
+  const value = result.value;
+  return Object.freeze({
+    kind: "ready" as const,
+    render: () => {
+      renderOverview(value);
+      renderMachinePlan(value);
+    },
+  });
+}
+
+async function loadServices(): Promise<SectionLoadResult> {
+  const result = await readServicesOnce();
+  if (result.outcome !== "success") return failed(result);
+  const value = result.value;
+  const list = readServiceList(value);
+  const render = () => {
+    renderServices(value);
+  };
+  return list.length === 0
+    ? Object.freeze({
+        kind: "empty" as const,
+        message: "No registered services.",
+        render,
+      })
+    : Object.freeze({ kind: "ready" as const, render });
+}
+
+async function loadSchedules(): Promise<SectionLoadResult> {
+  const result = await readServicesOnce();
+  if (result.outcome !== "success") return failed(result);
+  const serviceValues = readServiceList(result.value);
+  const previewWindow = createPreviewWindow();
+  const schedules = await Promise.all(
     serviceValues.map(async (service) => {
       const servicePath = encodeURIComponent(String(service.id));
-      const schedule = await readJson(
+      const schedule = await apiClient.read(
         `/admin/services/${servicePath}/schedule`,
-      ).catch(() => null);
-      if (schedule !== null) return { value: schedule, scheduleEditable: true };
-      const availability = await readJson(
-        `/admin/services/${servicePath}/availability`,
-      ).catch(() => null);
-      return { value: availability, scheduleEditable: false };
+        isRecord,
+      );
+      const policy =
+        schedule.outcome === "success"
+          ? { value: schedule.value, scheduleEditable: true }
+          : {
+              value: await apiClient
+                .read(`/admin/services/${servicePath}/availability`, isRecord)
+                .then((read) =>
+                  read.outcome === "success" ? read.value : null,
+                ),
+              scheduleEditable: false,
+            };
+      const preview = await apiClient.read(
+        `/admin/services/${servicePath}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
+        isRecord,
+      );
+      return {
+        ...(isRecord(policy.value) ? policy.value : {}),
+        scheduleEditable: policy.scheduleEditable,
+        preview: preview.outcome === "success" ? preview.value : null,
+      };
     }),
   );
-  const previewWindow = createPreviewWindow();
-  const previews = await Promise.all(
-    serviceValues.map((service) =>
-      readJson(
-        `/admin/services/${encodeURIComponent(String(service.id))}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
-      ).catch(() => null),
-    ),
+  const render = () => {
+    renderAvailability(schedules);
+  };
+  return schedules.length === 0
+    ? Object.freeze({
+        kind: "empty" as const,
+        message: "No service schedules available.",
+        render,
+      })
+    : Object.freeze({ kind: "ready" as const, render });
+}
+
+async function loadEvents(): Promise<SectionLoadResult> {
+  const history = await apiClient.read("/admin/event-history?limit=20");
+  if (history.outcome !== "success") return failed(history);
+  const [integrity, retention, exports] = await Promise.all([
+    apiClient.read("/admin/event-history/integrity"),
+    apiClient.read("/admin/event-history/retention"),
+    apiClient.read("/admin/event-history/exports"),
+  ]);
+  const value = {
+    history: history.value,
+    integrity:
+      integrity.outcome === "success"
+        ? integrity.value
+        : { outcome: integrity.outcome },
+    retention:
+      retention.outcome === "success"
+        ? retention.value
+        : { outcome: retention.outcome },
+    exports:
+      exports.outcome === "success"
+        ? exports.value
+        : { outcome: exports.outcome },
+  };
+  return Object.freeze({
+    kind: "ready" as const,
+    render: () => {
+      renderAudit(value);
+    },
+  });
+}
+
+async function loadBackups(): Promise<SectionLoadResult> {
+  const targets = await apiClient.read(
+    "/admin/backups/targets",
+    hasRecordArray("targets"),
   );
-  const schedules = policies.map(({ value, scheduleEditable }, index) => ({
-    ...(typeof value === "object" && value !== null ? value : {}),
-    scheduleEditable,
-    preview: previews[index],
-  }));
-  renderOverview(overview);
-  renderMachinePlan(overview);
-  renderServices(serviceList);
-  renderAvailability(schedules);
-  renderAudit({ history, integrity, retention, exports });
-  renderBackups(backupTargets, backupRuns);
-  renderInfrastructure(securityPosture);
+  if (targets.outcome !== "success") return failed(targets);
+  const runs = await apiClient.read("/admin/backups/runs?limit=20");
+  const runsValue = runs.outcome === "success" ? runs.value : { runs: [] };
+  const targetsValue = targets.value;
+  const render = () => {
+    renderBackups(targetsValue, runsValue);
+  };
+  return readRecordArray(targetsValue, "targets").length === 0
+    ? Object.freeze({
+        kind: "empty" as const,
+        message: "No registered backup targets.",
+        render,
+      })
+    : Object.freeze({ kind: "ready" as const, render });
+}
+
+async function loadInfrastructure(): Promise<SectionLoadResult> {
+  const result = await apiClient.read("/admin/security/status", isRecord);
+  if (result.outcome !== "success") return failed(result);
+  const value = result.value;
+  return Object.freeze({
+    kind: "ready" as const,
+    render: () => {
+      renderInfrastructure(value);
+    },
+  });
+}
+
+function createSection(
+  capability: string,
+  content: HTMLElement | null,
+  load: () => Promise<SectionLoadResult>,
+): DashboardSection | undefined {
+  if (content === null) return undefined;
+  const container = content.closest("section") ?? content.parentElement;
+  if (container === null) return undefined;
+  const status = new SectionStatusRegion({
+    document,
+    container,
+    capability,
+    onRetry: () => {
+      void coordinator.refreshCapability(capability);
+    },
+  });
+  return Object.freeze({ capability, status, load });
+}
+
+const coordinator = new DashboardRefreshCoordinator(
+  [
+    createSection("Overview", root, loadOverview),
+    createSection("Services", services, loadServices),
+    createSection("Schedules", availability, loadSchedules),
+    createSection("Events", audit, loadEvents),
+    createSection("Backups", backups, loadBackups),
+    createSection("Infrastructure", infrastructure, loadInfrastructure),
+  ].filter((section): section is DashboardSection => section !== undefined),
+);
+
+async function refresh(): Promise<void> {
+  await coordinator.refresh();
 }
 
 function createPreviewWindow(): Readonly<{
@@ -641,7 +785,6 @@ function createPreviewWindow(): Readonly<{
   };
 }
 
-void refresh().catch(() => {
-  if (status !== null)
-    status.textContent = "Administrative overview unavailable.";
-});
+// The coordinator settles every section independently and reports failures in
+// each section's own live region, so this can no longer reject as a whole.
+void refresh();

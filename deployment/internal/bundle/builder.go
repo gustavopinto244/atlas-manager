@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,11 @@ const (
 	PinnedGo   = "1.23.0"
 	MaxOutput  = 64 * 1024
 )
+
+// unbundledModuleStatement mirrors the guard in
+// scripts/generate-dashboard-assets.mjs so both build paths reject the same
+// shape of output.
+var unbundledModuleStatement = regexp.MustCompile(`(?m)^\s*(?:import|export)\s`)
 
 type Config struct {
 	Version                                string
@@ -131,10 +137,14 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	if _, err := config.Runner.Run(ctx, "npm", []string{"ci", "--ignore-scripts"}, buildRoot, environment); err != nil {
 		return Result{}, err
 	}
-	if _, err := config.Runner.Run(ctx, "node", []string{"node_modules/typescript/bin/tsc", "-p", "tsconfig.deployment.json"}, buildRoot, environment); err != nil {
+	// The deployment build runs the same npm pipeline as the application build so
+	// the dashboard bundling step has exactly one implementation. A second copy of
+	// that logic here is what previously shipped an unbundled ES module as the
+	// served /assets/app.js.
+	if _, err := config.Runner.Run(ctx, "npm", []string{"run", "build:deployment"}, buildRoot, environment); err != nil {
 		return Result{}, err
 	}
-	if err := copyFile(filepath.Join(config.SourceRoot, "src", "dashboard", "styles.css"), filepath.Join(buildRoot, "dist", "dashboard", "styles.css"), 0o644); err != nil {
+	if err := verifyServedDashboardAssets(buildRoot); err != nil {
 		return Result{}, err
 	}
 	if err := copyFile(filepath.Join(buildRoot, "package.json"), filepath.Join(runtimeRoot, "package.json"), 0o644); err != nil {
@@ -169,6 +179,9 @@ func Build(ctx context.Context, config Config) (Result, error) {
 		if err := copyDashboardAssets(root, config.DashboardAssetsRoot); err != nil {
 			return Result{}, err
 		}
+	}
+	if err := rejectEnvironmentSecrets(root); err != nil {
+		return Result{}, err
 	}
 	paths, err := manifest.Files(filepath.Join(root, "application"))
 	if err != nil {
@@ -335,7 +348,54 @@ func copyBuildInputs(source, destination string) error {
 			return err
 		}
 	}
-	return copyTree(filepath.Join(source, "src"), filepath.Join(destination, "src"))
+	if err := copyTree(filepath.Join(source, "src"), filepath.Join(destination, "src")); err != nil {
+		return err
+	}
+	// build:deployment runs scripts/generate-dashboard-assets.mjs.
+	return copyTree(filepath.Join(source, "scripts"), filepath.Join(destination, "scripts"))
+}
+
+// rejectEnvironmentSecrets refuses to publish a bundle containing an operator
+// environment file. Nothing in the build copies one today, so this asserts that
+// property explicitly rather than leaving it to depend on which paths
+// copyBuildInputs happens to select. Operator environment files hold live
+// credentials and belong only in root-owned configuration on the host.
+//
+// The bundle legitimately ships config/atlas-manager.env.example, whose name
+// does not start with the reserved prefix.
+func rejectEnvironmentSecrets(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("bundle_secret_scan_failed")
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".env") {
+			return fmt.Errorf("bundle_environment_secret_present")
+		}
+		return nil
+	})
+}
+
+// verifyServedDashboardAssets rejects a build whose served dashboard entrypoint
+// is still an ES module. The HTML shell loads /assets/app.js as a classic
+// script, so a surviving import or export statement is a browser SyntaxError
+// that leaves the dashboard stuck on its loading placeholder.
+func verifyServedDashboardAssets(buildRoot string) error {
+	for _, name := range []string{"main.js", "styles.css"} {
+		if _, err := os.Stat(filepath.Join(buildRoot, "dist", "dashboard", name)); err != nil {
+			return fmt.Errorf("dashboard_served_asset_missing")
+		}
+	}
+	served, err := os.ReadFile(filepath.Join(buildRoot, "dist", "dashboard", "main.js"))
+	if err != nil {
+		return fmt.Errorf("dashboard_served_asset_missing")
+	}
+	if unbundledModuleStatement.Match(served) {
+		return fmt.Errorf("dashboard_app_not_bundled")
+	}
+	return nil
 }
 
 func assemble(root, buildRoot, runtimeRoot string, config Config) error {

@@ -40,6 +40,17 @@ func (buildRunner) Run(_ context.Context, name string, args []string, directory 
 		return "go version go1.23.0 linux/amd64\n", nil
 	case name == "npm" && strings.Contains(joined, "--omit=dev"):
 		return "", writeFile(filepath.Join(directory, "node_modules/runtime/index.js"), "export {};\n", 0o644)
+	case name == "npm" && joined == "run build:deployment":
+		// Stand in for tsc plus the dashboard bundling step: the served
+		// entrypoint must arrive already bundled, as an IIFE with no module
+		// statements.
+		if err := writeFile(filepath.Join(directory, "dist/main.js"), "export default {};\n", 0o644); err != nil {
+			return "", err
+		}
+		if err := writeFile(filepath.Join(directory, "dist/dashboard/main.js"), "\"use strict\";\n(() => {})();\n", 0o644); err != nil {
+			return "", err
+		}
+		return "", writeFile(filepath.Join(directory, "dist/dashboard/styles.css"), "body{margin:0}\n", 0o644)
 	case name == "npm":
 		return "", writeFile(filepath.Join(directory, "node_modules/typescript/bin/tsc"), "fixture compiler\n", 0o755)
 	case name == "node":
@@ -296,6 +307,10 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 		t.Fatal(err)
 	}
 	if err := writeFile(filepath.Join(source, "src/dashboard/styles.css"), "body{}\n", 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// build:deployment runs from the copied source tree.
+	if err := writeFile(filepath.Join(source, "scripts/generate-dashboard-assets.mjs"), "// fixture\n", 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, asset := range []string{"app.js", "backup.js", "event-history.js", "index.html", "styles.css"} {

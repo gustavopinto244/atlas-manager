@@ -10,7 +10,14 @@ export type AdministrativeAuthenticationResult =
     }>
   | Readonly<{
       outcome: "unauthenticated";
-      reason: "credentials_absent" | "credentials_invalid";
+      reason:
+        | "credentials_absent"
+        | "credentials_invalid"
+        | "signature_invalid"
+        | "issuer_mismatch"
+        | "audience_mismatch"
+        | "claims_invalid"
+        | "key_unavailable";
     }>
   | Readonly<{
       outcome: "unavailable";
@@ -31,15 +38,27 @@ export function createAdministrativeAuthenticationResult(
     });
   }
   if (input["outcome"] === "unauthenticated") {
-    if (
-      keys.length !== 2 ||
-      (input["reason"] !== "credentials_absent" &&
-        input["reason"] !== "credentials_invalid")
-    )
+    const validReasons = [
+      "credentials_absent",
+      "credentials_invalid",
+      "signature_invalid",
+      "issuer_mismatch",
+      "audience_mismatch",
+      "claims_invalid",
+      "key_unavailable",
+    ];
+    if (keys.length !== 2 || !validReasons.includes(String(input["reason"])))
       throw new Error("Invalid authentication result");
     return Object.freeze({
       outcome: "unauthenticated" as const,
-      reason: input["reason"],
+      reason: input["reason"] as string as
+        | "credentials_absent"
+        | "credentials_invalid"
+        | "signature_invalid"
+        | "issuer_mismatch"
+        | "audience_mismatch"
+        | "claims_invalid"
+        | "key_unavailable",
     });
   }
   if (

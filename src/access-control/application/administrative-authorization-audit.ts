@@ -49,6 +49,11 @@ export class AdministrativeAuthorizationAudit {
     readonly reasonCode:
       | "credentials_absent"
       | "credentials_invalid"
+      | "signature_invalid"
+      | "issuer_mismatch"
+      | "audience_mismatch"
+      | "claims_invalid"
+      | "key_unavailable"
       | "identity_provider_unavailable";
   }): Promise<void> {
     await this.record({

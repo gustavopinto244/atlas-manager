@@ -58,7 +58,7 @@ func safeSnapshot(identity runtimeidentity.State, deployment hostinspection.Depl
 	return hostinspection.Snapshot{
 		Bundle:          qualificationreport.Check{Name: "bundle", Status: qualificationreport.Passed, Code: "bundle_valid"},
 		Platform:        qualificationreport.Check{Name: "platform", Status: qualificationreport.Passed, Code: "linux_amd64_root"},
-		NodeRuntime:     qualificationreport.Check{Name: "node_runtime", Status: qualificationreport.Passed, Code: "node_runtime_exact"},
+		NodeRuntime:     qualificationreport.Check{Name: "node_runtime", Status: qualificationreport.Passed, Code: "node_runtime_supported"},
 		Systemd:         qualificationreport.Check{Name: "systemd", Status: qualificationreport.Passed, Code: "systemd_available"},
 		Filesystem:      qualificationreport.Check{Name: "filesystem", Status: qualificationreport.Passed, Code: "filesystem_safe"},
 		RuntimeIdentity: qualificationreport.Check{Name: "runtime_identity", Status: identityStatus, Code: identityCode},

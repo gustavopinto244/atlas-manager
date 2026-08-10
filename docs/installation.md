@@ -29,6 +29,72 @@ effects and the machine scheduler disabled. This guide never installs or
 activates the Linux power helper and never performs a real shutdown, reboot,
 wake-alarm or RTC mutation.
 
+## Never transfer operator secrets to the host
+
+Transfer the release archive only. Do not copy a working tree, a `dist/`
+directory or a developer `$HOME` onto the server: those locations may hold
+uncommitted operator environment files carrying live credentials, and copying
+them publishes those credentials to the host.
+
+Bundle generation refuses to publish any file whose name begins with `.env`, so
+a release archive cannot carry one. That guarantee does not extend to an ad hoc
+`rsync` or `scp`. When transferring by hand, exclude them explicitly rather than
+relying on a pattern that happens not to match:
+
+```bash
+rsync -a --exclude='.env' --exclude='.env.*' --exclude='node_modules' \
+  --exclude='dist' <source> <destination>
+```
+
+Any environment file that does legitimately live on the host must be readable
+only by root or by the service account:
+
+| Path                                   | Owner                | Mode  |
+| -------------------------------------- | -------------------- | ----- |
+| `/etc/atlas-manager/atlas-manager.env` | `root:atlas-manager` | `640` |
+| Any operator-only environment file     | the operator account | `600` |
+
+Verify after every configuration change:
+
+```bash
+stat -c '%n %U:%G %a' /etc/atlas-manager/atlas-manager.env
+```
+
+A mode wider than the table above exposes the Cloudflare Access audience,
+principal assignments and any other configured secret to every local account.
+Rotate the affected values if a file was ever world-readable.
+
+## Host Node.js runtime
+
+The service unit runs `ExecStart=/usr/bin/node`, so `/usr/bin/node` must be the
+interpreter the host provides:
+
+```text
+supported range: >=24 <25   (package.json "engines.node")
+required path:   /usr/bin/node
+required type:   regular file owned by root, executable, not a symlink
+```
+
+`package.json` is the source of truth for the range. Host qualification and the
+installer both accept any release inside it, so a Node 24 security patch does
+not require a new deployment build. Verify with:
+
+```bash
+/usr/bin/node --version
+```
+
+A `node` resolved through nvm, `$PATH` or a shell profile does not satisfy this
+requirement, and neither does a symlink at `/usr/bin/node`. Qualification
+inspects the path with `lstat` and reports `node_runtime_unsafe` for a symlink
+and `node_runtime_version_mismatch` for an out-of-range release. If the
+workstation uses nvm, note that `node --version` in a shell may report a
+different release than the one the service will execute; only the reading from
+`/usr/bin/node` above is authoritative.
+
+Bundle reproduction is a separate, stricter constraint: a release bundle is
+built with one exact pinned toolchain, recorded in the release evidence, and
+that pin is not relaxed by this range.
+
 ## Supported installation products
 
 | Product               | Purpose                                                                        | Installation boundary                                                    |

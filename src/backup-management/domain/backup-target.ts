@@ -26,7 +26,11 @@ export type BackupScheduleMode = (typeof BACKUP_SCHEDULE_MODES)[number];
 export const BACKUP_DESTINATION_ROOT = "/var/lib/atlas-manager-backups";
 export const BACKUP_MAX_FILES = 100_000;
 export const BACKUP_MAX_TOTAL_BYTES = 100 * 1024 * 1024 * 1024;
-export const BACKUP_MAX_FILE_BYTES = 20 * 1024 * 1024 * 1024;
+// A single-file ceiling far above the expected working set is a limit that
+// never fires before the damage. One GiB leaves orders of magnitude of headroom
+// over the homelab's actual backup profile while still rejecting a target
+// pointed at something it should not be.
+export const BACKUP_MAX_FILE_BYTES = 1024 * 1024 * 1024;
 export const BACKUP_MAX_DEPTH = 64;
 export const BACKUP_MAX_RELATIVE_PATH_BYTES = 4_096;
 

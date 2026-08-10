@@ -22,11 +22,22 @@ export const CLOUDFLARE_ACCESS_JWT_CLOCK_TOLERANCE_SECONDS =
 
 export class CloudflareAccessJwtVerificationError extends Error {
   public override readonly name = "CloudflareAccessJwtVerificationError";
-  public constructor() {
+  public readonly kind: CloudflareAccessJwtVerificationKind;
+
+  public constructor(kind: CloudflareAccessJwtVerificationKind = "unknown") {
     super("Cloudflare Access assertion verification failed");
+    this.kind = kind;
     Object.freeze(this);
   }
 }
+
+export type CloudflareAccessJwtVerificationKind =
+  | "signature_invalid"
+  | "issuer_mismatch"
+  | "audience_mismatch"
+  | "claims_invalid"
+  | "key_unavailable"
+  | "unknown";
 
 export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVerifier {
   readonly #configuration: CloudflareAccessConfiguration;
@@ -53,20 +64,54 @@ export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVe
       const claims = validateClaims(payload, this.#configuration.audience);
       const verificationTimeMs = verificationTime.getTime();
       if (!Number.isFinite(verificationTimeMs))
-        throw new CloudflareAccessJwtVerificationError();
+        throw new CloudflareAccessJwtVerificationError("claims_invalid");
       validateTemporalClaims(claims, verificationTime);
-      const key = await this.#jwksProvider.resolveKey(
-        header.kid,
-        verificationTime,
-      );
-      await jwtVerify(assertion, key, {
-        algorithms: ["RS256"],
-        audience: this.#configuration.audience,
-        currentDate: verificationTime,
-        issuer: this.#configuration.issuer,
-        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "type"],
-        clockTolerance: CLOCK_TOLERANCE_SECONDS,
-      });
+      let key: CryptoKey;
+      try {
+        key = await this.#jwksProvider.resolveKey(
+          header.kid,
+          verificationTime,
+        );
+      } catch (keyError) {
+        if (isUnavailable(keyError))
+          return createAdministrativeAuthenticationResult({
+            outcome: "unavailable",
+            reason: "identity_provider_unavailable",
+          });
+        if (
+          keyError instanceof Error &&
+          keyError.name === "CloudflareAccessJwksKeyNotFoundError"
+        )
+          return createAdministrativeAuthenticationResult({
+            outcome: "unauthenticated",
+            reason: "key_unavailable",
+          });
+        return createAdministrativeAuthenticationResult({
+          outcome: "unavailable",
+          reason: "identity_provider_unavailable",
+        });
+      }
+      try {
+        await jwtVerify(assertion, key, {
+          algorithms: ["RS256"],
+          audience: this.#configuration.audience,
+          currentDate: verificationTime,
+          issuer: this.#configuration.issuer,
+          requiredClaims: ["iss", "aud", "sub", "exp", "iat", "type"],
+          clockTolerance: CLOCK_TOLERANCE_SECONDS,
+        });
+      } catch (verifyError) {
+        if (isUnavailable(verifyError))
+          return createAdministrativeAuthenticationResult({
+            outcome: "unavailable",
+            reason: "identity_provider_unavailable",
+          });
+        const reason = mapJwtVerifyErrorToReason(verifyError);
+        return createAdministrativeAuthenticationResult({
+          outcome: "unauthenticated",
+          reason,
+        });
+      }
       const principal = createAdministrativePrincipal({
         principalId: claims.sub,
       });
@@ -80,9 +125,10 @@ export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVe
           outcome: "unavailable",
           reason: "identity_provider_unavailable",
         });
+      const reason = extractVerificationReason(error);
       return createAdministrativeAuthenticationResult({
         outcome: "unauthenticated",
-        reason: "credentials_invalid",
+        reason,
       });
     }
   }
@@ -195,17 +241,20 @@ function validateClaims(
   const exp = input["exp"];
   const iat = input["iat"];
   const nbf = input["nbf"];
-  if (
-    typeof iss !== "string" ||
-    !isAudience(aud) ||
-    !audienceContains(aud, expectedAudience) ||
-    typeof sub !== "string" ||
-    input["type"] !== "app" ||
-    !isSafeInteger(exp) ||
-    !isSafeInteger(iat) ||
-    (nbf !== undefined && !isSafeInteger(nbf))
-  )
-    throw new CloudflareAccessJwtVerificationError();
+  if (typeof iss !== "string")
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  if (!isAudience(aud))
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  if (!audienceContains(aud, expectedAudience))
+    throw new CloudflareAccessJwtVerificationError("audience_mismatch");
+  if (typeof sub !== "string")
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  if (input["type"] !== "app")
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  if (!isSafeInteger(exp) || !isSafeInteger(iat))
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  if (nbf !== undefined && !isSafeInteger(nbf))
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
   return {
     iss,
     aud,
@@ -252,6 +301,45 @@ function isAudience(value: unknown): value is string | string[] {
 
 function isSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function mapJwtVerifyErrorToReason(
+  error: unknown,
+): "signature_invalid" | "issuer_mismatch" | "claims_invalid" {
+  if (!(error instanceof Error)) return "claims_invalid";
+  const message = error.message.toLowerCase();
+  if (message.includes("signature") || message.includes("invalid signature"))
+    return "signature_invalid";
+  if (message.includes("issuer") || message.includes('"iss"'))
+    return "issuer_mismatch";
+  return "claims_invalid";
+}
+
+function extractVerificationReason(
+  error: unknown,
+):
+  | "signature_invalid"
+  | "issuer_mismatch"
+  | "audience_mismatch"
+  | "claims_invalid"
+  | "key_unavailable" {
+  if (error instanceof CloudflareAccessJwtVerificationError) {
+    const { kind } = error;
+    if (kind === "audience_mismatch") return "audience_mismatch";
+    if (kind === "signature_invalid") return "signature_invalid";
+    if (kind === "key_unavailable") return "key_unavailable";
+    if (kind === "issuer_mismatch") return "issuer_mismatch";
+    return "claims_invalid";
+  }
+  if (!(error instanceof Error)) return "claims_invalid";
+  const message = error.message.toLowerCase();
+  if (message.includes("issuer") || message.includes('"iss"'))
+    return "issuer_mismatch";
+  if (message.includes("audience") || message.includes('"aud"'))
+    return "audience_mismatch";
+  if (message.includes("signature") || message.includes("invalid signature"))
+    return "signature_invalid";
+  return "claims_invalid";
 }
 
 function isUnavailable(error: unknown): boolean {

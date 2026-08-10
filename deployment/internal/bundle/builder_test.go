@@ -14,6 +14,89 @@ import (
 	"github.com/atlas-manager/atlas-manager/deployment/internal/manifest"
 )
 
+func TestVerifyServedDashboardAssetsRejectsUnbundledEntrypoint(t *testing.T) {
+	for name, served := range map[string]string{
+		"import statement": "import {x} from \"./navigation.js\";\nx();\n",
+		"export statement": "export const value = 1;\n",
+		"indented import":  "  import \"./navigation.js\";\n",
+	} {
+		root := t.TempDir()
+		writeDashboardBuild(t, root, served)
+		if err := verifyServedDashboardAssets(root); err == nil {
+			t.Fatalf("%s accepted as a bundled dashboard entrypoint", name)
+		} else if err.Error() != "dashboard_app_not_bundled" {
+			t.Fatalf("%s produced unexpected error: %v", name, err)
+		}
+	}
+}
+
+func TestVerifyServedDashboardAssetsAcceptsBundledEntrypoint(t *testing.T) {
+	root := t.TempDir()
+	writeDashboardBuild(t, root, "\"use strict\";\n(() => {\n  const x = 1;\n})();\n")
+	if err := verifyServedDashboardAssets(root); err != nil {
+		t.Fatalf("bundled dashboard entrypoint rejected: %v", err)
+	}
+}
+
+func TestVerifyServedDashboardAssetsRequiresBothAssets(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist", "dashboard"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dist", "dashboard", "main.js"), []byte("\"use strict\";\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyServedDashboardAssets(root); err == nil {
+		t.Fatal("missing served stylesheet accepted")
+	}
+}
+
+func writeDashboardBuild(t *testing.T, root, servedApp string) {
+	t.Helper()
+	directory := filepath.Join(root, "dist", "dashboard")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "main.js"), []byte(servedApp), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "styles.css"), []byte("body{margin:0}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRejectEnvironmentSecretsBlocksOperatorEnvironmentFiles(t *testing.T) {
+	for _, name := range []string{".env", ".env.operator", ".env.production", ".env.local"} {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "application", "dist"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "application", "dist", name), []byte("SECRET=value\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := rejectEnvironmentSecrets(root)
+		if err == nil {
+			t.Fatalf("%s was accepted into the bundle", name)
+		}
+		if err.Error() != "bundle_environment_secret_present" {
+			t.Fatalf("%s produced unexpected error: %v", name, err)
+		}
+	}
+}
+
+func TestRejectEnvironmentSecretsAllowsTheConfigurationTemplate(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), []byte("HOST=127.0.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectEnvironmentSecrets(root); err != nil {
+		t.Fatalf("configuration template rejected: %v", err)
+	}
+}
+
 func TestToolVersionMatchesPinnedTools(t *testing.T) {
 	if !toolVersionMatches("node", "v24.18.0\n", "v24.18.0") {
 		t.Fatal("node version rejected")
