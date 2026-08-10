@@ -197,7 +197,6 @@ jobs:
           test -f "$bundle_root/dashboard/index.html"
           test -f "$bundle_root/dashboard/styles.css"
           test -f "$bundle_root/dashboard/app.js"
-          test -f "$bundle_root/dashboard/backup.js"
           test ! -e "$bundle_root/atlas-manager.mock-admin.input.json"
           grep -q 'atlas-manager-runtime-configuration' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-service-lifecycle' "$bundle_root/MANIFEST.json"
@@ -206,8 +205,6 @@ jobs:
           grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/MANIFEST.json"
           grep -q 'atlas-manager-administrative-runtime-configuration' "$bundle_root/SHA256SUMS"
           grep -q 'application/dist/backup-management' "$bundle_root/MANIFEST.json"
-          grep -q 'dashboard/backup.js' "$bundle_root/MANIFEST.json"
-          grep -q 'dashboard/backup.js' "$bundle_root/SHA256SUMS"
           test -f "$bundle_root/contracts/atlas-manager-administrative-api.json"
           grep -q 'contracts/atlas-manager-administrative-api.json' "$bundle_root/MANIFEST.json"
           ./dist/deployment/atlas-manager-smoke run \

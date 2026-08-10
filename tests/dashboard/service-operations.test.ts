@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   controlOperationsFor,
   supportsLogs,
+  statusChipModifier,
 } from "../../src/dashboard/service-operations.js";
 
 describe("controlOperationsFor", () => {
@@ -42,5 +43,22 @@ describe("supportsLogs", () => {
     expect(supportsLogs({ supportedOperations: ["readLogs"] })).toBe(true);
     expect(supportsLogs({ supportedOperations: ["readStatus"] })).toBe(false);
     expect(supportsLogs({})).toBe(false);
+  });
+});
+
+describe("statusChipModifier", () => {
+  it.each([
+    ["running", "online"],
+    ["stopped", "offline"],
+    ["failed", "unavailable"],
+    ["unknown", "degraded"],
+  ])("maps backend state %s to chip modifier %s", (status, modifier) => {
+    expect(statusChipModifier(status)).toBe(modifier);
+  });
+
+  it("treats an unrecognized or missing status as degraded rather than online", () => {
+    expect(statusChipModifier("something-new")).toBe("degraded");
+    expect(statusChipModifier(undefined)).toBe("degraded");
+    expect(statusChipModifier(null)).toBe("degraded");
   });
 });

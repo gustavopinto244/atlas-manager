@@ -313,7 +313,7 @@ func buildRelease(t *testing.T, root, version, commit string) (string, string, s
 	if err := writeFile(filepath.Join(source, "scripts/generate-dashboard-assets.mjs"), "// fixture\n", 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, asset := range []string{"app.js", "backup.js", "event-history.js", "index.html", "styles.css"} {
+	for _, asset := range []string{"app.js", "index.html", "styles.css"} {
 		if err := writeFile(filepath.Join(source, "dashboard-assets", asset), asset+"\n", 0o644); err != nil {
 			t.Fatal(err)
 		}

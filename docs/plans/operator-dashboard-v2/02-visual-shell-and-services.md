@@ -1,5 +1,47 @@
 # Slice 2: visual shell and service experience
 
+## Status
+
+Delivered in this pass (branch `agent/operator-dashboard-v2-slice-2`):
+
+- Retired the duplicate `backup.js`/`event-history.js` scripts that competed
+  with `main.ts` for the same DOM (a Slice 1 item 5 gap); the dashboard now
+  has a single script owner for every section.
+- Desktop persistent sidebar (built on the existing hash-routed
+  `navigation.ts`, unchanged routing model) plus a topbar showing release
+  version, a global health summary derived from every section's current
+  state, last-refresh time, and a manual refresh button.
+- Mobile off-canvas drawer with a scrim, Escape-to-close, and close-on-navigate.
+- Focus movement to `<main>` and a live-region announcement on page change.
+- Design tokens (surface/border/text/status colors/spacing/radius) replacing
+  hardcoded hex values; `prefers-reduced-motion` support; relative units
+  throughout (no fixed-px layout that would break at 320px or 200% zoom).
+- Service cards: status chip with a non-color icon prefix derived from the
+  closed backend runtime-state set, explicit "not yet available" disclosure
+  for readiness/uptime/next-transition/dependents/resource-usage fields the
+  current `/admin/services` DTO does not provide (Slices 3-4 add the backing
+  data), and a "View schedule" link alongside the existing conditional Logs
+  button.
+- New tests: `service-operations.test.ts` (status chip mapping), rewritten
+  `navigation.test.ts` (hand-rolled fake DOM, matching the existing
+  `section-state.test.ts` pattern — no jsdom dependency in this project),
+  `no-unsafe-html.test.ts`.
+
+**Not delivered — deferred, not forgotten:**
+
+- A separate multi-section (Overview/Resources/Schedule/Logs/Events) service
+  detail view with its own deep link. The plan's acceptance line asks to
+  "reach detail in one click"; for now the service card itself is the detail
+  view, matching the plan's own warning against "PM2/Docker implementation
+  details fragmenting navigation" — there is not yet enough per-service data
+  (resources, next transition) to justify a second dedicated page ahead of
+  Slices 3-4. This should be revisited once those slices add real data.
+- Visual verification at 320px width and 200% zoom is reasoned from the CSS
+  (relative units, `min(80vw, ...)` drawer sizing, no fixed-px content
+  widths) rather than screenshot-tested; this repository has no
+  Playwright/Puppeteer dependency to add automated visual regression
+  coverage without introducing new tooling.
+
 ## Objective
 
 Turn the current stacked debug-like document into a responsive operator

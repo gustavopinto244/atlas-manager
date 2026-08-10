@@ -52,10 +52,7 @@ snapshot["styles.css"] = { ...snapshot["styles.css"], body: sourceStyles };
 const names = Object.keys(snapshot).sort();
 if (
   names.join("\n") !==
-  "app.js\nevent-history.js\nindex.html\nstyles.css\nbackup.js"
-    .split("\n")
-    .sort()
-    .join("\n")
+  "app.js\nindex.html\nstyles.css".split("\n").sort().join("\n")
 )
   throw new Error("dashboard_asset_inventory_invalid");
 

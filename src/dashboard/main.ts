@@ -10,7 +10,11 @@ import {
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
-import { controlOperationsFor, supportsLogs } from "./service-operations.js";
+import {
+  controlOperationsFor,
+  supportsLogs,
+  statusChipModifier,
+} from "./service-operations.js";
 import {
   AdministrativeApiClient,
   hasRecordArray,
@@ -35,6 +39,15 @@ const infrastructure = document.querySelector<HTMLElement>(
   "#infrastructure-placeholder",
 );
 const powerControls = document.querySelector<HTMLElement>("#power-controls");
+const environmentLabel = document.querySelector<HTMLElement>(
+  "#dashboard-environment",
+);
+const healthLabel = document.querySelector<HTMLElement>("#dashboard-health");
+const lastRefreshLabel = document.querySelector<HTMLElement>(
+  "#dashboard-last-refresh",
+);
+const refreshButton =
+  document.querySelector<HTMLButtonElement>("#dashboard-refresh");
 
 async function readJson(path: string): Promise<unknown> {
   const response = await fetch(path, {
@@ -101,9 +114,15 @@ function renderOverview(value: unknown): void {
   // from the root reported "unavailable" on every build regardless of the
   // configured value. There is no sourceCommit field in the contract, so the
   // dashboard no longer claims one.
+  const applicationVersion = displayValue(
+    readRecord(record.application).version,
+    "unavailable",
+  );
   const metadata = document.createElement("p");
-  metadata.textContent = `Version: ${displayValue(readRecord(record.application).version, "unavailable")}`;
+  metadata.textContent = `Version: ${applicationVersion}`;
   root.append(grid, metadata);
+  if (environmentLabel !== null)
+    environmentLabel.textContent = `Release: ${applicationVersion}`;
   if (powerControls !== null)
     void powerControlsController.render(
       powerControls,
@@ -188,21 +207,33 @@ function renderServices(value: unknown): void {
   const list = readServiceList(value);
   for (const service of list) {
     const article = document.createElement("article");
+    article.className = "service-card";
     const heading = document.createElement("h3");
-    addText(heading, service.id);
+    addText(heading, service.displayName ?? service.id);
+    const chip = document.createElement("span");
+    chip.className = `status-chip status-chip--${statusChipModifier(service.status)}`;
+    addText(chip, String(service.status));
+    heading.append(document.createTextNode(" "), chip);
     article.append(heading);
-    const summary = document.createElement("p");
+    const identity = document.createElement("p");
     addText(
-      summary,
-      `${String(service.displayName)} — ${String(service.status)} — ${String(service.availability)}`,
+      identity,
+      `ID: ${String(service.id)} · Adapter: ${String(service.managementKind)} (diagnostic only) · Availability mode: ${String(service.availability)}`,
     );
-    article.append(summary);
-    const metadata = document.createElement("p");
+    article.append(identity);
+    const dependencies = document.createElement("p");
     addText(
-      metadata,
-      `Adapter: ${String(service.managementKind)} · Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
+      dependencies,
+      `Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
     );
-    article.append(metadata);
+    article.append(dependencies);
+    const unavailableFields = document.createElement("p");
+    unavailableFields.className = "field-unavailable";
+    addText(
+      unavailableFields,
+      "Readiness, uptime, next transition, dependents and resource usage are not yet reported by this build.",
+    );
+    article.append(unavailableFields);
     for (const operation of controlOperationsFor(service)) {
       const form = document.createElement("form");
       form.className = "mutation";
@@ -279,6 +310,10 @@ function renderServices(value: unknown): void {
       });
       article.append(logsButton);
     }
+    const scheduleLink = document.createElement("a");
+    scheduleLink.href = "#schedules";
+    addText(scheduleLink, "View schedule");
+    article.append(scheduleLink);
     services.append(article);
   }
 }
@@ -762,20 +797,44 @@ function createSection(
   return Object.freeze({ capability, status, load });
 }
 
-const coordinator = new DashboardRefreshCoordinator(
-  [
-    createSection("Overview", root, loadOverview),
-    createSection("Services", services, loadServices),
-    createSection("Schedules", availability, loadSchedules),
-    createSection("Events", audit, loadEvents),
-    createSection("Backups", backups, loadBackups),
-    createSection("Infrastructure", infrastructure, loadInfrastructure),
-  ].filter((section): section is DashboardSection => section !== undefined),
-);
+const dashboardSections = [
+  createSection("Overview", root, loadOverview),
+  createSection("Services", services, loadServices),
+  createSection("Schedules", availability, loadSchedules),
+  createSection("Events", audit, loadEvents),
+  createSection("Backups", backups, loadBackups),
+  createSection("Infrastructure", infrastructure, loadInfrastructure),
+].filter((section): section is DashboardSection => section !== undefined);
+
+const coordinator = new DashboardRefreshCoordinator(dashboardSections);
 
 async function refresh(): Promise<void> {
+  if (refreshButton !== null) refreshButton.disabled = true;
   await coordinator.refresh();
+  reportGlobalHealth();
+  reportLastRefresh();
+  if (refreshButton !== null) refreshButton.disabled = false;
 }
+
+function reportGlobalHealth(): void {
+  if (healthLabel === null) return;
+  const states = dashboardSections.map((section) => section.status.state.kind);
+  const label = states.every((kind) => kind === "ready" || kind === "empty")
+    ? "Healthy"
+    : states.every((kind) => kind === "failed")
+      ? "Unavailable"
+      : "Degraded";
+  healthLabel.textContent = `Health: ${label}`;
+}
+
+function reportLastRefresh(): void {
+  if (lastRefreshLabel === null) return;
+  lastRefreshLabel.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
+}
+
+refreshButton?.addEventListener("click", () => {
+  void refresh();
+});
 
 function createPreviewWindow(): Readonly<{
   startsAt: string;
