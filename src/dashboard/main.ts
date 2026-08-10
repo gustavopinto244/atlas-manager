@@ -10,7 +10,11 @@ import {
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
-import { controlOperationsFor, supportsLogs } from "./service-operations.js";
+import {
+  controlOperationsFor,
+  supportsLogs,
+  statusChipModifier,
+} from "./service-operations.js";
 import {
   AdministrativeApiClient,
   hasRecordArray,
@@ -203,21 +207,33 @@ function renderServices(value: unknown): void {
   const list = readServiceList(value);
   for (const service of list) {
     const article = document.createElement("article");
+    article.className = "service-card";
     const heading = document.createElement("h3");
-    addText(heading, service.id);
+    addText(heading, service.displayName ?? service.id);
+    const chip = document.createElement("span");
+    chip.className = `status-chip status-chip--${statusChipModifier(service.status)}`;
+    addText(chip, String(service.status));
+    heading.append(document.createTextNode(" "), chip);
     article.append(heading);
-    const summary = document.createElement("p");
+    const identity = document.createElement("p");
     addText(
-      summary,
-      `${String(service.displayName)} — ${String(service.status)} — ${String(service.availability)}`,
+      identity,
+      `ID: ${String(service.id)} · Adapter: ${String(service.managementKind)} (diagnostic only) · Availability mode: ${String(service.availability)}`,
     );
-    article.append(summary);
-    const metadata = document.createElement("p");
+    article.append(identity);
+    const dependencies = document.createElement("p");
     addText(
-      metadata,
-      `Adapter: ${String(service.managementKind)} · Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
+      dependencies,
+      `Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
     );
-    article.append(metadata);
+    article.append(dependencies);
+    const unavailableFields = document.createElement("p");
+    unavailableFields.className = "field-unavailable";
+    addText(
+      unavailableFields,
+      "Readiness, uptime, next transition, dependents and resource usage are not yet reported by this build.",
+    );
+    article.append(unavailableFields);
     for (const operation of controlOperationsFor(service)) {
       const form = document.createElement("form");
       form.className = "mutation";
@@ -294,6 +310,10 @@ function renderServices(value: unknown): void {
       });
       article.append(logsButton);
     }
+    const scheduleLink = document.createElement("a");
+    scheduleLink.href = "#schedules";
+    addText(scheduleLink, "View schedule");
+    article.append(scheduleLink);
     services.append(article);
   }
 }

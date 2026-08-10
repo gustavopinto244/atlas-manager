@@ -27,3 +27,19 @@ function readSupportedOperations(
     ? value.filter((entry): entry is string => typeof entry === "string")
     : [];
 }
+
+const STATUS_CHIP_MODIFIER: Readonly<Record<string, string>> = Object.freeze({
+  running: "online",
+  stopped: "offline",
+  failed: "unavailable",
+  unknown: "degraded",
+});
+
+// Registered-service runtime states (SERVICE_RUNTIME_STATES) are backend
+// authoritative and closed; an unrecognized value is treated as "degraded"
+// rather than silently defaulting to an online-looking chip.
+export function statusChipModifier(status: unknown): string {
+  return typeof status === "string" && status in STATUS_CHIP_MODIFIER
+    ? STATUS_CHIP_MODIFIER[status]!
+    : "degraded";
+}
