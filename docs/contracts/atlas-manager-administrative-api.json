@@ -3,6 +3,7 @@
   "source": "src/http/administrative-route-security-catalog.ts",
   "routeCatalog": "closed",
   "routeCount": 47,
+  "catalogSha256": "912e575b5415b25b2d51c6bdcdb1a1acb1c1878734349091cd4678bbdfe32396",
   "routeIds": [
     "dashboard.read",
     "dashboard.asset.read",

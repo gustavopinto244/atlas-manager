@@ -599,14 +599,22 @@ CRIT-01.
    later stage, when the two undocumented variables become mandatory.
 
 8. **Release contract** — resolved. The `catalogSha256` field named in this
-   finding had no generator or verifier anywhere in the repository (confirmed
-   by exhaustive grep across `scripts/`, `deployment/`, and `tests/`); the
-   actual integrity mechanism for this file is a whole-file SHA256 digest
-   computed by `scripts/generate-release-contract.mjs` and
-   `scripts/generate-release-evidence.mjs` and checked by
-   `scripts/validate-release-artifacts.mjs` against
-   `contract.administrativeApiContractSha256` / `evidence.routeCatalog.contractSha256`
-   in the separate release-contract/evidence files — a real, tested mechanism
-   independent of any field inside this file. The orphaned `catalogSha256`
-   field was removed rather than populated with a value nothing would ever
-   check.
+   finding is not orphaned: `.github/workflows/ci.yml`'s "Release candidate
+   security and contract gate" step imports
+   `createAdministrativeApiContract()` from
+   `src/http/administrative-api-contract.ts` directly and fails the build if
+   its computed digest does not match `catalogSha256` in this file. An
+   earlier pass of this reconciliation missed that consumer (it lives in the
+   CI workflow file, not in `scripts/`) and incorrectly removed the field as
+   orphaned, which broke CI. The field is restored with the real digest
+   produced by `createAdministrativeApiContract()` over its authoritative
+   serialization (schema version + the closed route list, each route's
+   method/path/activation flag/operation/permission/request/confirmation/
+   gate/audit/replay/response policy, JSON-stringified with a trailing
+   newline, SHA256 hex-encoded), and
+   `tests/http/administrative-api-contract.test.ts` now asserts the
+   published digest matches that function's live output on every run instead
+   of asserting the field's absence. This is independent of, and in addition
+   to, the whole-file release-contract/evidence digest mechanism computed by
+   `scripts/generate-release-contract.mjs` and
+   `scripts/generate-release-evidence.mjs`.

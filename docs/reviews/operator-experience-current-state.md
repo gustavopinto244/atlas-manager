@@ -115,18 +115,24 @@ separate domains and were not merged).
 
 ## Administrative API contract digest
 
-`docs/contracts/atlas-manager-administrative-api.json` previously carried a
-`catalogSha256` field with no generator or verifier anywhere in the
-repository (confirmed by exhaustive grep across `scripts/`, `deployment/`
-and `tests/` in this reconciliation). The contract's real, tested integrity
-mechanism is a **whole-file SHA256 digest**, computed by
-`scripts/generate-release-contract.mjs` and
-`scripts/generate-release-evidence.mjs` and checked by
-`scripts/validate-release-artifacts.mjs` against
-`administrativeApiContractSha256` / `routeCatalog.contractSha256` in the
-separate release-contract/evidence files. The orphaned field has been
-removed; `tests/http/administrative-api-contract.test.ts` now reconciles
-`routeCount`/`routeIds` against the live catalog automatically.
+`docs/contracts/atlas-manager-administrative-api.json` carries a
+`catalogSha256` field. An earlier pass of this reconciliation concluded it
+was orphaned, based on a grep across `scripts/`, `deployment/` and `tests/`
+that missed its real consumer: `.github/workflows/ci.yml`'s "Release
+candidate security and contract gate" step imports
+`createAdministrativeApiContract()` from
+`src/http/administrative-api-contract.ts` directly (not through any script
+in `scripts/`) and fails the build if its computed `.sha256` does not equal
+`catalogSha256`. Removing the field broke CI on PR #316. It has been
+restored with the digest that function actually produces —
+`912e575b5415b25b2d51c6bdcdb1a1acb1c1878734349091cd4678bbdfe32396` over the
+current 47-route catalog — and
+`tests/http/administrative-api-contract.test.ts` now asserts the published
+value matches that function's live output on every run, alongside the
+pre-existing whole-file release-contract/evidence digest mechanism computed
+by `scripts/generate-release-contract.mjs` and
+`scripts/generate-release-evidence.mjs`, which remains a separate, unrelated
+check.
 
 ## ADR-027 status
 

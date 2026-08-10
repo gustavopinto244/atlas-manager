@@ -41,12 +41,19 @@
 
 ## Real source gaps found and fixed by this reconciliation
 
-1. **Orphaned `catalogSha256` field.** Investigated per the Slice 3 commit's
-   own flagged gap. Exhaustive grep confirmed no generator or verifier ever
-   existed for it; the contract's real integrity mechanism is a whole-file
-   SHA256 digest checked by `scripts/validate-release-artifacts.mjs`
-   against a separate release artifact. Removed the field rather than
-   populate it with an unverifiable value.
+1. **`catalogSha256` field, corrected twice.** Investigated per the Slice 3
+   commit's own flagged gap. A first pass concluded, from a grep across
+   `scripts/`, `deployment/` and `tests/`, that no generator or verifier
+   existed for it, and removed the field. That grep missed the actual
+   consumer: `.github/workflows/ci.yml`'s release gate imports
+   `createAdministrativeApiContract()` from
+   `src/http/administrative-api-contract.ts` directly and fails the build if
+   its `.sha256` output does not match `catalogSha256`, so removing the
+   field broke CI on PR #316. The field is restored with the digest that
+   function actually computes over the current 47-route catalog
+   (`912e575b5415b25b2d51c6bdcdb1a1acb1c1878734349091cd4678bbdfe32396`), and
+   the reconciliation test now asserts equality with that live output
+   instead of asserting the field's absence.
 2. **Route-order drift.** Writing the reconciliation test
    (`tests/http/administrative-api-contract.test.ts`) immediately caught a
    real bug: the published contract's `routeIds` did not match the live
@@ -62,6 +69,21 @@
 "candidate_preview"` to the new draft-preview use case's result, at the
    application boundary (not the shared domain evaluator, which also backs
    the unrelated persisted-policy preview).
+5. **Pre-existing, unrelated CI breakage: hardcoded stale version string.**
+   Diagnosing the `catalogSha256` CI failure surfaced a second, independent
+   defect in `.github/workflows/ci.yml`'s release gate: `test
+"$(node -p "require('./package.json').version")" = "1.0.0-rc.8"`, a
+   literal frozen at the rc.8 release cut (PR #306) with no authoritative
+   source to stay in sync with and never updated since. It ran before the
+   `catalogSha256` check in the same `set -e` step, so it — not the digest —
+   was the actual first failure point. `git log`/`gh run list` confirm this
+   has failed CI on every push to `main` since PR #308 (5 merges: #308,
+   #309, #310, #311, #313), unrelated to this branch's content. Removed the
+   dead comparison (nothing else in the repository defines an "expected"
+   version to check package.json against; the same step already reads
+   `package.json`'s version dynamically everywhere else it needs it) and
+   replaced the two artifact-name literals that also hardcoded `1.0.0-rc.8`
+   with the same dynamically-read version, exported once via `$GITHUB_ENV`.
 
 ## Slice 4 gaps found, not fixed (deferred with reasons)
 
@@ -90,7 +112,11 @@ implementable later without touching what shipped in this pass.
 - `src/service-management/application/preview-registered-service-availability-policy.ts`
   — `source` tag on the candidate-preview result.
 - `docs/contracts/atlas-manager-administrative-api.json` — `catalogSha256`
-  removed, `routeIds` order corrected.
+  restored with the real digest from `createAdministrativeApiContract()`,
+  `routeIds` order corrected.
+- `.github/workflows/ci.yml` — removed the dead, hardcoded `1.0.0-rc.8`
+  version comparison and the two artifact-name literals that shared the same
+  staleness; both now derive from `package.json`'s actual version.
 - `docs/pre-deploy-audit.md` — finding 8 marked resolved with evidence.
 - Full `docs/milestones/operator-experience/` and `docs/capabilities.md`
   reconciliation (see the dedicated reconciliation commit).
