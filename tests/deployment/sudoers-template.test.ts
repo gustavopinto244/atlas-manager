@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,6 @@ const SUDOERS_TEMPLATE_PATH = resolve(
 
 describe("Sudoers template for Atlas Manager operator", () => {
   const content = readFileSync(SUDOERS_TEMPLATE_PATH, "utf8");
-  const stats = statSync(SUDOERS_TEMPLATE_PATH);
 
   it("documents the required file permissions (440)", () => {
     const commentLine = content
@@ -40,7 +39,7 @@ describe("Sudoers template for Atlas Manager operator", () => {
     for (const line of sudoRuleLines) {
       const commandPart = line.split("NOPASSWD:")[1];
       expect(commandPart).toBeTruthy();
-      expect(commandPart?.trim()).toMatch(/^\/[\w\/-]+/);
+      expect(commandPart?.trim()).toMatch(/^\/[\w/-]+/);
     }
   });
 

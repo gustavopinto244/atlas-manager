@@ -1,5 +1,30 @@
 # Slice 1: reliability and service registration
 
+## Status (rc.13)
+
+Items 1-6 (reliability/isolation) were delivered in rc.12-adjacent work: typed
+`AdministrativeApiClient`, per-section state, isolated refresh coordination,
+and malformed-response handling are in place
+(`src/dashboard/api-client.ts`, `section-state.ts`, `refresh-coordinator.ts`).
+
+This session additionally closed the acceptance gap where control buttons
+ignored `supportedOperations`: `renderServices()` in `src/dashboard/main.ts`
+now derives its start/stop/restart buttons and Logs button from
+`src/dashboard/service-operations.ts`, matching what the backend actually
+enforces (`control-registered-service.ts`, `get-registered-service-logs.ts`).
+
+**Item 7-8 (registering the real Task Manager PM2 entry) remain an operator
+action, not source work.** The PM2 dispatch pipeline
+(`create-service-management.ts`) is already fully generic — any
+`managementAdapter: "pm2"` catalog entry works without adapter-specific code.
+What is missing is the *fact* of Task Manager's real PM2 process name on
+Atlas, which this repository cannot observe. Registration itself is: confirm
+the process name with `pm2 jlist` on Atlas, add the catalog entry to the
+administrative input, then run the existing transactional
+`replace-disabled` flow
+(`docs/operations/atlas-manager-administrative-configuration-replacement.md`)
+— no new tooling is required for this step.
+
 ## Objective
 
 Replace the current all-or-nothing loading behavior with explicit per-section

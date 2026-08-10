@@ -510,6 +510,7 @@ type Fixture = {
   token: (overrides?: {
     sub?: string;
     protectedType?: string | null;
+    aud?: string;
   }) => Promise<string>;
 };
 
