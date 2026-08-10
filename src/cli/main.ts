@@ -10,6 +10,8 @@ import type { AtlasCliTransport, CliResult } from "./contracts.js";
 import { helpFor } from "./help.js";
 import { createAtlasHttpTransport } from "./http-transport.js";
 import { parseCliArguments } from "./parser.js";
+import { AtlasCliInterruptedError } from "./administrative-client.js";
+import { renderHumanResult } from "./render.js";
 
 const packageMetadata = createRequire(import.meta.url)("../../package.json") as
   Readonly<{ version?: unknown }> | undefined;
@@ -72,10 +74,7 @@ export async function runAtlasCli(
       process.off("SIGINT", onInterrupt);
     }
   } catch (error) {
-    const cliError =
-      error instanceof AtlasCliError
-        ? error
-        : new AtlasCliError("infrastructure_unavailable", "Command failed");
+    const cliError = toCliError(error);
     const format =
       parsed?.format ?? (argv.includes("--json") ? "json" : "human");
     const result: CliResult = {
@@ -89,6 +88,23 @@ export async function runAtlasCli(
   }
 }
 
+/**
+ * An interruption that reached here without being classified by a command
+ * handler happened before anything could have been dispatched — a read, or a
+ * mutation's pre-check. It is reported as a clean cancellation. A mutation
+ * that may already have been sent is classified by the transport instead, and
+ * arrives here as an `AtlasCliError` describing an indeterminate outcome.
+ */
+function toCliError(error: unknown): AtlasCliError {
+  if (error instanceof AtlasCliError) return error;
+  if (error instanceof AtlasCliInterruptedError)
+    return new AtlasCliError(
+      "interrupted",
+      "Interrupted before the request was sent; no operation was dispatched",
+    );
+  return new AtlasCliError("infrastructure_unavailable", "Command failed");
+}
+
 function writeResult(
   output: NodeJS.WritableStream,
   format: "human" | "json",
@@ -99,7 +115,7 @@ function writeResult(
     return;
   }
   if (result.status === "ok") {
-    output.write(`${JSON.stringify(result.data, null, 2)}\n`);
+    output.write(renderHumanResult(result.command, result.data));
     return;
   }
   output.write(`error: ${result.error?.code}: ${result.error?.message}\n`);

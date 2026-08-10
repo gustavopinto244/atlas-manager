@@ -1029,7 +1029,7 @@ class ExecuteProtectedAdministrativeOperation {
           reasonCode:
             authentication.outcome === "unavailable"
               ? "identity_provider_unavailable"
-              : authentication.reason,
+              : auditReasonForAuthenticationFailure(authentication.reason),
         });
       } catch {
         throw new AdministrativeAccessControlError(
@@ -1102,6 +1102,42 @@ class ExecuteProtectedAdministrativeOperation {
       );
     }
   }
+}
+
+/**
+ * Translates an authentication failure reason into the audit event's
+ * authorization reason vocabulary.
+ *
+ * The authentication domain distinguishes seven `unauthenticated` reasons,
+ * but `ADMINISTRATIVE_AUTHORIZATION_REASON_CODES` deliberately publishes a
+ * coarser set. Passing the raw reason through made
+ * `createAdministrativeEventInput` reject the record for `signature_invalid`,
+ * `issuer_mismatch`, `audience_mismatch`, `claims_invalid` and
+ * `key_unavailable` — so the five most security-relevant authentication
+ * failures were never audited at all, and surfaced to the caller as a
+ * misleading `authorization_audit_unavailable` (HTTP 503) instead of an
+ * authentication refusal.
+ *
+ * The mapping is intentionally lossy rather than schema-expanding: a forged
+ * signature, a wrong issuer and a wrong audience are all, from an
+ * authorization standpoint, invalid credentials.
+ */
+function auditReasonForAuthenticationFailure(
+  reason:
+    | "credentials_absent"
+    | "credentials_invalid"
+    | "signature_invalid"
+    | "issuer_mismatch"
+    | "audience_mismatch"
+    | "claims_invalid"
+    | "key_unavailable",
+):
+  | "credentials_absent"
+  | "credentials_invalid"
+  | "identity_provider_unavailable" {
+  if (reason === "credentials_absent") return "credentials_absent";
+  if (reason === "key_unavailable") return "identity_provider_unavailable";
+  return "credentials_invalid";
 }
 
 function sourceForPrincipal(

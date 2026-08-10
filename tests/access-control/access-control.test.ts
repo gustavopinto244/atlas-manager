@@ -153,6 +153,58 @@ describe("administrative access-control foundation", () => {
     });
   });
 
+  // Regression: the authentication domain publishes seven `unauthenticated`
+  // reasons, but the audit event's authorization reason vocabulary is coarser.
+  // Passing the raw reason through made the event record invalid for the five
+  // most security-relevant failures — a forged signature, a wrong issuer, a
+  // wrong audience, invalid claims and an unavailable key — so those attempts
+  // were never audited and surfaced as `authorization_audit_unavailable`
+  // (HTTP 503) instead of an authentication refusal.
+  it.each([
+    ["credentials_absent", "credentials_absent"],
+    ["credentials_invalid", "credentials_invalid"],
+    ["signature_invalid", "credentials_invalid"],
+    ["issuer_mismatch", "credentials_invalid"],
+    ["audience_mismatch", "credentials_invalid"],
+    ["claims_invalid", "credentials_invalid"],
+    ["key_unavailable", "identity_provider_unavailable"],
+  ])("audits the %s authentication failure as %s", async (reason, expected) => {
+    const history = createEventHistory();
+    const authenticator = new MockAdministrativeAuthenticationProvider({
+      result: { outcome: "unauthenticated", reason },
+    });
+    const protectedAdministration = createProtectedAdministration({
+      accessControl: createAdministrativeAccessControl({
+        authenticator,
+        roleAssignmentReader: new InMemoryAdministrativeRoleAssignmentReader({
+          assignments: [],
+        }),
+      }),
+      powerManagement: createPowerManagement({
+        clock: clock(),
+        administrativeEventHistoryCapabilities: history,
+        wakeAlarmController: { schedule: vi.fn(), cancel: vi.fn() },
+      }),
+      eventHistory: history,
+      clock: clock(),
+    });
+
+    await expect(
+      protectedAdministration.scheduleWakeAlarm.execute({
+        scheduledFor: LATER,
+      }),
+    ).rejects.toMatchObject({ code: "administrative_authentication_required" });
+
+    const page = await history.getAdministrativeEventHistory.execute();
+    expect(page.events).toHaveLength(1);
+    expect(page.events[0]).toMatchObject({
+      source: { kind: "administrative", actorId: "unauthenticated" },
+      operation: "authorize_administrative_operation",
+      status: "rejected",
+      details: { decision: "denied", reasonCode: expected },
+    });
+  });
+
   it("keeps shutdown confirmation independent from authorization", async () => {
     const history = createEventHistory();
     const configured = access(["power_operator"]);

@@ -201,3 +201,86 @@ describe("Atlas HTTP CLI transport", () => {
     ).resolves.toEqual({ mode: "always_on" });
   });
 });
+
+describe("Atlas CLI schedule preview", () => {
+  // Slice 4 added a candidate/draft preview alongside the pre-existing
+  // persisted-policy preview. It is read-only, so it does not depend on the
+  // ADR-031 mutation transport, but it must not change what the existing
+  // invocation means.
+  const CANDIDATE_POLICY = JSON.stringify({ mode: "manual" });
+
+  it("previews a candidate policy through the draft preview route", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { source: "candidate_preview" }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await expect(
+      transport.execute(
+        "services schedule preview",
+        [
+          "task-manager",
+          "--from",
+          "2026-08-08T08:00:00.000Z",
+          "--to",
+          "2026-08-08T18:00:00.000Z",
+          "--policy",
+          CANDIDATE_POLICY,
+        ],
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ source: "candidate_preview" });
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(String(url)).toContain(
+      "/admin/services/task-manager/schedule/preview?",
+    );
+    expect(String(url)).toContain(
+      `policy=${encodeURIComponent(CANDIDATE_POLICY)}`,
+    );
+  });
+
+  it("keeps the persisted-policy preview as the default behaviour", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { outcome: "required" }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await transport.execute(
+      "services schedule preview",
+      ["task-manager"],
+      new AbortController().signal,
+    );
+
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(String(url)).toContain("/availability/preview?");
+    expect(String(url)).not.toContain("/schedule/preview");
+  });
+
+  it("rejects an unknown preview option", async () => {
+    const transport = createAtlasHttpTransport({
+      fetchImplementation: vi.fn<typeof fetch>(),
+    });
+
+    await expect(
+      transport.execute(
+        "services schedule preview",
+        ["task-manager", "--unexpected", "value"],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Unknown option: --unexpected");
+  });
+
+  it("requires an explicit interval alongside a candidate policy", async () => {
+    const transport = createAtlasHttpTransport({
+      fetchImplementation: vi.fn<typeof fetch>(),
+    });
+
+    await expect(
+      transport.execute(
+        "services schedule preview",
+        ["task-manager", "--policy", CANDIDATE_POLICY],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Preview options require --from");
+  });
+});

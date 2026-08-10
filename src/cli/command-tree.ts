@@ -29,17 +29,17 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
   {
     path: ["services", "start"],
     summary: "Start a registered service",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "stop"],
     summary: "Stop a registered service",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "restart"],
     summary: "Restart a registered service",
-    implemented: false,
+    implemented: true,
   },
   {
     path: ["services", "logs"],
