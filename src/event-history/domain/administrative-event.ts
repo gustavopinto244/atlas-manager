@@ -1,5 +1,11 @@
 import { isCanonicalTimestamp } from "../../power-management/domain/canonical-timestamp.js";
 import { isCanonicalAdministrativePrincipalId } from "../../access-control/domain/administrative-principal.js";
+import {
+  ADMINISTRATIVE_OPERATIONS,
+  permissionForAdministrativeOperation,
+  type AdministrativeOperation,
+} from "../../access-control/domain/administrative-operation.js";
+import { ADMINISTRATIVE_PERMISSIONS } from "../../access-control/domain/administrative-permission.js";
 
 export const ADMINISTRATIVE_EVENT_SOURCES = Object.freeze([
   "administrative",
@@ -365,125 +371,33 @@ function createDetails(
     const requestedOperation = record["requestedOperation"];
     const permission = record["permission"];
     const decision = record["decision"];
-    const validOperation = [
-      "read_wake_alarm",
-      "schedule_wake_alarm",
-      "cancel_wake_alarm",
-      "request_machine_shutdown",
-      "prepare_machine_shutdown_occurrence",
-      "execute_machine_shutdown_occurrence",
-      "run_machine_power_scheduler_tick",
-      "read_administrative_event_history",
-      "read_registered_services",
-      "read_registered_service",
-      "start_registered_service",
-      "stop_registered_service",
-      "restart_registered_service",
-      "read_registered_service_availability",
-      "update_registered_service_availability",
-      "remove_registered_service_availability",
-      "run_registered_backup",
-      "update_backup_schedule",
-      "remove_backup_schedule",
-      "update_backup_retention",
-      "run_backup_retention_prune",
-      "run_backup_scheduler_tick",
-      "read_operations_overview",
-      "read_administrative_dashboard",
-      "read_administrative_security_posture",
-      "verify_event_history_integrity",
-      "rotate_administrative_event_history",
-      "update_administrative_event_history_retention",
-      "prune_administrative_event_history",
-      "create_administrative_event_history_export",
-      "prune_administrative_event_history_exports",
-      "read_event_history_retention",
-      "list_event_history_exports",
-      "read_event_history_export",
-      "download_event_history_export",
-    ].includes(requestedOperation as string);
-    const validPermission = [
-      "power.wake.read",
-      "power.wake.schedule",
-      "power.wake.cancel",
-      "power.shutdown.request",
-      "power.shutdown.prepare",
-      "power.shutdown.execute",
-      "power.scheduler.tick",
-      "event_history.read",
-      "services.read",
-      "services.start",
-      "services.stop",
-      "services.restart",
-      "services.availability.read",
-      "services.availability.write",
-      "operations.read",
-      "dashboard.read",
-      "security.posture.read",
-      "backups.targets.read",
-      "backups.runs.read",
-      "backups.run",
-      "backups.schedule.read",
-      "backups.schedule.write",
-      "backups.retention.read",
-      "backups.retention.write",
-      "backups.retention.prune",
-      "backups.scheduler.tick",
-      "event_history.integrity.read",
-      "event_history.rotation.run",
-      "event_history.retention.read",
-      "event_history.retention.write",
-      "event_history.retention.prune",
-      "event_history.exports.read",
-      "event_history.exports.create",
-      "event_history.exports.download",
-      "event_history.exports.prune",
-    ].includes(permission as string);
-    const expected = {
-      read_wake_alarm: "power.wake.read",
-      schedule_wake_alarm: "power.wake.schedule",
-      cancel_wake_alarm: "power.wake.cancel",
-      request_machine_shutdown: "power.shutdown.request",
-      prepare_machine_shutdown_occurrence: "power.shutdown.prepare",
-      execute_machine_shutdown_occurrence: "power.shutdown.execute",
-      run_machine_power_scheduler_tick: "power.scheduler.tick",
-      read_administrative_event_history: "event_history.read",
-      read_registered_services: "services.read",
-      read_registered_service: "services.read",
-      start_registered_service: "services.start",
-      stop_registered_service: "services.stop",
-      restart_registered_service: "services.restart",
-      read_registered_service_availability: "services.availability.read",
-      update_registered_service_availability: "services.availability.write",
-      remove_registered_service_availability: "services.availability.write",
-      update_registered_service_schedule: "services.availability.write",
-      remove_registered_service_schedule: "services.availability.write",
-      run_registered_backup: "backups.run",
-      update_backup_schedule: "backups.schedule.write",
-      remove_backup_schedule: "backups.schedule.write",
-      update_backup_retention: "backups.retention.write",
-      run_backup_retention_prune: "backups.retention.prune",
-      run_backup_scheduler_tick: "backups.scheduler.tick",
-      read_operations_overview: "operations.read",
-      read_administrative_dashboard: "dashboard.read",
-      read_administrative_security_posture: "security.posture.read",
-      verify_event_history_integrity: "event_history.integrity.read",
-      rotate_administrative_event_history: "event_history.rotation.run",
-      update_administrative_event_history_retention:
-        "event_history.retention.write",
-      prune_administrative_event_history: "event_history.retention.prune",
-      create_administrative_event_history_export:
-        "event_history.exports.create",
-      prune_administrative_event_history_exports: "event_history.exports.prune",
-      read_event_history_retention: "event_history.retention.read",
-      list_event_history_exports: "event_history.exports.read",
-      read_event_history_export: "event_history.exports.read",
-      download_event_history_export: "event_history.exports.download",
-    } as Record<string, string>;
+    // Historically this validator carried its own hand-written copies of the
+    // operation list, the permission list and the operation-to-permission
+    // mapping. They drifted: eighteen operations that the access-control domain
+    // defines were missing here, so every authorization decision for them was
+    // rejected by the audit trail and surfaced to the caller as HTTP 503
+    // `authorization_audit_unavailable` — service logs, service schedule reads
+    // and mutations, every backup read, and the event-history operations, whose
+    // five entries here had names the operation vocabulary never used.
+    //
+    // The access-control domain is the single authority for what an
+    // administrative operation is and which permission it requires, so this
+    // validator now asks it instead of remembering an answer of its own.
+    const validOperation = (
+      ADMINISTRATIVE_OPERATIONS as readonly string[]
+    ).includes(requestedOperation as string);
+    const validPermission = (
+      ADMINISTRATIVE_PERMISSIONS as readonly string[]
+    ).includes(permission as string);
+    const expectedPermission = validOperation
+      ? (permissionForAdministrativeOperation(
+          requestedOperation as AdministrativeOperation,
+        ) as string)
+      : undefined;
     if (
       !validOperation ||
       !validPermission ||
-      expected[requestedOperation as string] !== permission ||
+      expectedPermission !== permission ||
       (decision !== "allowed" && decision !== "denied") ||
       (status === "succeeded" && decision !== "allowed") ||
       (status === "rejected" && decision !== "denied")

@@ -27,6 +27,10 @@ import { MachineShutdownOccurrenceExecutionError } from "../../power-management/
 import type { ServiceManagementCapabilities } from "../../service-management/composition/create-service-management.js";
 import { AdministrativeAuditTrail } from "../../event-history/application/administrative-audit-trail.js";
 import { RegisteredServiceNotFoundError } from "../../service-management/application/registered-service-not-found-error.js";
+import { ServiceAvailabilityPolicyValidationError } from "../../service-scheduling/domain/service-availability-policy-validation-error.js";
+import { ServiceAvailabilityModeValidationError } from "../../service-scheduling/domain/service-availability-mode.js";
+import { ServiceScheduleValidationError } from "../../service-scheduling/domain/service-schedule-validation-error.js";
+import { ServiceScheduleTimezoneValidationError } from "../../service-scheduling/domain/service-schedule-timezone.js";
 import type { BackupManagementCapabilities } from "../../backup-management/composition/create-backup-management.js";
 import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
 import type { MachinePowerPlan } from "../../power-management/domain/machine-power-plan.js";
@@ -1095,6 +1099,18 @@ class ExecuteProtectedAdministrativeOperation {
         throw error;
       if (error instanceof RegisteredServiceNotFoundError) throw error;
       if (error instanceof WakeAlarmScheduleValidationError) throw error;
+      // A rejected *policy* is the caller's input being wrong, not the
+      // protected operation failing. Swallowing these into
+      // `protected_operation_failed` turned every invalid schedule into an
+      // opaque HTTP 503, and left the schedule route's 400 mapping for exactly
+      // these error classes unreachable.
+      if (
+        error instanceof ServiceAvailabilityPolicyValidationError ||
+        error instanceof ServiceAvailabilityModeValidationError ||
+        error instanceof ServiceScheduleValidationError ||
+        error instanceof ServiceScheduleTimezoneValidationError
+      )
+        throw error;
       if (error instanceof MachineShutdownOccurrenceExecutionError) throw error;
       throw new AdministrativeAccessControlError(
         "protected_operation_failed",
