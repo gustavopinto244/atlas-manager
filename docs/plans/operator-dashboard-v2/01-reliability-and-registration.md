@@ -49,7 +49,7 @@ against the registered-service schema. Conceptually:
   "managementAdapter": "pm2",
   "externalResourceId": "task-manager",
   "supportedOperations": ["readStatus", "readLogs", "start", "stop", "restart"],
-  "availabilityPolicy": {"mode": "always"}
+  "availabilityPolicy": { "mode": "always" }
 }
 ```
 

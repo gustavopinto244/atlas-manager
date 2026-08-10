@@ -14,7 +14,12 @@ An operator authenticated successfully at Cloudflare Access but the Atlas
 Manager dashboard returned:
 
 ```json
-{"error":{"code":"administrative_authentication_required","message":"Administrative authentication required"}}
+{
+  "error": {
+    "code": "administrative_authentication_required",
+    "message": "Administrative authentication required"
+  }
+}
 ```
 
 The administrative API remained fail-closed. There was no authentication or
@@ -53,7 +58,7 @@ Cloudflare-protected Nginx endpoint returned only whether the incoming header
 was present:
 
 ```json
-{"assertionPresent":true}
+{ "assertionPresent": true }
 ```
 
 That result proved the Cloudflare edge boundary. The effective Atlas

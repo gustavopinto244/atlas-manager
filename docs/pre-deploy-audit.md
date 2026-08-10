@@ -18,13 +18,13 @@ versioned and must not carry the secret itself.
 
 ### Baseline checks executed
 
-| Check                   | Command                              | Result                                   |
-| ----------------------- | ------------------------------------ | ---------------------------------------- |
-| Types                   | `npm run typecheck`                  | Passed, no errors                        |
-| Tests                   | `npm test`                           | 214 files, 2753 passed, 3 skipped        |
-| Lint                    | `npm run lint`                       | Passed, no warnings                      |
-| Vulnerabilities (prod)  | `npm audit --omit=dev`               | 0 vulnerabilities                        |
-| Release snapshots       | `npm run release:validate-snapshots` | `{"result":"valid"}`                     |
+| Check                  | Command                              | Result                            |
+| ---------------------- | ------------------------------------ | --------------------------------- |
+| Types                  | `npm run typecheck`                  | Passed, no errors                 |
+| Tests                  | `npm test`                           | 214 files, 2753 passed, 3 skipped |
+| Lint                   | `npm run lint`                       | Passed, no warnings               |
+| Vulnerabilities (prod) | `npm audit --omit=dev`               | 0 vulnerabilities                 |
+| Release snapshots      | `npm run release:validate-snapshots` | `{"result":"valid"}`              |
 
 Internal code quality is high and consistent: the domain/application/
 infrastructure separation holds, process execution always goes through
@@ -37,13 +37,13 @@ denies by default, and the HTTP security envelope validates `Host`, `Origin` and
 
 ### Finding count
 
-| Severity | Count |
-| -------- | ----- |
-| Critical | 1     |
-| High     | 3     |
-| Medium   | 6     |
-| Low      | 4     |
-| **Total**| **14**|
+| Severity  | Count  |
+| --------- | ------ |
+| Critical  | 1      |
+| High      | 3      |
+| Medium    | 6      |
+| Low       | 4      |
+| **Total** | **14** |
 
 ### Verdict
 
@@ -88,22 +88,22 @@ files, given the machine's 8 GB RAM limit.
 
 ## 2. Findings table
 
-| ID       | Sev.     | File:line                                                             | Description                                                                                     | Status      |
-| -------- | -------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
-| CRIT-01  | Critical | `.env.operator:1-2`                                                   | Real `sudo` password in plaintext inside the project directory                                    | [CONFIRMED] |
-| HIGH-01  | High     | `deployment/internal/bundle/builder.go:134` + `src/http/administrative-dashboard-route.ts:61` | Deploy bundle serves an ES module as a classic script; dashboard JS never loads   | [CONFIRMED] |
-| HIGH-02  | High     | `src/backup-management/infrastructure/filesystem-tree-backup-adapter.ts:237` | Backup manifest loads each file wholly into RAM; limit permits 20 GiB per file    | [CONFIRMED] |
-| HIGH-03  | High     | `deployment/internal/hostinspection/inspection.go:476`                | Qualification demands Node exactly `v24.18.0` at `/usr/bin/node`; undocumented                    | [CONFIRMED] |
-| MED-01   | Medium   | `src/main.ts:276`, `src/http/create-administrative-runtime.ts:363`    | Application version hardcoded to `"1.0.0-rc.8"` while the package is `1.0.0-rc.11`                | [CONFIRMED] |
-| MED-02   | Medium   | `src/http/administrative-route-security-catalog.ts:54,307`            | Contract flag `ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED` does not exist as a variable          | [CONFIRMED] |
-| MED-03   | Medium   | `.env.example`                                                        | 6 variables read by the code are absent from `.env.example`                                       | [CONFIRMED] |
-| MED-04   | Medium   | `src/config/environment.ts:455-473`                                   | `ADMINISTRATIVE_DASHBOARD_ENABLED` does not require the APIs the dashboard consumes                | [CONFIRMED] |
-| MED-05   | Medium   | `src/http/create-app.ts:121-134,211-214`                              | `/health/*` sits outside the security envelope and is unauthenticated; no Nginx config in the repo | [CONFIRMED] |
-| MED-06   | Medium   | `deployment/internal/systemdunit/unit.go:18` + `src/main.ts`          | `Restart=no` with no `unhandledRejection` handler: one rejection downs the service permanently     | [CONFIRMED] |
-| LOW-01   | Low      | `deployment/internal/systemdunit/unit.go:12-13`                       | Unit grants no `docker` group and sets no `PATH`; Docker/PM2 adapters may fail                     | [SUSPECTED] |
-| LOW-02   | Low      | `src/power-management/infrastructure/node-linux-power-helper-transport.ts:212-218` | `safelyKill` sends only `SIGTERM`, with no escalation to `SIGKILL`                     | [CONFIRMED] |
-| LOW-03   | Low      | `src/event-history/infrastructure/file-segmented-administrative-event-history.ts:397,1157` | Synchronous history writes block the event loop on the request path   | [CONFIRMED] |
-| LOW-04   | Low      | repository root                                                       | Stray working-tree artifacts: `yay-bin/`, `.agents/`, `.codex/`, `atlas-manager-dist/`            | [CONFIRMED] |
+| ID      | Sev.     | File:line                                                                                     | Description                                                                                        | Status      |
+| ------- | -------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------- |
+| CRIT-01 | Critical | `.env.operator:1-2`                                                                           | Real `sudo` password in plaintext inside the project directory                                     | [CONFIRMED] |
+| HIGH-01 | High     | `deployment/internal/bundle/builder.go:134` + `src/http/administrative-dashboard-route.ts:61` | Deploy bundle serves an ES module as a classic script; dashboard JS never loads                    | [CONFIRMED] |
+| HIGH-02 | High     | `src/backup-management/infrastructure/filesystem-tree-backup-adapter.ts:237`                  | Backup manifest loads each file wholly into RAM; limit permits 20 GiB per file                     | [CONFIRMED] |
+| HIGH-03 | High     | `deployment/internal/hostinspection/inspection.go:476`                                        | Qualification demands Node exactly `v24.18.0` at `/usr/bin/node`; undocumented                     | [CONFIRMED] |
+| MED-01  | Medium   | `src/main.ts:276`, `src/http/create-administrative-runtime.ts:363`                            | Application version hardcoded to `"1.0.0-rc.8"` while the package is `1.0.0-rc.11`                 | [CONFIRMED] |
+| MED-02  | Medium   | `src/http/administrative-route-security-catalog.ts:54,307`                                    | Contract flag `ADMINISTRATIVE_SERVICE_SCHEDULE_HTTP_ENABLED` does not exist as a variable          | [CONFIRMED] |
+| MED-03  | Medium   | `.env.example`                                                                                | 6 variables read by the code are absent from `.env.example`                                        | [CONFIRMED] |
+| MED-04  | Medium   | `src/config/environment.ts:455-473`                                                           | `ADMINISTRATIVE_DASHBOARD_ENABLED` does not require the APIs the dashboard consumes                | [CONFIRMED] |
+| MED-05  | Medium   | `src/http/create-app.ts:121-134,211-214`                                                      | `/health/*` sits outside the security envelope and is unauthenticated; no Nginx config in the repo | [CONFIRMED] |
+| MED-06  | Medium   | `deployment/internal/systemdunit/unit.go:18` + `src/main.ts`                                  | `Restart=no` with no `unhandledRejection` handler: one rejection downs the service permanently     | [CONFIRMED] |
+| LOW-01  | Low      | `deployment/internal/systemdunit/unit.go:12-13`                                               | Unit grants no `docker` group and sets no `PATH`; Docker/PM2 adapters may fail                     | [SUSPECTED] |
+| LOW-02  | Low      | `src/power-management/infrastructure/node-linux-power-helper-transport.ts:212-218`            | `safelyKill` sends only `SIGTERM`, with no escalation to `SIGKILL`                                 | [CONFIRMED] |
+| LOW-03  | Low      | `src/event-history/infrastructure/file-segmented-administrative-event-history.ts:397,1157`    | Synchronous history writes block the event loop on the request path                                | [CONFIRMED] |
+| LOW-04  | Low      | repository root                                                                               | Stray working-tree artifacts: `yay-bin/`, `.agents/`, `.codex/`, `atlas-manager-dist/`             | [CONFIRMED] |
 
 ---
 
@@ -330,14 +330,14 @@ signal. The operator has no way to enable that flag by its documented name.
 Difference measured between keys read by the code and keys present in
 `.env.example`:
 
-| Variable                                                    | Where it is used                      |
-| ----------------------------------------------------------- | ------------------------------------- |
-| `MACHINE_POWER_EFFECTS_CONFIRMATION`                        | `src/config/environment.ts:256,507`   |
-| `LINUX_POWER_HELPER_EXPECTED_SHA256`                        | `src/config/environment.ts:257,515`   |
-| `SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE` | `src/config/environment.ts:259`       |
-| `SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE` | `src/config/environment.ts:261`       |
-| `SERVICE_AVAILABILITY_OVERRIDE_FILE`                        | `src/config/environment.ts:263`       |
-| `SERVICE_AVAILABILITY_POLICY_FILE`                          | `src/config/environment.ts:264`       |
+| Variable                                                    | Where it is used                    |
+| ----------------------------------------------------------- | ----------------------------------- |
+| `MACHINE_POWER_EFFECTS_CONFIRMATION`                        | `src/config/environment.ts:256,507` |
+| `LINUX_POWER_HELPER_EXPECTED_SHA256`                        | `src/config/environment.ts:257,515` |
+| `SERVICE_AVAILABILITY_RECONCILIATION_SCHEDULER_CURSOR_FILE` | `src/config/environment.ts:259`     |
+| `SERVICE_AVAILABILITY_RECONCILIATION_OCCURRENCE_CLAIM_FILE` | `src/config/environment.ts:261`     |
+| `SERVICE_AVAILABILITY_OVERRIDE_FILE`                        | `src/config/environment.ts:263`     |
+| `SERVICE_AVAILABILITY_POLICY_FILE`                          | `src/config/environment.ts:264`     |
 
 The first two are **mandatory** when
 `MACHINE_POWER_EFFECTS_ACTIVATION=linux_helper`
@@ -386,8 +386,11 @@ only `ADMINISTRATIVE_DASHBOARD_ENABLED=true`.
 The administrative envelope applies to three prefixes only:
 
 ```ts
-if (request.path === "/" || request.path.startsWith("/assets/") ||
-    request.path.startsWith("/admin"))
+if (
+  request.path === "/" ||
+  request.path.startsWith("/assets/") ||
+  request.path.startsWith("/admin")
+)
   return envelope(request, response, next);
 next();
 ```
@@ -470,7 +473,9 @@ reason.
 
 ```ts
 function safelyKill(child: ChildProcess): void {
-  try { if (!child.killed) child.kill("SIGTERM"); } catch { }
+  try {
+    if (!child.killed) child.kill("SIGTERM");
+  } catch {}
 }
 ```
 

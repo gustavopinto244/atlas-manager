@@ -59,9 +59,18 @@ for (const file of expected.files) {
 // it must be byte-identical to the reference asset already validated against
 // the manifest digest, and it must not still be an ES module, because the HTML
 // shell loads it as a classic script.
-const SERVED_ASSETS = Object.freeze({ "main.js": "app.js", "styles.css": "styles.css" });
+const SERVED_ASSETS = Object.freeze({
+  "main.js": "app.js",
+  "styles.css": "styles.css",
+});
 for (const [servedName, assetName] of Object.entries(SERVED_ASSETS)) {
-  const servedPath = join(bundleRoot, "application", "dist", "dashboard", servedName);
+  const servedPath = join(
+    bundleRoot,
+    "application",
+    "dist",
+    "dashboard",
+    servedName,
+  );
   let servedInfo;
   try {
     servedInfo = await stat(servedPath);
@@ -97,5 +106,6 @@ for (const file of names) {
     throw new Error(`dashboard_bundle_inventory_invalid:${file}`);
 }
 process.stdout.write(
-  JSON.stringify({ result: "passed", fileCount: 5, servedAssetCount: 2 }) + "\n",
+  JSON.stringify({ result: "passed", fileCount: 5, servedAssetCount: 2 }) +
+    "\n",
 );
