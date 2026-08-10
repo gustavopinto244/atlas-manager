@@ -756,6 +756,145 @@ describe("authenticated mutating CLI — manual backup run", () => {
   });
 });
 
+describe("authenticated mutating CLI — backup schedule and retention", () => {
+  it("writes a backup schedule through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "backups",
+        "schedule",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({
+          mode: "scheduled",
+          timezone: "America/Sao_Paulo",
+          windows: [{ weekday: "sunday", start: "02:00", end: "03:00" }],
+        }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      operation: "update",
+      result: "completed",
+      authoritativeRead: "ok",
+      policy: { mode: "scheduled", timezone: "America/Sao_Paulo" },
+    });
+    expect(await backupOperations(value.history)).toContain(
+      "update_backup_schedule",
+    );
+  });
+
+  it("writes a retention policy and prunes through the audited operations", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const set = await runCli(
+      value.app,
+      [
+        "backups",
+        "retention",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({ keepLastSuccessful: 3 }),
+        "--json",
+      ],
+      assertion,
+    );
+    expect(set.code).toBe(0);
+    expect(
+      (JSON.parse(set.out) as { data: { policy: unknown } }).data.policy,
+    ).toMatchObject({ keepLastSuccessful: 3 });
+
+    const prune = await runCli(
+      value.app,
+      ["backups", "retention", "prune", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(prune.code).toBe(0);
+    expect(
+      (JSON.parse(prune.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      targetId: BACKUP_TARGET_ID,
+      operation: "prune",
+      result: "completed",
+    });
+
+    const audited = await backupOperations(value.history);
+    expect(audited).toContain("update_backup_retention");
+    expect(audited).toContain("run_backup_retention_prune");
+
+    // The same prune issued the way the dashboard issues it produces the same
+    // audited operation — no CLI-only audit vocabulary for the most
+    // consequential mutation in this milestone.
+    const viaApi = await fixture(["backup_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .post(`/admin/backups/targets/${BACKUP_TARGET_ID}/retention/prunes`)
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({ confirmation: "confirm_registered_backup_retention_prune" });
+    expect(apiResponse.status).toBe(200);
+    expect(await backupOperations(viaApi.history)).toContain(
+      "run_backup_retention_prune",
+    );
+  });
+
+  it("refuses a prune for a principal that may write retention but not prune it", async () => {
+    // `service_operator` holds no backup permission at all; the distinction
+    // that matters is that pruning is its own permission, asserted in the
+    // contract test.
+    const value = await fixture(["service_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      ["backups", "retention", "prune", BACKUP_TARGET_ID, "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(await backupOperations(value.history)).not.toContain(
+      "run_backup_retention_prune",
+    );
+  });
+
+  it("rejects an invalid backup policy as invalid rather than as a transient failure", async () => {
+    const value = await fixture(["backup_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "backups",
+        "retention",
+        "set",
+        BACKUP_TARGET_ID,
+        "--policy",
+        JSON.stringify({ keepLastSuccessful: 0 }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("schedule_invalid");
+  });
+});
+
 describe("authenticated mutating CLI — mutation admission", () => {
   it("reports a busy service mutation gate as a conflict without retrying", async () => {
     const value = await fixture(["service_operator"]);
