@@ -328,10 +328,62 @@ function renderServices(value: unknown): void {
   }
 }
 
+// Client-side pagination state for the events section. A full section
+// refresh (loadEvents) always resets this to the first page; "Load more"
+// appends the next page on top without triggering a full-section reload,
+// so it survives the periodic refresh cycle re-fetching page one.
+let eventsList: readonly Record<string, unknown>[] = [];
+let eventsCursor: Readonly<{
+  hasMore: boolean;
+  nextAfterSequence: number | undefined;
+}> = Object.freeze({ hasMore: false, nextAfterSequence: undefined });
+let eventsAuditMeta: unknown = null;
+
 function renderAudit(value: unknown): void {
   if (audit === null) return;
-  audit.textContent = "";
-  addText(audit, value);
+  eventsAuditMeta = value;
+  audit.replaceChildren();
+  const events = document.createElement("pre");
+  addText(events, eventsList);
+  audit.append(events);
+  if (eventsCursor.hasMore && eventsCursor.nextAfterSequence !== undefined) {
+    const loadMoreButton = document.createElement("button");
+    loadMoreButton.type = "button";
+    addText(loadMoreButton, "Load more events");
+    loadMoreButton.addEventListener("click", () => {
+      void loadMoreEvents(loadMoreButton);
+    });
+    audit.append(loadMoreButton);
+  }
+  const meta = document.createElement("pre");
+  addText(meta, value);
+  audit.append(meta);
+}
+
+async function loadMoreEvents(button: HTMLButtonElement): Promise<void> {
+  const afterSequence = eventsCursor.nextAfterSequence;
+  if (afterSequence === undefined) return;
+  button.disabled = true;
+  const next = await apiClient.read(
+    `/admin/event-history?limit=20&afterSequence=${afterSequence}`,
+    hasRecordArray("events"),
+  );
+  if (next.outcome === "success") {
+    const page = next.value as Record<string, unknown>;
+    eventsList = [...eventsList, ...readRecordArray(page, "events")];
+    eventsCursor = Object.freeze({
+      hasMore: page.hasMore === true,
+      nextAfterSequence:
+        typeof page.nextAfterSequence === "number"
+          ? page.nextAfterSequence
+          : undefined,
+    });
+    renderAudit(eventsAuditMeta);
+    return;
+  }
+  button.disabled = false;
+  if (status !== null)
+    status.textContent = "Additional events could not be loaded.";
 }
 
 function renderMachinePlan(value: unknown): void {
@@ -751,15 +803,26 @@ async function loadSchedules(): Promise<SectionLoadResult> {
 }
 
 async function loadEvents(): Promise<SectionLoadResult> {
-  const history = await apiClient.read("/admin/event-history?limit=20");
+  const history = await apiClient.read(
+    "/admin/event-history?limit=20",
+    hasRecordArray("events"),
+  );
   if (history.outcome !== "success") return failed(history);
+  const page = history.value as Record<string, unknown>;
+  eventsList = readRecordArray(page, "events");
+  eventsCursor = Object.freeze({
+    hasMore: page.hasMore === true,
+    nextAfterSequence:
+      typeof page.nextAfterSequence === "number"
+        ? page.nextAfterSequence
+        : undefined,
+  });
   const [integrity, retention, exports] = await Promise.all([
     apiClient.read("/admin/event-history/integrity"),
     apiClient.read("/admin/event-history/retention"),
     apiClient.read("/admin/event-history/exports"),
   ]);
   const value = {
-    history: history.value,
     integrity:
       integrity.outcome === "success"
         ? integrity.value
