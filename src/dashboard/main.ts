@@ -10,6 +10,7 @@ import {
 } from "./machine-plan-view.js";
 import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
+import { controlOperationsFor, supportsLogs } from "./service-operations.js";
 import {
   AdministrativeApiClient,
   hasRecordArray,
@@ -202,7 +203,7 @@ function renderServices(value: unknown): void {
       `Adapter: ${String(service.managementKind)} · Dependencies: ${Array.isArray(service.dependencies) ? service.dependencies.join(", ") || "none" : "unavailable"}`,
     );
     article.append(metadata);
-    for (const operation of ["start", "stop", "restart"] as const) {
+    for (const operation of controlOperationsFor(service)) {
       const form = document.createElement("form");
       form.className = "mutation";
       const button = document.createElement("button");
@@ -247,34 +248,37 @@ function renderServices(value: unknown): void {
       });
       article.append(form);
     }
-    const logsButton = document.createElement("button");
-    logsButton.type = "button";
-    addText(logsButton, "Logs");
-    logsButton.addEventListener("click", () => {
-      logsButton.disabled = true;
-      void fetch(
-        `/admin/services/${encodeURIComponent(String(service.id))}/logs`,
-        { credentials: "same-origin", redirect: "error" },
-      )
-        .then(async (response) => {
-          if (!response.ok) throw new Error("logs_failed");
-          const value: unknown = await response.json();
-          let output = article.querySelector<HTMLElement>(".service-logs");
-          if (output === null) {
-            output = document.createElement("pre");
-            output.className = "service-logs";
-            article.append(output);
-          }
-          output.textContent = JSON.stringify(value, null, 2);
-        })
-        .catch(() => {
-          if (status !== null) status.textContent = "Service logs unavailable.";
-        })
-        .finally(() => {
-          logsButton.disabled = false;
-        });
-    });
-    article.append(logsButton);
+    if (supportsLogs(service)) {
+      const logsButton = document.createElement("button");
+      logsButton.type = "button";
+      addText(logsButton, "Logs");
+      logsButton.addEventListener("click", () => {
+        logsButton.disabled = true;
+        void fetch(
+          `/admin/services/${encodeURIComponent(String(service.id))}/logs`,
+          { credentials: "same-origin", redirect: "error" },
+        )
+          .then(async (response) => {
+            if (!response.ok) throw new Error("logs_failed");
+            const value: unknown = await response.json();
+            let output = article.querySelector<HTMLElement>(".service-logs");
+            if (output === null) {
+              output = document.createElement("pre");
+              output.className = "service-logs";
+              article.append(output);
+            }
+            output.textContent = JSON.stringify(value, null, 2);
+          })
+          .catch(() => {
+            if (status !== null)
+              status.textContent = "Service logs unavailable.";
+          })
+          .finally(() => {
+            logsButton.disabled = false;
+          });
+      });
+      article.append(logsButton);
+    }
     services.append(article);
   }
 }
