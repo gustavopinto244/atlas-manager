@@ -272,6 +272,13 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED",
       "read_registered_service_logs",
     ),
+    read(
+      "services.resources.read",
+      "GET",
+      "/admin/services/:serviceId/resources",
+      "ADMINISTRATIVE_SERVICE_MANAGEMENT_HTTP_ENABLED",
+      "read_registered_service_resources",
+    ),
     mutation(
       "services.start",
       "POST",

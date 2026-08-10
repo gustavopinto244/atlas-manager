@@ -72,6 +72,13 @@ function serviceDependencies(overrides: Record<string, unknown> = {}) {
         truncated: false,
       })),
     },
+    getRegisteredServiceResources: {
+      execute: vi.fn(async () => ({
+        outcome: "unavailable",
+        observedAt: "2026-01-01T00:00:00.000Z",
+        reason: "unsupported",
+      })),
+    },
     startRegisteredService: {
       execute: vi.fn(async () => ({
         targetServiceId: service.id,
@@ -224,6 +231,55 @@ describe("administrative control-plane routes", () => {
     expect(
       dependencies.values.getRegisteredServiceLogs.execute,
     ).toHaveBeenCalledWith("atlas-api");
+  });
+
+  it("reads registered service resources through the protected service surface", async () => {
+    const dependencies = serviceDependencies({
+      getRegisteredServiceResources: {
+        execute: vi.fn(async () => ({
+          outcome: "available",
+          observedAt: "2026-01-01T00:00:00.000Z",
+          cpu: { outcome: "available", usagePercent: 5 },
+          memory: {
+            outcome: "available",
+            usageBytes: 1024,
+            limitBytes: null,
+            usagePercent: null,
+          },
+          uptimeSeconds: 60,
+        })),
+      },
+    });
+    const response = await request(
+      createApp({ ...base(), administrativeServices: dependencies }),
+    ).get("/admin/services/atlas-api/resources");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      outcome: "available",
+      cpu: { usagePercent: 5 },
+      uptimeSeconds: 60,
+    });
+    expect(
+      dependencies.values.getRegisteredServiceResources.execute,
+    ).toHaveBeenCalledWith("atlas-api");
+  });
+
+  it("rejects non-GET methods on the resources route", async () => {
+    const dependencies = serviceDependencies();
+    const response = await request(
+      createApp({ ...base(), administrativeServices: dependencies }),
+    ).post("/admin/services/atlas-api/resources");
+    expect(response.status).toBe(405);
+    expect(response.headers.allow).toBe("GET");
+  });
+
+  it("returns 404 for resources of an unknown service id shape", async () => {
+    const dependencies = serviceDependencies();
+    const response = await request(
+      createApp({ ...base(), administrativeServices: dependencies }),
+    ).get("/admin/services/Not_Valid/resources");
+    expect(response.status).toBe(404);
   });
 
   it("supports availability reads and strict update/removal bodies", async () => {

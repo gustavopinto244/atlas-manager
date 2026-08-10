@@ -5,6 +5,7 @@ import { ExecuteRegisteredServiceAvailabilityReconciliationOccurrence } from "..
 import { GenerateRegisteredServiceAvailabilityReconciliationOccurrences } from "../application/generate-registered-service-availability-reconciliation-occurrences.js";
 import { GetRegisteredServiceEffectiveAvailability } from "../application/get-registered-service-effective-availability.js";
 import { GetRegisteredServiceLogs } from "../application/get-registered-service-logs.js";
+import { GetRegisteredServiceResources } from "../application/get-registered-service-resources.js";
 import { GetRegisteredServiceStatus } from "../application/get-registered-service-status.js";
 import { ListRegisteredServices } from "../application/list-registered-services.js";
 import {
@@ -66,6 +67,12 @@ import { NodeDockerContainerControlExecutor } from "../infrastructure/node-docke
 import type { DockerContainerControlExecutor } from "../infrastructure/docker-container-control-executor.js";
 import { DockerServiceStatusReader } from "../infrastructure/docker-service-status-reader.js";
 import { DockerServiceController } from "../infrastructure/docker-service-controller.js";
+import { NodeDockerContainerStatsExecutor } from "../infrastructure/node-docker-container-stats-executor.js";
+import { DockerServiceResourceReader } from "../infrastructure/docker-service-resource-reader.js";
+import { Pm2ServiceResourceReader } from "../infrastructure/pm2-service-resource-reader.js";
+import { MockServiceResourceReader } from "../infrastructure/mock-service-resource-reader.js";
+import { ComposeServiceResourceReader } from "../infrastructure/compose-service-resource-reader.js";
+import { DispatchingServiceResourceReader } from "../infrastructure/dispatching-service-resource-reader.js";
 import {
   NodeDockerComposeProjectStatusExecutor,
   NodeDockerComposeProjectControlExecutor,
@@ -101,6 +108,7 @@ export interface ServiceManagementCapabilities {
   readonly controlRegisteredService: ControlRegisteredService;
   readonly orchestrateRegisteredServiceControl: OrchestrateRegisteredServiceControlPort;
   readonly getRegisteredServiceLogs: GetRegisteredServiceLogs;
+  readonly getRegisteredServiceResources: GetRegisteredServiceResources;
   readonly setRegisteredServiceAvailabilityOverride: SetRegisteredServiceAvailabilityOverride;
   readonly updateRegisteredServiceAvailabilityPolicy: UpdateRegisteredServiceAvailabilityPolicy;
   readonly removeRegisteredServiceAvailabilityPolicy: RemoveRegisteredServiceAvailabilityPolicy;
@@ -193,6 +201,9 @@ export function createServiceManagement(
   const dockerStatusReader = new DockerServiceStatusReader(
     dockerInspectExecutor,
   );
+  const dockerStatsExecutor =
+    overrides?.dockerContainerStatsExecutor ??
+    new NodeDockerContainerStatsExecutor();
   const dockerController = new DockerServiceController(
     dockerInspectExecutor,
     dockerControlExecutor,
@@ -221,6 +232,19 @@ export function createServiceManagement(
     docker: dockerStatusReader,
     "docker-compose": composeStatusReader,
   });
+  const resourceReader = new DispatchingServiceResourceReader(
+    {
+      mock: new MockServiceResourceReader(clock),
+      pm2: new Pm2ServiceResourceReader(processListExecutor, clock),
+      docker: new DockerServiceResourceReader(
+        dockerStatsExecutor,
+        dockerInspectExecutor,
+        clock,
+      ),
+      "docker-compose": new ComposeServiceResourceReader(clock),
+    },
+    clock,
+  );
   const controller =
     overrides?.serviceController ??
     new DispatchingServiceController({
@@ -240,6 +264,11 @@ export function createServiceManagement(
   const getRegisteredServiceLogs = new GetRegisteredServiceLogs(
     catalog,
     logReader,
+    clock,
+  );
+  const getRegisteredServiceResources = new GetRegisteredServiceResources(
+    catalog,
+    resourceReader,
     clock,
   );
 
@@ -381,6 +410,7 @@ export function createServiceManagement(
     controlRegisteredService,
     orchestrateRegisteredServiceControl,
     getRegisteredServiceLogs,
+    getRegisteredServiceResources,
     setRegisteredServiceAvailabilityOverride:
       new SetRegisteredServiceAvailabilityOverride(
         catalog,
