@@ -8,7 +8,7 @@ import {
 
 describe("administrative route security catalog registration", () => {
   it("keeps the explicit operator-experience route-count contract", () => {
-    expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(45);
+    expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(46);
   });
 
   it("records the implemented power endpoint body limits", () => {
