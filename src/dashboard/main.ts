@@ -442,6 +442,13 @@ function renderBackups(value: unknown, runsValue: unknown): void {
     );
     appendBackupActionForm(
       article,
+      "Run now",
+      target.id,
+      "/runs",
+      "confirm_registered_backup_run",
+    );
+    appendBackupActionForm(
+      article,
       "Prune retention",
       target.id,
       "/retention/prunes",
