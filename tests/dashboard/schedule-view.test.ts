@@ -65,6 +65,47 @@ describe("dashboard schedule view", () => {
     );
   });
 
+  it("renders the following transitions beneath the preview line", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "scheduled" },
+      preview: {
+        outcome: "required",
+        firstRequiredAt: "2026-08-08T08:00:00.000Z",
+        transitions: [
+          {
+            kind: "became_available",
+            scheduledFor: "2026-08-08T08:00:00.000Z",
+          },
+          {
+            kind: "became_unavailable",
+            scheduledFor: "2026-08-08T17:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(parent.textContent).toContain(
+      "Becomes available: 2026-08-08T08:00:00.000Z",
+    );
+    expect(parent.textContent).toContain(
+      "Becomes unavailable: 2026-08-08T17:00:00.000Z",
+    );
+  });
+
+  it("omits the transitions list when none are provided", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "always" },
+      preview: {
+        outcome: "required",
+        firstRequiredAt: "2026-08-08T08:00:00.000Z",
+      },
+    });
+
+    expect(parent.textContent).not.toContain("Becomes");
+  });
+
   it("shows the current effective state and local time when available", () => {
     const parent = new FakeElement();
     renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {

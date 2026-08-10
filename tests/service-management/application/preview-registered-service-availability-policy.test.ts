@@ -109,6 +109,39 @@ describe("PreviewRegisteredServiceAvailabilityPolicy", () => {
     ).rejects.toThrow(ServiceAvailabilityModeValidationError);
   });
 
+  it("includes a bounded list of following transitions for a scheduled candidate policy", async () => {
+    const preview = new PreviewRegisteredServiceAvailabilityPolicy(
+      catalog(),
+      overrideStore(),
+    );
+    const result = await preview.execute({
+      serviceId: "atlas-api",
+      policy: {
+        mode: "scheduled",
+        timezone: "America/Sao_Paulo",
+        windows: [{ weekday: "monday", start: "09:00", end: "17:00" }],
+      },
+      startsAt: "2026-08-03T00:00:00.000Z",
+      endsAt: "2026-08-04T00:00:00.000Z",
+    });
+    expect(result.transitions).toBeDefined();
+    expect(result.transitions?.length).toBeGreaterThan(0);
+  });
+
+  it("omits transitions for a non-scheduled candidate policy", async () => {
+    const preview = new PreviewRegisteredServiceAvailabilityPolicy(
+      catalog(),
+      overrideStore(),
+    );
+    const result = await preview.execute({
+      serviceId: "atlas-api",
+      policy: { mode: "always" },
+      startsAt: "2026-08-03T21:00:00.000Z",
+      endsAt: "2026-08-04T12:00:00.000Z",
+    });
+    expect(result.transitions).toBeUndefined();
+  });
+
   it("applies an active override to the candidate policy's evaluation", async () => {
     const preview = new PreviewRegisteredServiceAvailabilityPolicy(
       catalog(),

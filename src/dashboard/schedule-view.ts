@@ -34,6 +34,20 @@ export function renderScheduleTimeline(
     const previewSummary = document.createElement("p");
     previewSummary.textContent = `Preview: ${preview.outcome}${preview.firstRequiredAt === null ? "" : ` · First required at: ${preview.firstRequiredAt}`}`;
     parent.append(previewSummary);
+    if (preview.transitions.length > 0) {
+      const transitionsList = document.createElement("ul");
+      transitionsList.className = "schedule-transitions";
+      for (const transition of preview.transitions) {
+        const item = document.createElement("li");
+        const label =
+          transition.kind === "became_available"
+            ? "Becomes available"
+            : "Becomes unavailable";
+        item.textContent = `${label}: ${transition.scheduledFor}`;
+        transitionsList.append(item);
+      }
+      parent.append(transitionsList);
+    }
   }
   if (policy.mode !== "scheduled") return;
   const table = document.createElement("table");
@@ -104,9 +118,15 @@ function readPolicy(value: unknown): Readonly<{
   };
 }
 
+type ScheduleTransition = Readonly<{
+  kind: "became_available" | "became_unavailable";
+  scheduledFor: string;
+}>;
+
 function readPreview(value: unknown): Readonly<{
   outcome: string;
   firstRequiredAt: string | null;
+  transitions: readonly ScheduleTransition[];
 }> | null {
   if (typeof value !== "object" || value === null) return null;
   const preview = (value as { preview?: unknown }).preview;
@@ -119,7 +139,23 @@ function readPreview(value: unknown): Readonly<{
       typeof record.firstRequiredAt === "string"
         ? record.firstRequiredAt
         : null,
+    transitions: readTransitions(record.transitions),
   };
+}
+
+function readTransitions(value: unknown): readonly ScheduleTransition[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): ScheduleTransition[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const record = entry as Record<string, unknown>;
+    if (
+      (record.kind !== "became_available" &&
+        record.kind !== "became_unavailable") ||
+      typeof record.scheduledFor !== "string"
+    )
+      return [];
+    return [{ kind: record.kind, scheduledFor: record.scheduledFor }];
+  });
 }
 
 function readEffectiveAvailability(value: unknown): string | null {
