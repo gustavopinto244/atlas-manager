@@ -362,6 +362,14 @@ describe("administrative control-plane routes", () => {
       removeRegisteredServiceSchedule: {
         execute: vi.fn(async () => undefined),
       },
+      previewRegisteredServiceSchedule: {
+        execute: vi.fn(async () => ({
+          serviceId: "atlas-api",
+          startsAt: "2026-01-01T00:00:00.000Z",
+          endsAt: "2026-01-02T00:00:00.000Z",
+          outcome: "required",
+        })),
+      },
     };
     const dependencies = {
       admission: new FixedAdministrativeRequestAdmission(base().clock),
@@ -413,6 +421,79 @@ describe("administrative control-plane routes", () => {
     expect(
       schedule.removeRegisteredServiceSchedule.execute,
     ).toHaveBeenCalledWith("atlas-api");
+  });
+
+  it("previews a candidate schedule without persisting it", async () => {
+    const schedule = {
+      getRegisteredServiceSchedule: { execute: vi.fn() },
+      setRegisteredServiceSchedule: { execute: vi.fn() },
+      removeRegisteredServiceSchedule: { execute: vi.fn() },
+      previewRegisteredServiceSchedule: {
+        execute: vi.fn(async () => ({
+          serviceId: "atlas-api",
+          startsAt: "2026-01-01T00:00:00.000Z",
+          endsAt: "2026-01-02T00:00:00.000Z",
+          outcome: "required",
+        })),
+      },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => schedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeServiceSchedule: dependencies,
+    });
+
+    const policy = JSON.stringify({ mode: "always" });
+    const response = await request(app).get(
+      `/admin/services/atlas-api/schedule/preview?startsAt=2026-01-01T00:00:00.000Z&endsAt=2026-01-02T00:00:00.000Z&policy=${encodeURIComponent(policy)}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      serviceId: "atlas-api",
+      startsAt: "2026-01-01T00:00:00.000Z",
+      endsAt: "2026-01-02T00:00:00.000Z",
+      outcome: "required",
+    });
+    expect(
+      schedule.previewRegisteredServiceSchedule.execute,
+    ).toHaveBeenCalledWith("atlas-api", {
+      policy: { mode: "always" },
+      startsAt: "2026-01-01T00:00:00.000Z",
+      endsAt: "2026-01-02T00:00:00.000Z",
+    });
+    expect(
+      schedule.setRegisteredServiceSchedule.execute,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rejects a schedule preview missing a required query parameter", async () => {
+    const schedule = {
+      getRegisteredServiceSchedule: { execute: vi.fn() },
+      setRegisteredServiceSchedule: { execute: vi.fn() },
+      removeRegisteredServiceSchedule: { execute: vi.fn() },
+      previewRegisteredServiceSchedule: { execute: vi.fn() },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => schedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeServiceSchedule: dependencies,
+    });
+
+    const response = await request(app).get(
+      "/admin/services/atlas-api/schedule/preview?startsAt=2026-01-01T00:00:00.000Z&endsAt=2026-01-02T00:00:00.000Z",
+    );
+    expect(response.status).toBe(400);
+    expect(
+      schedule.previewRegisteredServiceSchedule.execute,
+    ).not.toHaveBeenCalled();
   });
 
   it("protects overview and dashboard delivery with the shared headers", async () => {

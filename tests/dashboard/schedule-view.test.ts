@@ -64,4 +64,35 @@ describe("dashboard schedule view", () => {
       "Preview: required · First required at: 2026-08-08T08:00:00.000Z",
     );
   });
+
+  it("shows the current effective state and local time when available", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "scheduled", timezone: "America/Sao_Paulo" },
+      effectiveAvailability: "available",
+    });
+
+    expect(parent.textContent).toContain("Current state: available");
+    expect(parent.textContent).toContain("Local time:");
+  });
+
+  it("omits the current-state line when effectiveAvailability is absent", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "always" },
+    });
+
+    expect(parent.textContent).not.toContain("Current state:");
+  });
+
+  it("falls back to ISO time when the timezone is unknown", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "scheduled", timezone: "Not/AZone" },
+      effectiveAvailability: "unavailable",
+    });
+
+    expect(parent.textContent).toContain("Current state: unavailable");
+    expect(parent.textContent).toMatch(/Local time: \d{4}-\d{2}-\d{2}T/u);
+  });
 });

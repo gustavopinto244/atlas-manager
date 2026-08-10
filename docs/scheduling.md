@@ -18,6 +18,22 @@ the `/availability` mutation remains reserved for temporary overrides.
 Both are evaluated by the application layer and consumed by the same
 reconciliation scheduler.
 
+### Policy precedence
+
+1. The environment-owned base policy from `REGISTERED_SERVICES_JSON` is used
+   as-is.
+2. If a persisted policy exists in the policy store for that service ID, it
+   **fully replaces** the base policy (not a field-by-field merge) —
+   identically whether the service is read individually or as part of a
+   list.
+3. A temporary availability override, if active, is applied on top of the
+   resolved policy at evaluation time; it is not part of policy resolution
+   itself.
+
+Implemented in `PolicyAwareRegisteredServiceCatalog`
+(`src/service-management/infrastructure/`) and covered by dedicated
+precedence tests.
+
 ## Reconciliation flow
 
 At a transition the scheduler evaluates the policy, generates an occurrence,
@@ -35,8 +51,16 @@ occurrence and applies dependency-aware stop orchestration.
 
 `atlas services schedule show <service-id>` reads the protected base-policy
 resource, while `preview` evaluates an explicit interval through the shared
-domain. The dashboard renders the same policy as a weekly timeline and writes
-through the protected schedule resource. The browser does not own policy state.
+domain against the **persisted** policy. The dashboard's weekly editor adds a
+second, dashboard-only preview: it sends a **candidate (unsaved) policy** to
+`GET /admin/services/:serviceId/schedule/preview`, which validates and
+evaluates it through the same domain functions without persisting anything —
+the result is tagged `source: "candidate_preview"` to distinguish it from the
+persisted-policy preview. Save, Preview and Remove are three distinct
+dashboard actions with distinct semantics; only Save and Remove mutate state,
+and both require an authoritative reread before the UI reports success. The
+browser does not own policy state or calculate transitions on its own in
+either preview path.
 
 ## Machine policy safety
 

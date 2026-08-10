@@ -327,6 +327,13 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_SERVICE_AVAILABILITY_HTTP_ENABLED",
       "read_registered_service_availability_preview",
     ),
+    read(
+      "services.schedule.preview",
+      "GET",
+      "/admin/services/:serviceId/schedule/preview",
+      "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
+      "read_registered_service_schedule_preview",
+    ),
     mutation(
       "services.availability.update",
       "PUT",

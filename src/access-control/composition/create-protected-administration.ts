@@ -104,6 +104,16 @@ export interface ProtectedAdministrationCapabilities {
   readonly getRegisteredServiceSchedule: Readonly<{
     execute(serviceId: string): Promise<unknown>;
   }>;
+  readonly previewRegisteredServiceSchedule: Readonly<{
+    execute(
+      serviceId: string,
+      input: {
+        readonly policy: unknown;
+        readonly startsAt: string;
+        readonly endsAt: string;
+      },
+    ): Promise<unknown>;
+  }>;
   readonly setRegisteredServiceSchedule: Readonly<{
     execute(serviceId: string, input: unknown): Promise<unknown>;
   }>;
@@ -489,6 +499,22 @@ export function createProtectedAdministration(
           serviceId,
           value,
         ),
+      ),
+  });
+  const previewRegisteredServiceSchedule = Object.freeze({
+    execute: (
+      serviceId: string,
+      input: {
+        readonly policy: unknown;
+        readonly startsAt: string;
+        readonly endsAt: string;
+      },
+    ) =>
+      runner.run("read_registered_service_schedule_preview", () =>
+        requireServices().previewRegisteredServiceAvailabilityPolicy.execute({
+          serviceId,
+          ...input,
+        }),
       ),
   });
   const removeRegisteredServiceSchedule = Object.freeze({
@@ -926,6 +952,7 @@ export function createProtectedAdministration(
     getRegisteredServiceAvailability,
     getRegisteredServiceAvailabilityPreview,
     getRegisteredServiceSchedule,
+    previewRegisteredServiceSchedule,
     setRegisteredServiceSchedule,
     removeRegisteredServiceSchedule,
     setRegisteredServiceAvailability,

@@ -361,7 +361,7 @@ jobs:
       - name: Release candidate security and contract gate
         id: release-gate
         run: |
-          test "$(node -p "require('./package.json').version")" = "1.0.0-rc.8"
+          echo "PACKAGE_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
           npm run release:validate-snapshots
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
           release_artifacts="$RUNNER_TEMP/atlas-manager-release-artifacts"
@@ -437,7 +437,7 @@ jobs:
         if: steps.release-gate.outcome == 'success'
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: atlas-manager-1.0.0-rc.8-release-qualification-${{ github.run_id }}
+          name: atlas-manager-${{ env.PACKAGE_VERSION }}-release-qualification-${{ github.run_id }}
           path: ${{ runner.temp }}/atlas-manager-release-artifacts
           if-no-files-found: error
           retention-days: 14
@@ -446,7 +446,7 @@ jobs:
         if: steps.release-gate.outcome == 'success'
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: atlas-manager-1.0.0-rc.8-deployment-bundle-${{ github.run_id }}
+          name: atlas-manager-${{ env.PACKAGE_VERSION }}-deployment-bundle-${{ github.run_id }}
           path: ${{ runner.temp }}/atlas-manager-deployment-bundle
           if-no-files-found: error
           retention-days: 14

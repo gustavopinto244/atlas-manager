@@ -4,6 +4,17 @@ The dashboard is a server-owned HTML shell with vanilla TypeScript assets. It
 is served only through the protected administrative route and uses the existing
 administrative API; it does not contain domain or authorization rules.
 
+## Shell
+
+A persistent sidebar (desktop) / off-canvas drawer (mobile, opened by a topbar
+toggle button with a scrim and Escape-to-close) drives hash-routed navigation
+across the pages below. The topbar also shows the release version, a global
+health summary derived from every section's current load state, the last
+refresh time and a manual refresh button. Design tokens (surface, border,
+text, status colors, spacing, radius) back the visual system; status uses an
+icon prefix plus text, never color alone. Focus moves to the page heading and
+a live region announces the page on navigation.
+
 ## Pages
 
 The navigation shell exposes Overview, Services, Schedules, Machine, Backups,
@@ -29,22 +40,40 @@ windows.
 
 ## Services and schedules
 
-Services render their registered adapter, current status, availability and
-dependencies. Start, stop and restart are mutation actions protected by the
-backend route policy; the browser shows a confirmation dialog and sends the
-exact backend confirmation token. The result is reread after the operation.
+Services render their registered adapter (a diagnostic label, not the
+primary identity), a status chip derived from the closed set of backend
+runtime states, current availability, dependencies and a compact CPU/memory/
+uptime line (`ServiceResourceObservation`, PM2/Docker; `mock`/
+`docker-compose` report "unavailable" honestly rather than a fabricated
+value). Resources refresh on a bounded 30-second poll of the Services
+section, paused while the tab is hidden; a resource-read failure for one
+service degrades only that service's card, never the section. Start, stop
+and restart buttons are derived from each service's `supportedOperations`
+rather than a fixed list, and are mutation actions protected by the backend
+route policy; the browser shows a confirmation dialog and sends the exact
+backend confirmation token. The result is reread after the operation. Fields
+the plan asks for but the current API doesn't provide yet (readiness, next
+transition, dependents) are stated as not yet available rather than omitted
+silently.
 
 The Schedules page renders the current availability response as a weekly
-timeline. It uses the server-provided weekday, time and timezone values. It
-does not validate or persist a new base policy in the browser. The Logs action
-performs a protected read and renders the returned payload as text without
-interpreting it as markup.
+timeline, including the current effective state and current local time
+formatted in the policy's own timezone. It uses the server-provided weekday,
+time and timezone values. It does not validate or persist a new base policy
+in the browser. The Logs action performs a protected read and renders the
+returned payload as text without interpreting it as markup.
 
-Each service timeline also includes the reusable weekly schedule editor. It
-supports mode, timezone and weekday windows, performs basic client-side
-validation, and submits the authoritative policy to the protected API. The
+Each service timeline also includes the reusable weekly schedule editor:
+mode, IANA timezone, seven day rows with an explicit enable checkbox
+(replacing the earlier implicit "empty inputs mean disabled" convention),
+copy-one-day-to-selected-days, clear day, clear week, and dirty-state
+tracking with a `beforeunload` warning. Save, Preview and Remove are three
+distinct actions: Save persists through the protected schedule route; Remove
+deletes the persisted policy through the same route; Preview sends the
+current draft to a read-only candidate-policy preview endpoint and renders
+the result without persisting anything or being treated as a mutation. The
 backend remains responsible for complete validation, authorization, mutation
-admission and audit.
+admission and audit in every case.
 
 ## State and errors
 
@@ -71,8 +100,13 @@ than color alone. Responsive rules support narrow screens.
 
 ## Asset contract
 
-The build generates `index.html`, `app.js`, `styles.css`, `backup.js` and
-`event-history.js`. `app.js` is bundled as a browser IIFE so internal
-TypeScript component imports cannot escape the five-file asset contract. The
-generated manifest and bundle verifier require the generated and packaged
-bytes to be identical.
+The build generates exactly three files: `index.html`, `app.js` and
+`styles.css`. `app.js` is bundled as a browser IIFE so internal TypeScript
+component imports cannot escape the three-file asset contract. Earlier
+builds also served `backup.js` and `event-history.js` as separate scripts
+duplicating logic the consolidated `app.js` refresh coordinator already
+owns (both scripts wrote into the same DOM concurrently); Operator Dashboard
+v2 Slice 2 retired them, and every asset-inventory check (generation script,
+verification script, Go bundle builder, release rehearsal fixtures, CI) was
+updated to the real three-file set. The generated manifest and bundle
+verifier require the generated and packaged bytes to be identical.

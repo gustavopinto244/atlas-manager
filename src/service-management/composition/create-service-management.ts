@@ -95,6 +95,7 @@ import type { ServiceReadinessReader } from "../application/ports/service-readin
 
 import type { ServiceController } from "../application/ports/service-controller.js";
 import { GetRegisteredServiceAvailabilityForInterval } from "../application/get-registered-service-availability-for-interval.js";
+import { PreviewRegisteredServiceAvailabilityPolicy } from "../application/preview-registered-service-availability-policy.js";
 import { UpdateRegisteredServiceAvailabilityPolicy } from "../application/update-registered-service-availability-policy.js";
 import { RemoveRegisteredServiceAvailabilityPolicy } from "../application/remove-registered-service-availability-policy.js";
 import {
@@ -115,6 +116,7 @@ export interface ServiceManagementCapabilities {
   readonly cancelRegisteredServiceAvailabilityOverride: CancelRegisteredServiceAvailabilityOverride;
   readonly getRegisteredServiceEffectiveAvailability: GetRegisteredServiceEffectiveAvailability;
   readonly getRegisteredServiceAvailabilityForInterval: GetRegisteredServiceAvailabilityForInterval;
+  readonly previewRegisteredServiceAvailabilityPolicy: PreviewRegisteredServiceAvailabilityPolicy;
   readonly orchestrateRegisteredServicesStop: OrchestrateRegisteredServicesStopPort;
   readonly pruneExpiredRegisteredServiceAvailabilityOverrides: PruneExpiredRegisteredServiceAvailabilityOverrides;
   readonly pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims: PruneCompletedServiceAvailabilityReconciliationOccurrenceClaims;
@@ -335,6 +337,8 @@ export function createServiceManagement(
     );
   const getRegisteredServiceAvailabilityForInterval =
     new GetRegisteredServiceAvailabilityForInterval(catalog, overrideStore);
+  const previewRegisteredServiceAvailabilityPolicy =
+    new PreviewRegisteredServiceAvailabilityPolicy(catalog, overrideStore);
   const orchestrateRegisteredServiceControl =
     overrides?.orchestrateRegisteredServiceControl ??
     new OrchestrateRegisteredServiceControl(
@@ -425,6 +429,7 @@ export function createServiceManagement(
       new CancelRegisteredServiceAvailabilityOverride(catalog, overrideStore),
     getRegisteredServiceEffectiveAvailability,
     getRegisteredServiceAvailabilityForInterval,
+    previewRegisteredServiceAvailabilityPolicy,
     orchestrateRegisteredServicesStop,
     pruneExpiredRegisteredServiceAvailabilityOverrides,
     pruneCompletedServiceAvailabilityReconciliationOccurrenceClaims,

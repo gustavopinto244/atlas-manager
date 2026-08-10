@@ -598,8 +598,23 @@ CRIT-01.
    yes. The whole MED-03 analysis presumes `linux_helper` activation arrives in a
    later stage, when the two undocumented variables become mandatory.
 
-8. **Release contract** — should the `catalogSha256` in
-   `docs/contracts/atlas-manager-administrative-api.json` be regenerated before
-   rollout? The `release:generate-*` scripts were not executed, to avoid creating
-   files beyond this report, so it was not verified whether the published contract
-   still matches the current `rc.11` catalog.
+8. **Release contract** — resolved. The `catalogSha256` field named in this
+   finding is not orphaned: `.github/workflows/ci.yml`'s "Release candidate
+   security and contract gate" step imports
+   `createAdministrativeApiContract()` from
+   `src/http/administrative-api-contract.ts` directly and fails the build if
+   its computed digest does not match `catalogSha256` in this file. An
+   earlier pass of this reconciliation missed that consumer (it lives in the
+   CI workflow file, not in `scripts/`) and incorrectly removed the field as
+   orphaned, which broke CI. The field is restored with the real digest
+   produced by `createAdministrativeApiContract()` over its authoritative
+   serialization (schema version + the closed route list, each route's
+   method/path/activation flag/operation/permission/request/confirmation/
+   gate/audit/replay/response policy, JSON-stringified with a trailing
+   newline, SHA256 hex-encoded), and
+   `tests/http/administrative-api-contract.test.ts` now asserts the
+   published digest matches that function's live output on every run instead
+   of asserting the field's absence. This is independent of, and in addition
+   to, the whole-file release-contract/evidence digest mechanism computed by
+   `scripts/generate-release-contract.mjs` and
+   `scripts/generate-release-evidence.mjs`.

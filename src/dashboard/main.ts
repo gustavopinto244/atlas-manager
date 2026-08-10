@@ -693,28 +693,30 @@ async function loadSchedules(): Promise<SectionLoadResult> {
   const schedules = await Promise.all(
     serviceValues.map(async (service) => {
       const servicePath = encodeURIComponent(String(service.id));
-      const schedule = await apiClient.read(
-        `/admin/services/${servicePath}/schedule`,
-        isRecord,
-      );
+      const [schedule, availability, preview] = await Promise.all([
+        apiClient.read(`/admin/services/${servicePath}/schedule`, isRecord),
+        apiClient.read(`/admin/services/${servicePath}/availability`, isRecord),
+        apiClient.read(
+          `/admin/services/${servicePath}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
+          isRecord,
+        ),
+      ]);
       const policy =
         schedule.outcome === "success"
           ? { value: schedule.value, scheduleEditable: true }
           : {
-              value: await apiClient
-                .read(`/admin/services/${servicePath}/availability`, isRecord)
-                .then((read) =>
-                  read.outcome === "success" ? read.value : null,
-                ),
+              value:
+                availability.outcome === "success" ? availability.value : null,
               scheduleEditable: false,
             };
-      const preview = await apiClient.read(
-        `/admin/services/${servicePath}/availability/preview?startsAt=${encodeURIComponent(previewWindow.startsAt)}&endsAt=${encodeURIComponent(previewWindow.endsAt)}`,
-        isRecord,
-      );
+      const effectiveAvailability =
+        availability.outcome === "success"
+          ? readRecord(availability.value).effectiveAvailability
+          : undefined;
       return {
         ...(isRecord(policy.value) ? policy.value : {}),
         scheduleEditable: policy.scheduleEditable,
+        effectiveAvailability,
         preview: preview.outcome === "success" ? preview.value : null,
       };
     }),

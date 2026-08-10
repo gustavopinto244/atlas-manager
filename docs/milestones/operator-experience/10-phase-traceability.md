@@ -43,11 +43,28 @@ document that owns it. It is a coverage index, not evidence of implementation.
 
 ## Unresolved decisions that block implementation slices
 
+Reconciled 2026-08-10 against source HEAD `298ffa9` plus this session's
+Slice 4 completion; see
+[`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md)
+for full evidence. Only decisions with no accepted resolution in source
+remain in this table.
+
 | Decision                                                                           | Blocks                                 | Required artifact                                                         |
 | ---------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
-| Correct end-to-end Cloudflare assertion flow and remove current read bypass        | all dashboard/API work                 | security repair tests and deployment rehearsal                            |
 | Local/remote CLI identity model                                                    | mutating CLI commands                  | ADR-028; authenticated transport implementation and security tests remain |
-| Service policy persistence and precedence                                          | schedule mutation/API/editor           | store contract and tests                                                  |
 | Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                                                             |
 | Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice                                 |
-| Final route additions and explicit route count                                     | API contract/release gates             | route proposal and updated contract snapshot                              |
+
+## Resolved decisions
+
+| Decision                                                                    | Resolution                                                                                                                                                                                                                                                                                            | Evidence                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Correct end-to-end Cloudflare assertion flow and remove current read bypass | The unauthenticated dashboard read exception was removed; every administrative route requires a valid Access assertion and authorized principal.                                                                                                                                                      | `08-security-api-and-authorization.md`'s own header note; `tests/http/administrative-dashboard-authentication-integration.test.ts`, `tests/access-control/`                                                                      |
+| Service policy persistence and precedence                                   | `ServiceAvailabilityPolicyStore` (in-memory and file-backed) exists; `PolicyAwareRegisteredServiceCatalog` fully replaces the environment-owned base policy with a persisted one when present, identically through `findById()` and `list()`; temporary overrides remain a separate evaluation layer. | `src/service-management/infrastructure/policy-aware-registered-service-catalog.ts`; precedence explicitly tested in `tests/service-management/infrastructure/policy-aware-registered-service-catalog.test.ts` (added 2026-08-10) |
+| Final route additions and explicit route count                              | Exercised three times without incident (45→46→47 across Slices 3 and 4); an automated test now reconciles the published contract against the live catalog on every run instead of relying on manual count-matching.                                                                                   | `tests/http/administrative-api-contract.test.ts` (added 2026-08-10)                                                                                                                                                              |
+
+ADR-027 (`docs/adr/027-operator-cli-and-dashboard.md`) remains formally
+`Status: Proposed` even though source has operated in full compliance with
+its decision since the CLI foundation and across all four Operator Dashboard
+v2 slices. This is a governance action for the maintainer, not a source gap;
+recommended but not performed by this reconciliation.
