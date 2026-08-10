@@ -27,7 +27,7 @@ unavailable.
 | Machine plan/status              | Yes                                                                         | Machine                                                                                | Protected overview payload                      | Safe plan/power reader                                                                                                                      | `operations.read`                  | No                            | Authorization     | Read-only scheduler state | Mock/disabled effects; simulation preview                                       |
 | Wake/shutdown effects            | No                                                                          | Tested mock controls                                                                   | Feature-flagged routes                          | Mock power adapters                                                                                                                         | Power RBAC + gates                 | Exact/gated                   | Yes               | Machine scheduler         | Physical effects disabled; DOM/HTTP states covered                              |
 | Infrastructure diagnostics       | Yes (`infra`/`nginx`/`tunnel`/`doctor`)                                     | Full diagnostics + security posture                                                    | Security posture + infrastructure diagnostics   | Read-only diagnostic adapters (ADR-032)                                                                                                     | `infrastructure.diagnostics.read`  | No                            | Authorization     | No                        | Complete; read-only, no repair capability (ADR-032)                             |
-| `atlas` operator CLI             | Yes (36 command nodes; 31 implemented, 5 stubbed pending infra diagnostics) | n/a                                                                                    | Typed HTTP adapter                              | TypeScript parser/output contracts                                                                                                          | Protected routes; no forged Access | n/a                           | Backend audit     | n/a                       | Packaged as reinstallable `.tgz`                                                |
+| `atlas` operator CLI             | Yes (36 command nodes; 36 implemented, 0 stubbed — ADR-032 closed the last 5) | n/a                                                                                    | Typed HTTP adapter                              | TypeScript parser/output contracts                                                                                                          | Protected routes; no forged Access | n/a                           | Backend audit     | n/a                       | Packaged as reinstallable `.tgz`                                                |
 | Administrative dashboard         | n/a                                                                         | Yes (persistent sidebar, topbar, mobile drawer, design tokens, focus/live-region a11y) | Protected shell/assets/API                      | Vanilla TypeScript assets, single script owner per page                                                                                     | Cloudflare Access + RBAC           | UI confirmation for mutations | Backend audit     | n/a                       | Authenticated operational shell                                                 |
 | Reinstallable operator package   | `npm install`                                                               | n/a                                                                                    | Uses existing API                               | npm archive, no runtime deps                                                                                                                | Inherits API auth                  | n/a                           | Backend audit     | n/a                       | `npm run package:operator`                                                      |
 | Server installation planner      | Bundle-local `inspect`/`plan`                                               | n/a                                                                                    | Fixed sibling tool reports                      | Read-only deployment orchestration                                                                                                          | OS/file permissions                | Never supplied by planner     | External evidence | n/a                       | Available; mutation remains explicit                                            |
@@ -35,12 +35,11 @@ unavailable.
 The packaged CLI exposes its installed package version through
 `atlas --version`.
 
-The administrative route catalog currently contains 47 descriptors, verified
+The administrative route catalog currently contains 48 descriptors, verified
 by `tests/http/administrative-api-contract.test.ts` against the live
 `ADMINISTRATIVE_ROUTE_SECURITY_CATALOG` (this reconciliation replaces the
-prior static count, which had drifted to 45 as of the last capability-matrix
-update and did not yet include Slice 3's resources route or Slice 4's
-candidate-preview route). Route activation and feature-flag state are
+prior static count of 47, which predated the infrastructure diagnostics
+route added under ADR-032). Route activation and feature-flag state are
 exposed by the protected security posture response; disabled power routes
 remain absent from the effective route set. See [CLI reference](cli.md),
 [dashboard guide](dashboard.md), [scheduling](scheduling.md), and the
@@ -67,10 +66,7 @@ preparation/execution states.
   current read endpoint returns the override object on its own (only via the
   mutation endpoints), which is a small backend gap, not a frontend one.
 - CLI schedule _mutation_ commands (`set`/`always`/`manual`/`disable`/`remove`)
-  are not built. They are no longer blocked on a decision: ADR-031's
-  authenticated transport is accepted and in use by `services
-start/stop/restart`, and the schedule routes already carry their own RBAC,
-  confirmation, gate and audit policies. This is a mechanical follow-up slice.
-  (The candidate-preview gap listed here previously is closed: `atlas services
-schedule preview <id> --from <ts> --to <ts> --policy <json>` exposes it.)
-- CLI backup mutation commands are likewise unblocked but not built.
+  and CLI backup mutation commands (`run`, `run-status`, `schedule
+set`/`remove`, `retention set`/`prune`) are built: they reuse the ADR-031
+  authenticated transport with zero new administrative routes. This item is
+  closed as of `feat/operator-cli-schedule-backup-mutations` (#318).

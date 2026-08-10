@@ -25,7 +25,10 @@ Exit gate: no authentication bypass, existing security regressions green.
 1. Add the packaged `atlas` executable, parser, help and output abstraction.
 2. Add `status`, `health` and `doctor` using read-only application ports.
 3. Add `infra status`, `infra listeners`, `nginx status/test` and `tunnel
-status` only where adapters can report partial failures safely.
+status` only where adapters can report partial failures safely. — done
+   2026-08-10 under ADR-032 (Operator Infrastructure Diagnostics, PR #319),
+   which also extended `status`/`doctor` and added the dashboard
+   Infrastructure diagnostics section.
 4. Add JSON schemas and stable exit/error codes.
 
 Exit gate: no mutating CLI command and no direct shell-output parsing inside
