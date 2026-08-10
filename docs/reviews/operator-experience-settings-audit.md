@@ -40,8 +40,8 @@ against that page's current dashboard code, not assumed.
 - Typed contract: `EventHistoryRetentionPolicy`
   (`src/event-history/domain/event-history-record.ts:56-69`) —
   `automaticPruneEnabled: boolean`, `segments: {minSealedSegments,
-  maxSealedSegments, maxSealedSegmentAgeDays}`, `exports: {minExports,
-  maxExports, maxExportAgeDays}`. Parsed by `createRetentionPolicy`
+maxSealedSegments, maxSealedSegmentAgeDays}`, `exports: {minExports,
+maxExports, maxExportAgeDays}`. Parsed by `createRetentionPolicy`
   (`event-history-record.ts:248-295`), which enforces bounded integers per
   field and `max >= min` invariants and rejects unknown/missing keys via
   `assertExactKeys`.
@@ -211,13 +211,13 @@ the pre-existing `runEventHistoryMutation` audit wrapper, all unchanged.
 
 ## Summary table
 
-| # | Candidate | Classification | Disposition |
-| --- | --- | --- | --- |
-| 1 | Event-history retention policy | `SUPPORTED_MUTATION` | **Implemented** — new Settings page content |
-| 2 | Backup schedule/retention | `SUPPORTED_MUTATION` | Already implemented on Backups page; not duplicated |
-| 3 | Service schedule/availability | `SUPPORTED_MUTATION` | Already implemented on Schedules page; not duplicated |
-| 4 | Machine schedule mutation | `OUT_OF_SCOPE_FOR_1_0` | Unchanged; gated behind future ADR, future phase |
-| 5 | Power (wake alarm, shutdown) | `NOT_ADMINISTRABLE` for Settings | Unchanged; explicitly out of scope for this phase |
-| 6 | Event-history rotation/prune/export actions | `NOT_ADMINISTRABLE` for Settings | Unchanged; one-shot actions, Events-page scope |
-| 7 | Administrative activation flags (env vars) | `NOT_ADMINISTRABLE` | Unchanged; stays read-only on Infrastructure |
-| 8 | Security posture / infrastructure diagnostics | `SUPPORTED_READ_ONLY` | Already implemented on Infrastructure page; not duplicated |
+| #   | Candidate                                     | Classification                   | Disposition                                                |
+| --- | --------------------------------------------- | -------------------------------- | ---------------------------------------------------------- |
+| 1   | Event-history retention policy                | `SUPPORTED_MUTATION`             | **Implemented** — new Settings page content                |
+| 2   | Backup schedule/retention                     | `SUPPORTED_MUTATION`             | Already implemented on Backups page; not duplicated        |
+| 3   | Service schedule/availability                 | `SUPPORTED_MUTATION`             | Already implemented on Schedules page; not duplicated      |
+| 4   | Machine schedule mutation                     | `OUT_OF_SCOPE_FOR_1_0`           | Unchanged; gated behind future ADR, future phase           |
+| 5   | Power (wake alarm, shutdown)                  | `NOT_ADMINISTRABLE` for Settings | Unchanged; explicitly out of scope for this phase          |
+| 6   | Event-history rotation/prune/export actions   | `NOT_ADMINISTRABLE` for Settings | Unchanged; one-shot actions, Events-page scope             |
+| 7   | Administrative activation flags (env vars)    | `NOT_ADMINISTRABLE`              | Unchanged; stays read-only on Infrastructure               |
+| 8   | Security posture / infrastructure diagnostics | `SUPPORTED_READ_ONLY`            | Already implemented on Infrastructure page; not duplicated |
