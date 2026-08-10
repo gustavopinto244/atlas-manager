@@ -11,6 +11,43 @@ This document is derived directly from source, tests and generated contracts
 (route count, CLI command tree, dashboard page list), the verification method
 is named so the claim can be re-run rather than trusted on faith.
 
+## Corrections and re-snapshots
+
+This is the living current-state inventory, so it is updated in place rather
+than forked per milestone. Every material change to a previously published
+claim is recorded here first, with the reason, so that a reader can tell an
+_update_ from a _correction_.
+
+### C1 — ADR-028 was already Accepted (recorded 2026-08-10, authenticated mutating CLI milestone)
+
+The 2026-08-10 snapshot stated under "Unresolved decisions" that
+"No ADR-028 exists". That was **wrong at the time it was written**:
+`docs/adr/028-cli-identity-and-privilege-boundary.md` existed with
+`Status: Accepted`. The claim was carried over from planning text instead of
+being re-derived from `docs/adr/`, which is exactly the failure mode this
+document's preamble warns against.
+
+The substantive consequence was also wrong. ADR-028 does not leave the CLI
+identity model undecided; it decides the _constraints_ (no forged assertions,
+no implicit `sudo`, no secrets in `argv`, no direct PM2/Docker/systemd
+mutation, read-only over HTTP, mutations unavailable without an authenticated
+mutation transport) and requires a **further** ADR to choose the concrete
+transport. Describing mutations as "blocked on ADR-028" therefore misstated
+both the blocker and its remedy.
+
+Resolution: ADR-031 (Accepted) chooses the transport — operator-authenticated
+HTTP through the existing administrative boundary. `services start`,
+`services stop` and `services restart` are implemented against it. The rows
+below reflect the corrected state.
+
+### C2 — ADR-027 formally accepted (recorded 2026-08-10)
+
+The 2026-08-10 snapshot recommended that the maintainer accept ADR-027 and
+explicitly declined to change its status. That recommendation was acted on in
+the authenticated mutating CLI milestone after a decision-by-decision
+conformance review (`docs/reviews/adr-027-implementation-conformance.md`).
+ADR-027 is now `Accepted`.
+
 ## Identity
 
 | Field             | Value                                                                                                                  |
@@ -146,13 +183,18 @@ not a source gap: recommend the maintainer formally accept ADR-027 given the
 implementation already conforms to it; this reconciliation does not change
 the ADR's status itself.
 
+**Update (2026-08-10, correction C2):** acted on. ADR-027 is now `Accepted`
+following `docs/reviews/adr-027-implementation-conformance.md`. The phrase
+"mutating CLI blocked pending a separate identity ADR" above described the
+state at that snapshot; that ADR is ADR-031, now accepted and implemented.
+
 ## Unresolved decisions (re-derived from `10-phase-traceability.md`)
 
-| Decision                                                | Status                                | Evidence                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare assertion flow / unauthenticated read bypass | **Resolved**                          | `docs/milestones/operator-experience/08-security-api-and-authorization.md`'s own header note confirms removal; extensive auth regression suite passes (`tests/http/administrative-dashboard-authentication-integration.test.ts`, `tests/access-control/`) |
-| Local/remote CLI identity model                         | **Still open**                        | No ADR-028 exists; `services start/stop/restart` CLI nodes remain `implemented: false` by design                                                                                                                                                          |
-| Service policy persistence and precedence               | **Resolved**                          | `ServiceAvailabilityPolicyStore` + `PolicyAwareRegisteredServiceCatalog` exist; precedence now explicitly tested (see above)                                                                                                                              |
-| Machine policy persistence and precedence               | **Still open**                        | No policy store or mutation use case for `MACHINE_OPERATING_POLICY`; correctly out of Slice 4 scope                                                                                                                                                       |
-| Runtime diagnostic implementation boundary              | **Still open**                        | Infrastructure-diagnostics track not started                                                                                                                                                                                                              |
-| Final route additions and explicit route count          | **Resolved as an ongoing discipline** | Exercised three times (45→46→47) with contract updates each time; now backed by an automated reconciliation test rather than manual count-matching                                                                                                        |
+| Decision                                                | Status                                       | Evidence                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloudflare assertion flow / unauthenticated read bypass | **Resolved**                                 | `docs/milestones/operator-experience/08-security-api-and-authorization.md`'s own header note confirms removal; extensive auth regression suite passes (`tests/http/administrative-dashboard-authentication-integration.test.ts`, `tests/access-control/`) |
+| Local/remote CLI identity model                         | **Resolved** (2026-08-10, see correction C1) | ADR-028 (Accepted) fixes the identity/privilege constraints; ADR-031 (Accepted) chooses the concrete authenticated mutation transport; `services start/stop/restart` are implemented against it                                                           |
+| Service policy persistence and precedence               | **Resolved**                                 | `ServiceAvailabilityPolicyStore` + `PolicyAwareRegisteredServiceCatalog` exist; precedence now explicitly tested (see above)                                                                                                                              |
+| Machine policy persistence and precedence               | **Still open**                               | No policy store or mutation use case for `MACHINE_OPERATING_POLICY`; correctly out of Slice 4 scope                                                                                                                                                       |
+| Runtime diagnostic implementation boundary              | **Still open**                               | Infrastructure-diagnostics track not started                                                                                                                                                                                                              |
+| Final route additions and explicit route count          | **Resolved as an ongoing discipline**        | Exercised three times (45→46→47) with contract updates each time; now backed by an automated reconciliation test rather than manual count-matching                                                                                                        |

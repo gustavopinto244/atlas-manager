@@ -49,11 +49,19 @@ Slice 4 completion; see
 for full evidence. Only decisions with no accepted resolution in source
 remain in this table.
 
-| Decision                                                                           | Blocks                                 | Required artifact                                                         |
-| ---------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
-| Local/remote CLI identity model                                                    | mutating CLI commands                  | ADR-028; authenticated transport implementation and security tests remain |
-| Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                                                             |
-| Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice                                 |
+Re-reconciled 2026-08-10 by the authenticated mutating CLI milestone. The
+"Local/remote CLI identity model" row was removed from this table: it was
+resolved by ADR-028 (constraints, Accepted) plus ADR-031 (concrete
+authenticated mutation transport, Accepted), and `services start/stop/restart`
+are implemented against that transport. The row's previous wording —
+"ADR-028; authenticated transport implementation and security tests remain" —
+also misread ADR-028's status; see correction C1 in
+[`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md).
+
+| Decision                                                                           | Blocks                                 | Required artifact                         |
+| ---------------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- |
+| Machine policy persistence and precedence                                          | machine schedule mutation              | dedicated ADR                             |
+| Runtime diagnostic implementation boundary (Node adapters versus shared Go report) | status/doctor/dashboard infrastructure | boundary decision in the diagnostic slice |
 
 ## Resolved decisions
 
@@ -62,9 +70,5 @@ remain in this table.
 | Correct end-to-end Cloudflare assertion flow and remove current read bypass | The unauthenticated dashboard read exception was removed; every administrative route requires a valid Access assertion and authorized principal.                                                                                                                                                      | `08-security-api-and-authorization.md`'s own header note; `tests/http/administrative-dashboard-authentication-integration.test.ts`, `tests/access-control/`                                                                      |
 | Service policy persistence and precedence                                   | `ServiceAvailabilityPolicyStore` (in-memory and file-backed) exists; `PolicyAwareRegisteredServiceCatalog` fully replaces the environment-owned base policy with a persisted one when present, identically through `findById()` and `list()`; temporary overrides remain a separate evaluation layer. | `src/service-management/infrastructure/policy-aware-registered-service-catalog.ts`; precedence explicitly tested in `tests/service-management/infrastructure/policy-aware-registered-service-catalog.test.ts` (added 2026-08-10) |
 | Final route additions and explicit route count                              | Exercised three times without incident (45→46→47 across Slices 3 and 4); an automated test now reconciles the published contract against the live catalog on every run instead of relying on manual count-matching.                                                                                   | `tests/http/administrative-api-contract.test.ts` (added 2026-08-10)                                                                                                                                                              |
-
-ADR-027 (`docs/adr/027-operator-cli-and-dashboard.md`) remains formally
-`Status: Proposed` even though source has operated in full compliance with
-its decision since the CLI foundation and across all four Operator Dashboard
-v2 slices. This is a governance action for the maintainer, not a source gap;
-recommended but not performed by this reconciliation.
+| Local/remote CLI identity model                                             | ADR-028 (Accepted) fixes the identity and privilege constraints; ADR-031 (Accepted) chooses the concrete transport — operator-authenticated HTTP through the existing administrative boundary, forwarding an externally issued Access assertion. No new route, no second authorization system.        | `docs/adr/028-cli-identity-and-privilege-boundary.md`, `docs/adr/031-authenticated-mutating-cli-transport.md`, `docs/reviews/mutating-cli-threat-model.md`, `tests/cli/mutating-transport-security.test.ts`                      |
+| ADR-027 formal status                                                       | Accepted 2026-08-10 after a decision-by-decision conformance review: twelve of thirteen normative decisions implemented and regression-covered, the thirteenth an unbuilt capability rather than a divergence.                                                                                        | `docs/reviews/adr-027-implementation-conformance.md`                                                                                                                                                                             |
