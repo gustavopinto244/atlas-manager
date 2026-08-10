@@ -28,8 +28,9 @@ of the protected overview response; the dashboard does not derive operational
 state independently.
 
 Infrastructure is read-only and shows the protected security posture, route
-catalog reconciliation and host-boundary flags. It does not offer a repair
-button.
+catalog reconciliation, host-boundary flags and the runtime diagnostics
+(status, PM2/Docker, Nginx and tunnel checks) added by ADR-032. It does not
+offer a repair button.
 
 Machine shows the authoritative operating policy, next shutdown/wake
 transitions and a simulation preview. The preview identifies the backend,

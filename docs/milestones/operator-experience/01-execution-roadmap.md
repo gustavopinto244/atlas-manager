@@ -25,7 +25,10 @@ Exit gate: no authentication bypass, existing security regressions green.
 1. Add the packaged `atlas` executable, parser, help and output abstraction.
 2. Add `status`, `health` and `doctor` using read-only application ports.
 3. Add `infra status`, `infra listeners`, `nginx status/test` and `tunnel
-status` only where adapters can report partial failures safely.
+status` only where adapters can report partial failures safely. — done
+   2026-08-10 under ADR-032 (Operator Infrastructure Diagnostics, PR #319),
+   which also extended `status`/`doctor` and added the dashboard
+   Infrastructure diagnostics section.
 4. Add JSON schemas and stable exit/error codes.
 
 Exit gate: no mutating CLI command and no direct shell-output parsing inside
@@ -114,3 +117,77 @@ qualification/deployment rehearsals.
 15. `test: complete operator experience regressions`
 
 Commit names are provisional and must follow the actual diff.
+
+## Operator Experience closeout (2026-08-10)
+
+This section is the authoritative "what's left" statement for the Operator
+Experience milestone series as of source HEAD `b7b18d1` (post-#319). It
+supersedes the phase-by-phase status above where the two disagree. Full
+detail and file-level evidence: `docs/reviews/operator-experience-final-gap-audit.md`.
+
+**Source complete** (delivered, tested, in `main`):
+
+- Administrative route catalog (48 descriptors, contract-tested).
+- CLI: 36/36 command nodes implemented, 0 stubs.
+- Authenticated mutating CLI over ADR-031 (`services
+start/stop/restart`).
+- Scheduling and backup CLI mutations (`services schedule
+set/always/manual/disable/remove`, `backups run/run-status/schedule
+set|remove/retention set|prune`).
+- Infrastructure diagnostics: CLI (`infra`, `nginx`, `tunnel`, extended
+  `status`/`doctor`) and dashboard Infrastructure page (ADR-032).
+- Dashboard shell/navigation, service resource observability, persisted
+  service scheduling with candidate-draft preview and weekly editor.
+- Next-transition presentation for service schedules (single next value).
+
+**Deferred** (consciously, by design — see gap audit items 7-9):
+
+- Compose per-member resource aggregation semantics (needs its own
+  aggregation design).
+- Separate multi-section service detail page (reassessed, not currently
+  justified by real backing data).
+- Machine schedule mutation/persistence (explicitly gated behind a
+  dedicated ADR; physical power management stays out of scope for 1.0
+  entirely, not just this release).
+
+**Real gaps** (not by design, just not built — see gap audit items 2-6):
+
+- Active schedule override + expiry presentation.
+- Following-transitions list (beyond the single next value).
+- Scheduler health/cursor visibility.
+- Dashboard manual backup "run now" control (CLI-only today).
+- Events pagination/tail UX in the dashboard.
+
+None of these were implemented in this closeout milestone: each requires
+extending a route response contract or adding UX comparable in size to an
+existing mutation flow, which is outside this milestone's small-fixes bar.
+
+**Operational** (depend on real Atlas host availability, not on source):
+
+- Task Manager registration on the real host.
+- Live Atlas scheduling/power acceptance (source is mock-backed only;
+  `POWER_MANAGEMENT_BACKEND=mock` and effects stay disabled).
+- Read-only Atlas host qualification (ADR-018).
+
+**Release** (required to promote the next RC):
+
+- Full source qualification (format/lint/typecheck/tests/build/audit/Go
+  qualification) — see `docs/reviews/operator-experience-final-gap-audit.md`
+  and this reconciliation's Phase 5 qualification run for current status.
+- Independent Candidate A/B build reproducibility.
+- Formalizing the next release-candidate identity (version stays
+  `1.0.0-rc.13` until that is explicitly done).
+
+### Expected sequence going forward
+
+"source closeout" → "next RC formalization" → "full qualification" →
+"Candidate A/B reproducibility" → "read-only Atlas host qualification" →
+"Task Manager registration/verification" → "deployment" → "operator
+acceptance".
+
+This reconciliation completes "source closeout" (documentation reconciled,
+gaps classified, qualification run — see Phase 5). It does **not** perform
+RC formalization (no version bump), Candidate A/B builds, or anything
+requiring the real Atlas host — those remain the next steps in the sequence,
+in the stated order. Physical power management is not part of this release
+closeout scope; it stays out of scope for 1.0 entirely.

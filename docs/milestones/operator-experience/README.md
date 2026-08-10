@@ -1,6 +1,7 @@
 # Atlas Operator Experience — plan and implementation context
 
-Status: implementation reconciled through Operator Dashboard v2 Slice 4
+Status: implementation reconciled through the Operator Infrastructure
+Diagnostics milestone (ADR-032, PR #319)
 
 This directory preserves the original implementation plan and records its
 current source reconciliation. The source inventory and capability matrix are
@@ -10,33 +11,39 @@ code.
 ## Current implementation baseline (2026-08-10)
 
 See [`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md)
+and [`docs/reviews/operator-experience-final-gap-audit.md`](../../reviews/operator-experience-final-gap-audit.md)
 for the full, source-derived inventory. Summary:
 
-- Source HEAD at reconciliation start: `298ffa95f53fa18b48221f6c81df26279d9ea9e9`
-  (merge of Operator Dashboard v2 Slice 3, #313); this reconciliation and
-  Slice 4 continue on `feat/operator-experience-slice4`.
+- Source HEAD at this reconciliation: `b7b18d1` (merge of Operator
+  Infrastructure Diagnostics, #319), following the merged authenticated
+  mutating CLI (#317) and scheduling/backup CLI mutations (#318).
 - Release: `1.0.0-rc.13`.
-- Administrative route catalog: **47 descriptors**, verified against source
+- Administrative route catalog: **48 descriptors**, verified against source
   by `tests/http/administrative-api-contract.test.ts` (not a static count —
   see that test before trusting any other number in this directory).
-- Completed capability tracks: security/contracts repair, CLI foundation
-  and 31 of 36 command nodes, dashboard shell/navigation
-  (Operator Dashboard v2 Slice 2), service resource observability
-  (Slice 3), and registered-service scheduling — persistent policy store,
-  candidate-draft preview, weekly editor overhaul, timeline current-state
-  display (Slice 4).
-  Scheduling and backup CLI mutations are delivered: `services schedule
-set/always/manual/disable/remove`, `backups run`, `backups run-status`,
-  `backups schedule set/remove` and `backups retention set/prune`, all reusing
-  the ADR-031 transport with zero new administrative routes.
-- Remaining implementation:
-  infrastructure diagnostics (CLI/dashboard), machine schedule mutation
-  (blocked on a dedicated policy-store ADR), Compose resource aggregation
-  semantics, active-override display on the schedule timeline.
+- CLI command tree: **36 of 36 command nodes implemented, 0 stubs** —
+  `tests/cli/` asserts no declared-but-unimplemented command remains. ADR-032
+  closed the last five (`infra status`, `infra listeners`, `nginx status`,
+  `nginx test`, `tunnel status`).
+- Completed capability tracks: security/contracts repair, full CLI command
+  tree, dashboard shell/navigation (Operator Dashboard v2 Slice 2), service
+  resource observability (Slice 3), registered-service scheduling —
+  persistent policy store, candidate-draft preview, weekly editor overhaul,
+  timeline current-state display (Slice 4), authenticated mutating CLI
+  (`services start/stop/restart` over ADR-031), scheduling and backup CLI
+  mutations (`services schedule set/always/manual/disable/remove`, `backups
+run`, `backups run-status`, `backups schedule set/remove`, `backups
+retention set/prune`), and infrastructure diagnostics (CLI `infra`/`nginx`/
+  `tunnel` commands plus the dashboard Infrastructure page, ADR-032).
+- Remaining implementation gaps: see the final gap audit for the
+  authoritative, classified list. At a minimum: machine schedule mutation
+  (blocked on a dedicated policy-store ADR — deliberately out of scope for
+  this milestone), Compose resource aggregation semantics, active-override/
+  expiry presentation on the schedule timeline, a separate multi-section
+  service detail page, and Events pagination/tail UX.
 - Remaining operational acceptance: Task Manager registration and any live
-  scheduling acceptance require Atlas host access this reconciliation does
-  not have; see the Slice 4 final reconciliation document for the current
-  blocker.
+  Atlas scheduling acceptance require real Atlas host access this
+  reconciliation does not have.
 
 ### Original inventory snapshot (historical, do not treat as current)
 
@@ -100,8 +107,9 @@ Branch: `agent/fix-administrative-profile-contract`
 - Administrative shell, assets and APIs fail closed without a valid Access
   assertion and authorized principal.
 - The catalog and published contract stay reconciled by
-  `tests/http/administrative-api-contract.test.ts` (47 descriptors as of
-  2026-08-10; do not hardcode this number elsewhere).
+  `tests/http/administrative-api-contract.test.ts` (48 descriptors as of
+  2026-08-10, after ADR-032's infrastructure diagnostics route; do not
+  hardcode this number elsewhere).
 - CLI/dashboard remain presentation adapters.
 - Power browser tests cover disabled, loading, unauthorized, busy, malformed
   response, confirmation and accepted-occurrence flows.
