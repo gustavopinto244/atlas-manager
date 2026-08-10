@@ -117,6 +117,33 @@ describe("dashboard schedule view", () => {
     expect(parent.textContent).toContain("Local time:");
   });
 
+  it("shows an active override with its expiry", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "manual" },
+      effectiveAvailability: "available",
+      override: {
+        kind: "keep_available",
+        expiresAt: "2026-08-08T08:00:00.000Z",
+      },
+    });
+
+    expect(parent.textContent).toContain(
+      "Active override: keep_available · Expires at: 2026-08-08T08:00:00.000Z",
+    );
+  });
+
+  it("omits the override line when there is no active override", () => {
+    const parent = new FakeElement();
+    renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {
+      policy: { mode: "manual" },
+      effectiveAvailability: "available",
+      override: null,
+    });
+
+    expect(parent.textContent).not.toContain("Active override:");
+  });
+
   it("omits the current-state line when effectiveAvailability is absent", () => {
     const parent = new FakeElement();
     renderScheduleTimeline(fakeDocument(), parent as unknown as HTMLElement, {

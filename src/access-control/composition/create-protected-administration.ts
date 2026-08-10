@@ -463,13 +463,15 @@ export function createProtectedAdministration(
         ).find((candidate) => candidate.id === serviceId);
         if (service === undefined)
           throw new Error("registered_service_not_found");
+        const availability =
+          await requireServices().getRegisteredServiceEffectiveAvailability.executeWithOverride(
+            serviceId,
+          );
         return Object.freeze({
           serviceId,
           policy: service.availabilityPolicy,
-          effectiveAvailability:
-            await requireServices().getRegisteredServiceEffectiveAvailability.execute(
-              serviceId,
-            ),
+          effectiveAvailability: availability.expectation,
+          override: availability.override,
           observedAt,
         });
       }),

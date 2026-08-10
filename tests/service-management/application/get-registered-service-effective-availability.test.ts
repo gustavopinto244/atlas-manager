@@ -332,6 +332,49 @@ describe("GetRegisteredServiceEffectiveAvailability", () => {
     expect(store.removeByServiceId).not.toHaveBeenCalled();
   });
 
+  it("executeWithOverride surfaces the active override alongside the expectation", async () => {
+    const service = createService({ mode: "always" });
+    const override = createOverride("keep_available");
+    const { useCase } = createUseCase(service, override);
+
+    await expect(useCase.executeWithOverride(service.id)).resolves.toEqual({
+      expectation: "available",
+      override,
+    });
+  });
+
+  it("executeWithOverride returns null for a service with no override", async () => {
+    const service = createService({ mode: "manual" });
+    const { useCase } = createUseCase(service, null);
+
+    await expect(useCase.executeWithOverride(service.id)).resolves.toEqual({
+      expectation: "manual",
+      override: null,
+    });
+  });
+
+  it("executeWithOverride returns null for an expired override", async () => {
+    const service = createService({ mode: "always" });
+    const override = createOverride(
+      "suspend_schedule",
+      "2026-08-02T13:00:00.000Z",
+    );
+    const { useCase } = createUseCase(service, override);
+
+    await expect(useCase.executeWithOverride(service.id)).resolves.toEqual({
+      expectation: "available",
+      override: null,
+    });
+  });
+
+  it("execute() still returns just the expectation string", async () => {
+    const service = createService({ mode: "always" });
+    const override = createOverride("keep_available");
+    const { useCase } = createUseCase(service, override);
+
+    await expect(useCase.execute(service.id)).resolves.toBe("available");
+  });
+
   it("follows catalog, store, clock, and return order", async () => {
     const trace: string[] = [];
     const service = createService({ mode: "always" });

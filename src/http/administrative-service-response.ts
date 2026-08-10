@@ -64,6 +64,7 @@ export function mapAdministrativeAvailability(
     policy: unknown;
     effectiveAvailability: string;
     observedAt: string;
+    override?: Readonly<{ kind: string; expiresAt: string }> | null;
   }>,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
@@ -71,7 +72,15 @@ export function mapAdministrativeAvailability(
     policy: mapPolicy(value.policy),
     effectiveAvailability: value.effectiveAvailability,
     observedAt: value.observedAt,
+    override: mapOverride(value.override),
   });
+}
+
+function mapOverride(
+  override: Readonly<{ kind: string; expiresAt: string }> | null | undefined,
+): Readonly<{ kind: string; expiresAt: string }> | null {
+  if (override === null || override === undefined) return null;
+  return Object.freeze({ kind: override.kind, expiresAt: override.expiresAt });
 }
 
 function mapPolicy(policy: unknown): unknown {

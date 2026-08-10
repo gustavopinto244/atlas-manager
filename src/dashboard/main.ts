@@ -718,10 +718,15 @@ async function loadSchedules(): Promise<SectionLoadResult> {
         availability.outcome === "success"
           ? readRecord(availability.value).effectiveAvailability
           : undefined;
+      const override =
+        availability.outcome === "success"
+          ? readRecord(availability.value).override
+          : undefined;
       return {
         ...(isRecord(policy.value) ? policy.value : {}),
         scheduleEditable: policy.scheduleEditable,
         effectiveAvailability,
+        override,
         preview: preview.outcome === "success" ? preview.value : null,
       };
     }),

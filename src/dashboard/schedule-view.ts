@@ -29,6 +29,12 @@ export function renderScheduleTimeline(
     stateLine.textContent = `Current state: ${effectiveAvailability} · Local time: ${localTime}`;
     parent.append(stateLine);
   }
+  const override = readOverride(value);
+  if (override !== null) {
+    const overrideLine = document.createElement("p");
+    overrideLine.textContent = `Active override: ${override.kind} · Expires at: ${override.expiresAt}`;
+    parent.append(overrideLine);
+  }
   const preview = readPreview(value);
   if (preview !== null) {
     const previewSummary = document.createElement("p");
@@ -164,6 +170,18 @@ function readEffectiveAvailability(value: unknown): string | null {
   return typeof record.effectiveAvailability === "string"
     ? record.effectiveAvailability
     : null;
+}
+
+function readOverride(
+  value: unknown,
+): Readonly<{ kind: string; expiresAt: string }> | null {
+  if (typeof value !== "object" || value === null) return null;
+  const override = (value as { override?: unknown }).override;
+  if (typeof override !== "object" || override === null) return null;
+  const record = override as Record<string, unknown>;
+  if (typeof record.kind !== "string" || typeof record.expiresAt !== "string")
+    return null;
+  return { kind: record.kind, expiresAt: record.expiresAt };
 }
 
 // The dashboard never calculates this itself -- it only formats a timestamp
