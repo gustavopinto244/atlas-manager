@@ -68,10 +68,7 @@ export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVe
       validateTemporalClaims(claims, verificationTime);
       let key: CryptoKey;
       try {
-        key = await this.#jwksProvider.resolveKey(
-          header.kid,
-          verificationTime,
-        );
+        key = await this.#jwksProvider.resolveKey(header.kid, verificationTime);
       } catch (keyError) {
         if (isUnavailable(keyError))
           return createAdministrativeAuthenticationResult({

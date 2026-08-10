@@ -7,6 +7,9 @@ const root = process.cwd();
 const outputDirectory = process.env.RELEASE_ARTIFACT_DIR
   ? process.env.RELEASE_ARTIFACT_DIR
   : root;
+const packageJson = JSON.parse(
+  await readFile(join(root, "package.json"), "utf8"),
+);
 const sourceCommit =
   process.env.RELEASE_SNAPSHOT === "true"
     ? null
@@ -92,7 +95,7 @@ const sourceLine = sourceCommit
   : "Source commit: detached CI qualification artifact";
 const output = `# Atlas Manager v1 requirements traceability
 
-Release candidate: \`${process.env.RELEASE_VERSION ?? "1.0.0-rc.11"}\`
+Release candidate: \`${process.env.RELEASE_VERSION ?? packageJson.version}\`
 ${sourceLine}
 Scope: software-only qualification; physical gates are intentionally separate.
 

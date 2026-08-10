@@ -210,13 +210,9 @@ export function logMachinePowerRuntimeIdentityBlocked(
   );
 }
 
-export function logUnhandledError(
-  logger: PinoLogger,
-  error: unknown,
-): void {
+export function logUnhandledError(logger: PinoLogger, error: unknown): void {
   const errorType = error instanceof Error ? error.name : "UnknownError";
-  const errorMessage =
-    error instanceof Error ? error.message : String(error);
+  const errorMessage = error instanceof Error ? error.message : String(error);
   logger.error(
     {
       event: "unhandled_error_detected",

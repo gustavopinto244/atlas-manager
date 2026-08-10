@@ -10,7 +10,9 @@ export function controlOperationsFor(
   service: Record<string, unknown>,
 ): readonly ServiceControlOperation[] {
   const supported = readSupportedOperations(service);
-  return CONTROL_OPERATIONS.filter((operation) => supported.includes(operation));
+  return CONTROL_OPERATIONS.filter((operation) =>
+    supported.includes(operation),
+  );
 }
 
 export function supportsLogs(service: Record<string, unknown>): boolean {

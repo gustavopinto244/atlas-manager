@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.0-rc.13
+
+- derives dashboard service controls (start/stop/restart/logs) from each
+  registered service's actual `supportedOperations` instead of a hardcoded
+  button list, closing the remaining verifiable gap in Operator Dashboard v2
+  Slice 1 reliability work;
+- extracts the operation-filtering logic into a new testable module
+  (`src/dashboard/service-operations.ts`), since the dashboard entrypoint
+  executes DOM-dependent code and cannot be unit tested directly;
+- fixes release-identity drift across the lockfile, release contract, CLI
+  version test, and requirements-traceability generator's hardcoded fallback
+  (see `docs/reviews/rc13-release-identity-audit.md`); the traceability
+  generator now derives its release-candidate label from `package.json`
+  instead of a literal that required a manual bump every release;
+- registering the real Task Manager PM2 entry remains an operator action
+  pending live Atlas inspection of the actual PM2 process — the PM2 dispatch
+  pipeline is already adapter-generic and requires no further source work.
+
 ## 1.0.0-rc.12
 
 - closes deployability and authentication-hardening gates identified by the
@@ -50,7 +68,7 @@
   Cloudflare Access redirecting the browser from the Access login domain to the
   administrative origin;
 - accepts the exact cross-site return shape: `GET /` with `Sec-Fetch-Site:
-  cross-site`, `Sec-Fetch-Mode: navigate`, and `Sec-Fetch-Dest: document`;
+cross-site`, `Sec-Fetch-Mode: navigate`, and `Sec-Fetch-Dest: document`;
 - maintains mandatory authentication after the envelope check with Cloudflare
   Access assertion verification and backend-authoritative RBAC;
 - keeps Host and Origin validation enabled with cross-site administrative API and
