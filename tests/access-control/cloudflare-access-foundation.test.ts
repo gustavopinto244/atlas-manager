@@ -214,7 +214,7 @@ describe("Cloudflare Access JWT verification", () => {
       ),
     ).resolves.toEqual({
       outcome: "unauthenticated",
-      reason: "credentials_invalid",
+      reason: "claims_invalid",
     });
   });
 
@@ -230,7 +230,7 @@ describe("Cloudflare Access JWT verification", () => {
       verifier.verify(createCloudflareAccessJwtAssertion(token), NOW),
     ).resolves.toEqual({
       outcome: "unauthenticated",
-      reason: "credentials_invalid",
+      reason: "claims_invalid",
     });
     expect(fetch.calls).toHaveLength(1);
   });
@@ -353,6 +353,41 @@ describe("Cloudflare Access JWT verification", () => {
       provider.checkReadiness(new Date(NOW.getTime() + 1_000)),
     ).resolves.toBe("unavailable");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports audience_mismatch when token audience does not match configuration", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+    const token = await fixture.token({ aud: "wrong-audience" });
+    await expect(
+      verifier.verify(createCloudflareAccessJwtAssertion(token), NOW),
+    ).resolves.toEqual({
+      outcome: "unauthenticated",
+      reason: "audience_mismatch",
+    });
+  });
+
+  it("reports claims_invalid when token is expired", async () => {
+    const fixture = await createFixture();
+    const verifier = new CloudflareAccessJwtVerifierAdapter(
+      fixture.configuration,
+      new CloudflareAccessJwksProvider(fixture.configuration, {
+        fetch: createJwksFetch(fixture.publicJwk),
+      }),
+    );
+    const pastTime = new Date(NOW.getTime() - 400_000);
+    const token = await fixture.token();
+    await expect(
+      verifier.verify(createCloudflareAccessJwtAssertion(token), pastTime),
+    ).resolves.toEqual({
+      outcome: "unauthenticated",
+      reason: "claims_invalid",
+    });
   });
 
   it("flows a verified subject through the existing access-control port", async () => {
@@ -498,7 +533,7 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
     token: async (overrides = {}) => {
       const protectedType = overrides.protectedType;
       return new SignJWT({
-        aud: configuration.audience,
+        aud: overrides.aud ?? configuration.audience,
         exp: Math.floor(NOW.getTime() / 1_000) + 300,
         iat: Math.floor(NOW.getTime() / 1_000),
         iss: configuration.issuer,

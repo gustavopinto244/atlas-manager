@@ -1,0 +1,26 @@
+# Atlas Manager operator sudoers file template
+#
+# Install with: sudo visudo -c -f deployment/sudoers/atlas-manager-operator
+# Then: sudo install -m 440 -o root -g root deployment/sudoers/atlas-manager-operator /etc/sudoers.d/atlas-manager-operator
+#
+# This file grants specific systemd lifecycle commands without requiring a password.
+# Remove this file to restore the pre-change behavior: sudo rm /etc/sudoers.d/atlas-manager-operator
+#
+# Docker access is intentionally excluded: docker is equivalent to root.
+# Grant container access via group membership instead: sudo usermod -aG docker <operator>
+#
+# PM2 commands are excluded: PM2 typically runs under the operator account, requiring no sudo.
+# If PM2 requires sudo in your environment, add specific entries after validation.
+
+Defaults env_keep+="LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT LC_IDENTIFICATION LC_ALL LANGUAGE"
+
+# Service lifecycle: systemctl start/stop/restart/status
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl start atlas-manager.service
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop atlas-manager.service
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart atlas-manager.service
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl status atlas-manager.service
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-enabled atlas-manager.service
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active atlas-manager.service
+
+# Service logs: journalctl
+operator ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u atlas-manager.service

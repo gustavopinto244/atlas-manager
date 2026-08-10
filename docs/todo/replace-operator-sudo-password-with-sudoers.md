@@ -1,6 +1,8 @@
 # TODO: replace the operator sudo password with a scoped /etc/sudoers.d rule
 
-Status: open — not implemented. Recorded from the pre-deploy audit (CRIT-01).
+Status: partially implemented in rc.12. The systemctl and journalctl portion has been
+delivered as a reference template at `deployment/sudoers/atlas-manager-operator`. Open questions
+about PM2 and container-access rollout remain unresolved (see below).
 
 Reference: [pre-deploy audit](../pre-deploy-audit.md), finding CRIT-01.
 

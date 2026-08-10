@@ -31,6 +31,7 @@ import {
   logMachinePowerRuntimeIdentityBlocked,
   logHttpServerStarted,
   logUnexpectedStartupFailure,
+  logUnhandledError,
 } from "./logging/logger.js";
 import { GetServerHealth } from "./server-health/application/get-server-health.js";
 import { LinuxCoretempCpuTemperatureReader } from "./server-health/infrastructure/linux-coretemp-cpu-temperature-reader.js";
@@ -379,6 +380,16 @@ function start(): void {
       shutdownRequested = true;
       return coordinatedShutdown(reason);
     };
+    process.on("unhandledRejection", (reason: unknown) => {
+      logUnhandledError(logger, reason);
+      setFailureExitCode();
+      void requestShutdown(Object.freeze({ kind: "unhandled_error" }));
+    });
+    process.on("uncaughtException", (error: Error) => {
+      logUnhandledError(logger, error);
+      setFailureExitCode();
+      void requestShutdown(Object.freeze({ kind: "unhandled_error" }));
+    });
     const schedulerRuntime =
       new ServiceAvailabilityReconciliationSchedulerRuntime(
         serviceManagement.serviceAvailabilityReconciliationSchedulerLoop,

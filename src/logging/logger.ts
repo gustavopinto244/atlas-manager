@@ -209,3 +209,20 @@ export function logMachinePowerRuntimeIdentityBlocked(
     "Machine power runtime identity blocked",
   );
 }
+
+export function logUnhandledError(
+  logger: PinoLogger,
+  error: unknown,
+): void {
+  const errorType = error instanceof Error ? error.name : "UnknownError";
+  const errorMessage =
+    error instanceof Error ? error.message : String(error);
+  logger.error(
+    {
+      event: "unhandled_error_detected",
+      errorType,
+      errorMessage,
+    },
+    "Unhandled error detected, initiating shutdown",
+  );
+}
