@@ -1,5 +1,57 @@
 # Slice 4: scheduling UX and adapter boundaries
 
+## Status
+
+Delivered (branch `agent/operator-dashboard-v2-slice-4`):
+
+- **Draft preview without persisting**: `PreviewRegisteredServiceAvailabilityPolicy`
+  (new use case) + `GET /admin/services/:id/schedule/preview?policy=&startsAt=&endsAt=`
+  reuse the existing domain validation and evaluator with a candidate policy
+  instead of the persisted one, satisfying "the browser does not calculate
+  authoritative transitions independently." Also fixed a real pre-existing
+  gap found while wiring this: an invalid policy `mode` was not mapped to a
+  400 response on the _existing_ save route either.
+- **Editor**: explicit per-day enable checkbox (previously implicit via
+  empty inputs), copy-one-day-to-selected-days, clear day, clear week,
+  dirty-state tracking with a `beforeunload` warning, and Save/Preview/Remove
+  as three distinct actions (Remove wires up the schedule-delete route that
+  already existed but had no UI trigger).
+- **Timeline**: shows the current effective state (`effectiveAvailability`,
+  already computed server-side, now also fetched on the success path rather
+  than only as an error fallback) and the current local time formatted in
+  the policy's own timezone.
+- **Control-plane boundary**: verified, not implemented -- there is no HTTP
+  path to register a new service at all (`REGISTERED_SERVICES_JSON` is
+  operator-controlled deployment config, applied only through the
+  transactional `replace-disabled` flow), and `managementAdapter` is a
+  closed enum (`mock`/`pm2`/`docker`/`docker-compose`) with no `systemd`
+  option. Nginx, cloudflared and Atlas Manager cannot become schedulable
+  services through any code path that exists today; this document's own
+  prohibition on a generic systemd adapter without a dedicated ADR (see
+  "Nginx boundary" below) remains un-triggered because no such adapter was
+  added.
+
+**Not delivered, explicitly deferred:**
+
+- True multi-window-per-day editing. The domain already supports multiple
+  windows sharing a weekday (verified in
+  `weekly-availability-schedule.ts`'s overlap check), and `copyWindowToDays`/
+  `clearDayWindow` operate generically on arbitrary window lists, but the
+  editor's day rows are still fixed at one window per weekday. Extending to
+  dynamic add/remove rows per day is a larger UI change left for a follow-up.
+- Active override and expiry display on the timeline. No current endpoint
+  returns the override's `kind`/`expiresAt` on the success path used by the
+  schedule view (`GetRegisteredServiceAvailability` returns policy +
+  effective availability, not the override object) -- this needs a small new
+  read-only use case, not just frontend work, and was deferred to keep this
+  pass's backend surface area to the one addition (preview) that was
+  strictly necessary.
+- Scheduler cursor/health surfaced per service (no authoritative API exposes
+  it at that granularity; the plan itself gates this on "when exposed").
+- The physical deployment acceptance steps (register Task Manager, run a
+  live schedule window, verify Nginx/cloudflared/Atlas stayed up) require
+  Atlas host access this session does not have.
+
 ## Objective
 
 Provide a usable weekly schedule editor and timeline for registered PM2,

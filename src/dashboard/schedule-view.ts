@@ -18,6 +18,17 @@ export function renderScheduleTimeline(
   const summary = document.createElement("p");
   summary.textContent = `Mode: ${policy.mode}${policy.timezone === null ? "" : ` · Timezone: ${policy.timezone}`}`;
   parent.append(summary);
+  const effectiveAvailability = readEffectiveAvailability(value);
+  if (effectiveAvailability !== null) {
+    const stateLine = document.createElement("p");
+    const now = new Date();
+    const localTime =
+      policy.timezone === null
+        ? now.toISOString()
+        : formatLocalTime(now, policy.timezone);
+    stateLine.textContent = `Current state: ${effectiveAvailability} · Local time: ${localTime}`;
+    parent.append(stateLine);
+  }
   const preview = readPreview(value);
   if (preview !== null) {
     const previewSummary = document.createElement("p");
@@ -109,4 +120,35 @@ function readPreview(value: unknown): Readonly<{
         ? record.firstRequiredAt
         : null,
   };
+}
+
+function readEffectiveAvailability(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  return typeof record.effectiveAvailability === "string"
+    ? record.effectiveAvailability
+    : null;
+}
+
+// The dashboard never calculates this itself -- it only formats a timestamp
+// it already has (the browser clock, used purely for display) into the
+// authoritative policy's own timezone, matching how an operator reading a
+// weekly window would expect to see "now."
+function formatLocalTime(now: Date, timezone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .format(now)
+      .replace(",", "");
+  } catch {
+    return now.toISOString();
+  }
 }
