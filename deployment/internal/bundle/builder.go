@@ -180,6 +180,9 @@ func Build(ctx context.Context, config Config) (Result, error) {
 			return Result{}, err
 		}
 	}
+	if err := rejectEnvironmentSecrets(root); err != nil {
+		return Result{}, err
+	}
 	paths, err := manifest.Files(filepath.Join(root, "application"))
 	if err != nil {
 		return Result{}, err
@@ -350,6 +353,29 @@ func copyBuildInputs(source, destination string) error {
 	}
 	// build:deployment runs scripts/generate-dashboard-assets.mjs.
 	return copyTree(filepath.Join(source, "scripts"), filepath.Join(destination, "scripts"))
+}
+
+// rejectEnvironmentSecrets refuses to publish a bundle containing an operator
+// environment file. Nothing in the build copies one today, so this asserts that
+// property explicitly rather than leaving it to depend on which paths
+// copyBuildInputs happens to select. Operator environment files hold live
+// credentials and belong only in root-owned configuration on the host.
+//
+// The bundle legitimately ships config/atlas-manager.env.example, whose name
+// does not start with the reserved prefix.
+func rejectEnvironmentSecrets(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("bundle_secret_scan_failed")
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".env") {
+			return fmt.Errorf("bundle_environment_secret_present")
+		}
+		return nil
+	})
 }
 
 // verifyServedDashboardAssets rejects a build whose served dashboard entrypoint

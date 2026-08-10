@@ -65,6 +65,38 @@ func writeDashboardBuild(t *testing.T, root, servedApp string) {
 	}
 }
 
+func TestRejectEnvironmentSecretsBlocksOperatorEnvironmentFiles(t *testing.T) {
+	for _, name := range []string{".env", ".env.operator", ".env.production", ".env.local"} {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "application", "dist"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "application", "dist", name), []byte("SECRET=value\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := rejectEnvironmentSecrets(root)
+		if err == nil {
+			t.Fatalf("%s was accepted into the bundle", name)
+		}
+		if err.Error() != "bundle_environment_secret_present" {
+			t.Fatalf("%s produced unexpected error: %v", name, err)
+		}
+	}
+}
+
+func TestRejectEnvironmentSecretsAllowsTheConfigurationTemplate(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), []byte("HOST=127.0.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectEnvironmentSecrets(root); err != nil {
+		t.Fatalf("configuration template rejected: %v", err)
+	}
+}
+
 func TestToolVersionMatchesPinnedTools(t *testing.T) {
 	if !toolVersionMatches("node", "v24.18.0\n", "v24.18.0") {
 		t.Fatal("node version rejected")

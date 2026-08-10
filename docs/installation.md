@@ -29,6 +29,41 @@ effects and the machine scheduler disabled. This guide never installs or
 activates the Linux power helper and never performs a real shutdown, reboot,
 wake-alarm or RTC mutation.
 
+## Never transfer operator secrets to the host
+
+Transfer the release archive only. Do not copy a working tree, a `dist/`
+directory or a developer `$HOME` onto the server: those locations may hold
+uncommitted operator environment files carrying live credentials, and copying
+them publishes those credentials to the host.
+
+Bundle generation refuses to publish any file whose name begins with `.env`, so
+a release archive cannot carry one. That guarantee does not extend to an ad hoc
+`rsync` or `scp`. When transferring by hand, exclude them explicitly rather than
+relying on a pattern that happens not to match:
+
+```bash
+rsync -a --exclude='.env' --exclude='.env.*' --exclude='node_modules' \
+  --exclude='dist' <source> <destination>
+```
+
+Any environment file that does legitimately live on the host must be readable
+only by root or by the service account:
+
+| Path                                   | Owner                | Mode  |
+| -------------------------------------- | -------------------- | ----- |
+| `/etc/atlas-manager/atlas-manager.env` | `root:atlas-manager` | `640` |
+| Any operator-only environment file     | the operator account | `600` |
+
+Verify after every configuration change:
+
+```bash
+stat -c '%n %U:%G %a' /etc/atlas-manager/atlas-manager.env
+```
+
+A mode wider than the table above exposes the Cloudflare Access audience,
+principal assignments and any other configured secret to every local account.
+Rotate the affected values if a file was ever world-readable.
+
 ## Host Node.js runtime
 
 The service unit runs `ExecStart=/usr/bin/node`, so `/usr/bin/node` must be the
