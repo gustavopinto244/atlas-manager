@@ -1,7 +1,7 @@
 # Atlas Manager v1 requirements traceability
 
 Release candidate: `1.0.0-rc.13`
-Source commit: `ab152b3e7866e1091022d667e41e63d020cedad3`
+Source commit: detached CI qualification artifact
 Scope: software-only qualification; physical gates are intentionally separate.
 
 The table is generated from the normative identifiers in `docs/requirements.md`.
