@@ -22,6 +22,7 @@ export interface InfrastructureDiagnosticsCompositionInput {
   readonly pm2ProcessListExecutor?: InfrastructureDiagnosticSources["pm2ProcessListExecutor"];
   readonly backupSchedulerCursorReader?: InfrastructureDiagnosticSources["backupSchedulerCursorReader"];
   readonly powerSchedulerCursorReader?: InfrastructureDiagnosticSources["powerSchedulerCursorReader"];
+  readonly serviceAvailabilityReconciliationSchedulerCursorReader?: InfrastructureDiagnosticSources["serviceAvailabilityReconciliationSchedulerCursorReader"];
   readonly eventHistoryReadinessReader?: InfrastructureDiagnosticSources["eventHistoryReadinessReader"];
   readonly powerPostureReader?: InfrastructureDiagnosticSources["powerPostureReader"];
   /**
@@ -63,6 +64,13 @@ export function createInfrastructureDiagnosticsRuntime(
     ...(input.powerSchedulerCursorReader === undefined
       ? {}
       : { powerSchedulerCursorReader: input.powerSchedulerCursorReader }),
+    ...(input.serviceAvailabilityReconciliationSchedulerCursorReader ===
+    undefined
+      ? {}
+      : {
+          serviceAvailabilityReconciliationSchedulerCursorReader:
+            input.serviceAvailabilityReconciliationSchedulerCursorReader,
+        }),
     ...(input.eventHistoryReadinessReader === undefined
       ? {}
       : { eventHistoryReadinessReader: input.eventHistoryReadinessReader }),

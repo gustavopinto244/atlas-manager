@@ -291,4 +291,96 @@ describe("Atlas CLI schedule preview", () => {
       ),
     ).rejects.toThrow("Preview options require --from");
   });
+
+  it("reads the first event-history page by default", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { events: [] }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await transport.execute("events", [], new AbortController().signal);
+
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(urlOf(url)).toBe(
+      "http://127.0.0.1:3000/admin/event-history?limit=20",
+    );
+  });
+
+  it("widens the page with --tail, unchanged from prior behavior", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { events: [] }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await transport.execute("events", ["--tail"], new AbortController().signal);
+
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(urlOf(url)).toBe(
+      "http://127.0.0.1:3000/admin/event-history?limit=100",
+    );
+  });
+
+  it("wires --after to the server's afterSequence pagination cursor", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { events: [] }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await transport.execute(
+      "events",
+      ["--after", "42"],
+      new AbortController().signal,
+    );
+
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(urlOf(url)).toBe(
+      "http://127.0.0.1:3000/admin/event-history?limit=20&afterSequence=42",
+    );
+  });
+
+  it("combines --tail and --after for a wide, cursor-advanced page", async () => {
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { events: [] }));
+    const transport = createAtlasHttpTransport({ fetchImplementation });
+
+    await transport.execute(
+      "events",
+      ["--after", "7", "--tail"],
+      new AbortController().signal,
+    );
+
+    const [url] = fetchImplementation.mock.calls[0]!;
+    expect(urlOf(url)).toBe(
+      "http://127.0.0.1:3000/admin/event-history?limit=100&afterSequence=7",
+    );
+  });
+
+  it("rejects a non-numeric --after value", async () => {
+    const transport = createAtlasHttpTransport({
+      fetchImplementation: vi.fn<typeof fetch>(),
+    });
+
+    await expect(
+      transport.execute(
+        "events",
+        ["--after", "not-a-number"],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Option --after requires a non-negative integer");
+  });
+
+  it("rejects an unknown events option", async () => {
+    const transport = createAtlasHttpTransport({
+      fetchImplementation: vi.fn<typeof fetch>(),
+    });
+
+    await expect(
+      transport.execute(
+        "events",
+        ["--unexpected"],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Unknown option: --unexpected");
+  });
 });

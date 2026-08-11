@@ -183,8 +183,11 @@ async function executeHttpCommand(
     case "backups retention prune":
       return executeBackupRetentionPrune(client, args, signal);
     case "events": {
-      const limit = args.includes("--tail") ? 100 : 20;
-      return client.read(`/admin/event-history?limit=${limit}`, signal);
+      const options = readEventHistoryQueryOptions(args);
+      const query = new URLSearchParams({ limit: String(options.limit) });
+      if (options.afterSequence !== undefined)
+        query.set("afterSequence", String(options.afterSequence));
+      return client.read(`/admin/event-history?${query.toString()}`, signal);
     }
     case "infra status":
       return readInfraStatus(client, signal);
@@ -1547,6 +1550,59 @@ async function readOverviewField(
   const overview = await client.read("/admin/overview", signal);
   if (typeof overview !== "object" || overview === null) return null;
   return (overview as Record<string, unknown>)[field] ?? null;
+}
+
+const EVENT_HISTORY_DEFAULT_LIMIT = 20;
+const EVENT_HISTORY_TAIL_LIMIT = 100;
+
+type EventHistoryQueryOptions = Readonly<{
+  limit: number;
+  /** Unset reads the first page; the dashboard's "Load more" cursor. */
+  afterSequence: number | undefined;
+}>;
+
+/**
+ * `--tail` widens the single page (unchanged prior behavior). `--after
+ * <sequence>` wires the same `afterSequence` cursor the dashboard's "Load
+ * more" pagination already uses server-side, so a script can walk multiple
+ * pages instead of only ever reading the first one.
+ */
+function readEventHistoryQueryOptions(
+  args: readonly string[],
+): EventHistoryQueryOptions {
+  let tail = false;
+  let afterSequence: number | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const flag = args[index];
+    if (flag === "--tail") {
+      tail = true;
+      continue;
+    }
+    if (flag === "--after") {
+      const value = args[index + 1];
+      if (value === undefined || !/^(?:0|[1-9][0-9]*)$/u.test(value))
+        throw new AtlasCliError(
+          "invalid_arguments",
+          "Option --after requires a non-negative integer sequence",
+        );
+      afterSequence = Number(value);
+      if (!Number.isSafeInteger(afterSequence))
+        throw new AtlasCliError(
+          "invalid_arguments",
+          "Option --after requires a non-negative integer sequence",
+        );
+      index += 1;
+      continue;
+    }
+    throw new AtlasCliError(
+      "invalid_arguments",
+      `Unknown option: ${String(flag)}`,
+    );
+  }
+  return Object.freeze({
+    limit: tail ? EVENT_HISTORY_TAIL_LIMIT : EVENT_HISTORY_DEFAULT_LIMIT,
+    afterSequence,
+  });
 }
 
 type PreviewOptions = Readonly<{

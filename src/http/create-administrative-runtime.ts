@@ -46,6 +46,7 @@ import {
 import { NodePm2ProcessListExecutor } from "../service-management/infrastructure/pm2-process-list-executor.js";
 import { FileBackupSchedulerCursorStore } from "../backup-management/infrastructure/file-backup-scheduler-state.js";
 import { FileMachinePowerSchedulerCursorStore } from "../power-management/infrastructure/file-machine-power-scheduler-cursor-store.js";
+import { FileServiceAvailabilityReconciliationSchedulerCursorStore } from "../service-management/infrastructure/file-service-availability-reconciliation-scheduler-cursor-store.js";
 import type { AdministrativeIdentityReadiness } from "../access-control/domain/administrative-identity-readiness.js";
 import { GetMachinePowerPlan } from "../power-management/application/get-machine-power-plan.js";
 import type { MachinePowerPlan } from "../power-management/domain/machine-power-plan.js";
@@ -284,6 +285,15 @@ export function createAdministrativeRuntime(
           powerSchedulerCursorReader: new FileMachinePowerSchedulerCursorStore(
             config.machinePowerSchedulerCursorFilePath,
           ),
+        }),
+    ...(config.serviceAvailabilityReconciliationSchedulerCursorFilePath ===
+    undefined
+      ? {}
+      : {
+          serviceAvailabilityReconciliationSchedulerCursorReader:
+            new FileServiceAvailabilityReconciliationSchedulerCursorStore(
+              config.serviceAvailabilityReconciliationSchedulerCursorFilePath,
+            ),
         }),
     eventHistoryReadinessReader:
       eventHistory.checkAdministrativeEventHistoryReadiness,

@@ -42,6 +42,7 @@ atlas backups schedule show <target-id>
 atlas backups retention show <target-id>
 atlas events
 atlas events --tail
+atlas events --after <sequence>
 atlas machine status
 atlas machine plan
 atlas machine schedule show

@@ -43,6 +43,9 @@ export interface InfrastructureDiagnosticSources {
     read(): Promise<unknown>;
   }>;
   readonly powerSchedulerCursorReader?: Readonly<{ read(): Promise<unknown> }>;
+  readonly serviceAvailabilityReconciliationSchedulerCursorReader?: Readonly<{
+    read(): Promise<unknown>;
+  }>;
   readonly eventHistoryReadinessReader?: Readonly<{
     execute(): Promise<unknown>;
   }>;
@@ -100,6 +103,13 @@ export async function buildInfrastructureDiagnosticReport(
       schedulerCheck(
         CHECK_ID.schedulerPower,
         sources.powerSchedulerCursorReader,
+        observedAt,
+      ),
+    ),
+    probe(CHECK_ID.schedulerServiceAvailability, observedAt, () =>
+      schedulerCheck(
+        CHECK_ID.schedulerServiceAvailability,
+        sources.serviceAvailabilityReconciliationSchedulerCursorReader,
         observedAt,
       ),
     ),
@@ -400,7 +410,13 @@ async function schedulerCheck(
 function readLastTick(cursor: unknown): string | undefined {
   if (typeof cursor === "string") return cursor;
   if (typeof cursor !== "object" || cursor === null) return undefined;
-  for (const key of ["lastTickAt", "observedAt", "occurredAt", "value"]) {
+  for (const key of [
+    "lastTickAt",
+    "observedAt",
+    "occurredAt",
+    "completedThrough",
+    "value",
+  ]) {
     const value = (cursor as Record<string, unknown>)[key];
     if (typeof value === "string") return value;
   }
