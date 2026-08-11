@@ -150,6 +150,45 @@ export function serviceSchedulePath(serviceId: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Machine operating policy (schedule) mutations (ADR-033)
+// ---------------------------------------------------------------------------
+
+export type AtlasMachineScheduleOperation = "update" | "delete";
+
+export const ATLAS_MACHINE_SCHEDULE_OPERATIONS: readonly AtlasMachineScheduleOperation[] =
+  Object.freeze(["update", "delete"]);
+
+const MACHINE_SCHEDULE_MUTATIONS: Readonly<
+  Record<AtlasMachineScheduleOperation, AtlasAdministrativeMutationDescriptor>
+> = Object.freeze({
+  update: Object.freeze({
+    routeId: "machine.schedule.update",
+    method: "PUT",
+    pathTemplate: "/admin/machine/schedule",
+    confirmation: "confirm_machine_operating_policy_update",
+  }),
+  delete: Object.freeze({
+    routeId: "machine.schedule.delete",
+    method: "DELETE",
+    pathTemplate: "/admin/machine/schedule",
+    confirmation: "confirm_machine_operating_policy_removal",
+  }),
+});
+
+export const ATLAS_MACHINE_SCHEDULE_MUTATIONS = MACHINE_SCHEDULE_MUTATIONS;
+
+/** Fixed path -- the machine has no id, unlike a registered service. */
+export const ATLAS_MACHINE_SCHEDULE_PATH = "/admin/machine/schedule";
+export const ATLAS_MACHINE_SCHEDULE_PREVIEW_PATH =
+  "/admin/machine/schedule/preview";
+
+export function machineScheduleMutation(
+  operation: AtlasMachineScheduleOperation,
+): AtlasAdministrativeMutationDescriptor {
+  return MACHINE_SCHEDULE_MUTATIONS[operation];
+}
+
+// ---------------------------------------------------------------------------
 // Registered-backup operations
 // ---------------------------------------------------------------------------
 

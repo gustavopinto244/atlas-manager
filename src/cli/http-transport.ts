@@ -25,6 +25,9 @@ import {
   isAtlasBackupRunId,
   isAtlasBackupTargetId,
   isAtlasServiceId,
+  machineScheduleMutation,
+  ATLAS_MACHINE_SCHEDULE_PATH,
+  ATLAS_MACHINE_SCHEDULE_PREVIEW_PATH,
   serviceActionMutation,
   serviceActionPath,
   serviceReadPath,
@@ -34,6 +37,7 @@ import {
   type AtlasBackupRetentionOperation,
   type AtlasDiagnosticStatus,
   type AtlasBackupScheduleOperation,
+  type AtlasMachineScheduleOperation,
   type AtlasServiceOperation,
   type AtlasServiceScheduleOperation,
 } from "./administrative-contract.js";
@@ -208,6 +212,17 @@ async function executeHttpCommand(
       return readOverviewField(client, "powerSafety", signal);
     case "machine schedule show":
       return readOverviewField(client, "machineSchedule", signal);
+    case "machine schedule preview": {
+      const preview = readMachineSchedulePreviewOptions(args);
+      return client.read(
+        `${ATLAS_MACHINE_SCHEDULE_PREVIEW_PATH}?policy=${encodeURIComponent(preview.policy)}`,
+        signal,
+      );
+    }
+    case "machine schedule set":
+      return executeMachineScheduleSet(client, args, signal);
+    case "machine schedule remove":
+      return executeMachineScheduleRemove(client, signal);
     default:
       throw new AtlasCliError(
         "command_not_implemented",
@@ -725,6 +740,205 @@ function mapScheduleMutationRejection(
       envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
     })`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Machine operating policy (schedule) mutations (ADR-033)
+// ---------------------------------------------------------------------------
+
+export type AtlasMachineScheduleMutationResult = Readonly<{
+  operation: AtlasMachineScheduleOperation;
+  result: "completed";
+  /**
+   * Authoritative post-mutation policy mode, or `unknown` when the confirming
+   * re-read failed. For `delete` this is the *fallback* policy the machine
+   * reverts to: the statically configured `MACHINE_OPERATING_POLICY`
+   * environment default.
+   */
+  mode: string;
+  /** Full authoritative resolved policy, when the re-read succeeded. */
+  policy: unknown;
+  authoritativeRead: "ok" | "unavailable";
+}>;
+
+async function executeMachineScheduleSet(
+  client: AtlasAdministrativeClient,
+  args: readonly string[],
+  signal: AbortSignal,
+): Promise<AtlasMachineScheduleMutationResult> {
+  const policy = readMachineSchedulePolicyArgument(args);
+  return mutateMachineSchedule(client, "update", signal, { policy });
+}
+
+async function executeMachineScheduleRemove(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+): Promise<AtlasMachineScheduleMutationResult> {
+  // Deliberately no `policy` key: removing the persisted override lets the
+  // machine fall back to its environment-configured default policy.
+  return mutateMachineSchedule(client, "delete", signal, undefined);
+}
+
+async function mutateMachineSchedule(
+  client: AtlasAdministrativeClient,
+  operation: AtlasMachineScheduleOperation,
+  signal: AbortSignal,
+  payload: Readonly<Record<string, unknown>> | undefined,
+): Promise<AtlasMachineScheduleMutationResult> {
+  client.assertMutationAllowed();
+
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.mutate(
+      {
+        descriptor: machineScheduleMutation(operation),
+        path: ATLAS_MACHINE_SCHEDULE_PATH,
+        ...(payload === undefined ? {} : { payload }),
+      },
+      signal,
+    );
+  } catch (error) {
+    throw mapMutationDispatchError(
+      error,
+      `machine schedule ${operation} request`,
+      "Re-read authoritative state with: atlas machine schedule show",
+    );
+  }
+
+  if (envelope.status < 200 || envelope.status >= 300)
+    throw mapMachineScheduleMutationRejection(envelope);
+  if (envelope.malformed)
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unreadable machine schedule response",
+    );
+  if (!hasMachineScheduleMutationAcknowledgement(envelope.body, operation))
+    throw new AtlasCliError(
+      "service_operation_failed",
+      "Atlas returned an unexpected machine schedule response",
+    );
+
+  // Success is never claimed from the mutation response alone (ADR-031): the
+  // resolved policy is read back from the authoritative schedule route.
+  const authoritative = await describeMachineScheduleSafely(client, signal);
+  return Object.freeze({
+    operation,
+    result: "completed" as const,
+    mode: authoritative.kind === "described" ? authoritative.mode : "unknown",
+    policy: authoritative.kind === "described" ? authoritative.policy : null,
+    authoritativeRead:
+      authoritative.kind === "described" ? "ok" : "unavailable",
+  });
+}
+
+type MachineScheduleDescription =
+  | Readonly<{ kind: "described"; mode: string; policy: unknown }>
+  | Readonly<{ kind: "indeterminate" }>;
+
+async function describeMachineScheduleSafely(
+  client: AtlasAdministrativeClient,
+  signal: AbortSignal,
+): Promise<MachineScheduleDescription> {
+  let envelope: AtlasAdministrativeResponse;
+  try {
+    envelope = await client.readEnvelope(ATLAS_MACHINE_SCHEDULE_PATH, signal);
+  } catch {
+    return Object.freeze({ kind: "indeterminate" as const });
+  }
+  if (envelope.status !== 200 || envelope.malformed)
+    return Object.freeze({ kind: "indeterminate" as const });
+  if (typeof envelope.body !== "object" || envelope.body === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const policy = (envelope.body as Record<string, unknown>).policy;
+  if (typeof policy !== "object" || policy === null)
+    return Object.freeze({ kind: "indeterminate" as const });
+  const mode = (policy as Record<string, unknown>).mode;
+  if (typeof mode !== "string")
+    return Object.freeze({ kind: "indeterminate" as const });
+  return Object.freeze({ kind: "described" as const, mode, policy });
+}
+
+/**
+ * A `PUT` answers with the persisted policy itself (`{mode, ...}`); a
+ * `DELETE` answers with `{removed: true}` -- both are verified here rather
+ * than assumed from the HTTP status, mirroring
+ * `hasScheduleMutationAcknowledgement`.
+ */
+function hasMachineScheduleMutationAcknowledgement(
+  body: unknown,
+  operation: AtlasMachineScheduleOperation,
+): boolean {
+  if (typeof body !== "object" || body === null) return false;
+  const record = body as Record<string, unknown>;
+  if (operation === "delete") return record.removed === true;
+  return typeof record.mode === "string";
+}
+
+function mapMachineScheduleMutationRejection(
+  envelope: AtlasAdministrativeResponse,
+): AtlasCliError {
+  if (envelope.status === 401 || envelope.status === 403)
+    return new AtlasCliError(
+      "administrative_access_denied",
+      "Administrative authentication is required",
+    );
+  if (envelope.status === 409 || envelope.status === 429)
+    return new AtlasCliError(
+      "operation_conflict",
+      envelope.status === 429
+        ? "Atlas is rate limiting administrative requests; retry shortly"
+        : "Another administrative machine schedule operation is in progress",
+    );
+  if (
+    envelope.status === 400 &&
+    envelope.errorCode === "invalid_machine_schedule_request"
+  )
+    return new AtlasCliError(
+      "schedule_invalid",
+      "Atlas rejected the machine schedule policy as invalid",
+    );
+  if (envelope.errorCode === "administrative_service_state_recheck_required")
+    return new AtlasCliError(
+      "mutation_outcome_unknown",
+      "Atlas could not confirm the outcome. Re-read authoritative state with: atlas machine schedule show",
+    );
+  return new AtlasCliError(
+    "service_operation_failed",
+    `Atlas rejected the machine schedule mutation (HTTP ${envelope.status}${
+      envelope.errorCode === undefined ? "" : `, ${envelope.errorCode}`
+    })`,
+  );
+}
+
+function readMachineSchedulePolicyArgument(args: readonly string[]): unknown {
+  if (args.length !== 2 || args[0] !== "--policy")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      args.length > 0 && args[0] !== "--policy" && args[0]?.startsWith("-")
+        ? `Unknown option: ${String(args[0])}`
+        : "Option --policy <json> is required",
+    );
+  try {
+    return JSON.parse(args[1] as string) as unknown;
+  } catch {
+    throw new AtlasCliError(
+      "invalid_arguments",
+      "Option --policy requires valid JSON",
+    );
+  }
+}
+
+function readMachineSchedulePreviewOptions(
+  args: readonly string[],
+): Readonly<{ policy: string }> {
+  if (args.length !== 2 || args[0] !== "--policy")
+    throw new AtlasCliError(
+      "invalid_arguments",
+      args.length > 0 && args[0] !== "--policy" && args[0]?.startsWith("-")
+        ? `Unknown option: ${String(args[0])}`
+        : "Option --policy <json> is required",
+    );
+  return Object.freeze({ policy: args[1] as string });
 }
 
 // ---------------------------------------------------------------------------
