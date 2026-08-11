@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0-rc.15
+
+- rebuilds the dashboard's visual system as Design v3: a layered dark/neon
+  design system with cyan/violet accents used as outlines, washes and glows
+  rather than fills, a restructured shell markup, and the four
+  `SectionStatusRegion` async states (loading/empty/failed/stale) made
+  visually distinct instead of rendering identically (#326);
+- adds CLI authentication as a Cloudflare Access service token (ADR-034):
+  `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` take precedence over the
+  now-deprecated `ATLAS_CLOUDFLARE_ACCESS_JWT`, principals are discriminated
+  as `human`/`service` so a machine identity can never appear in the audit
+  trail as an operator, and an undeclared service token authenticates as
+  nobody even when Cloudflare accepted it (#326);
+- formalizes this release candidate as the interim, #326-inclusive build the
+  1.0.0 GA promotion sequence deploys and accepts on the real Atlas host
+  before promoting that exact accepted commit to bare `1.0.0`;
+- retains mock-only power safety and, as of this candidate, still no
+  completed real-host deployment: acceptance is pending, see
+  `docs/release/atlas-manager-1.0.0-rc.15.md`.
+
 ## 1.0.0-rc.14
 
 - closes four Operator Experience gap-audit items that were re-verified as
