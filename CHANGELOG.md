@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- adds a per-route HTTP study guide (`study/`, one document per registered
+  route grouped by domain) written while re-learning the request flow of
+  every administrative endpoint;
+- fixes several HTTP error-mapping bugs surfaced while writing those docs:
+  invalid service availability policies and invalid event-history retention
+  policies were responding `503`/`500` instead of `400`, an out-of-range
+  `limit` on `GET /admin/backups/runs` responded `503` instead of `400`,
+  and a rejected `DELETE /admin/event-history/retention` reported an
+  incomplete `Allow` header;
+- fixes `POST /admin/event-history/exports` returning a response with every
+  field `undefined` — the handler passed the mutation's nested
+  `{outcome, metadata}` result straight into a mapper expecting a flat
+  metadata object;
+- corrects a swapped audit operation label between the service schedule and
+  service availability read paths (authorization behavior was unaffected,
+  since both resolve to the same permission);
+- aligns the published API contract's declared `maxBodyBytes` with the
+  byte limits actually enforced by several mutation routes, which had
+  drifted (documented 8192 bytes vs. enforced 512/4096), and regenerates
+  the contract digest accordingly;
+- removes seven orphaned source files that nothing imported, found by
+  cross-referencing every relative import across `src/`, `tests/`,
+  `scripts/` and `deployment/`: an unused Cloudflare Access JWKS test
+  fake, an unwired `BackupReadinessReader` implementation, four one-line
+  re-export shims for classes now defined directly in
+  `linux-power-helper-adapters.ts`, and an unreferenced
+  `DockerContainerDetailsReader`; note this leaves
+  `src/service-management/domain/docker-container-details.ts` exercised
+  only by its own test, with no remaining production consumer.
+
 ## 1.0.0
 
 General availability. Identity promotion only — no functional change from
