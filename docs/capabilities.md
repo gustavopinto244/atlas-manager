@@ -62,31 +62,25 @@ preparation/execution states.
   service card plus the dedicated Schedules section already surface every
   field that has real backing data, and a second page would either duplicate
   that or show fields with no data behind them.
-- Scheduler health/cursor visibility (item 4) was **closed in Operator
-  Experience Phase 4**: a new `scheduler.service_availability` `CHECK_ID`
-  reads `ServiceAvailabilityReconciliationSchedulerCursor` through the
-  existing `infra`/`doctor` diagnostics report, wired via a new
-  `create-administrative-runtime.ts` config field
-  (`serviceAvailabilityReconciliationSchedulerCursorFilePath`, already
-  present in `EnvironmentConfig` since Phase 3 but previously unused by
-  diagnostics). Fixing `readLastTick()` to also recognize the cursor's
-  `completedThrough` key was a genuine, pre-existing bug: the already-shipped
-  `scheduler.power` check reads the same key shape and silently reported "no
-  tick recorded yet" even when the power scheduler cursor had advanced. Both
-  checks now report the real last-tick timestamp. See
-  `docs/reviews/operator-experience-final-gap-audit.md` item 4.
 - CLI schedule _mutation_ commands (`set`/`always`/`manual`/`disable`/`remove`)
   and CLI backup mutation commands (`run`, `run-status`, `schedule
 set`/`remove`, `retention set`/`prune`) are built: they reuse the ADR-031
   authenticated transport with zero new administrative routes. This item is
   closed as of `feat/operator-cli-schedule-backup-mutations` (#318).
-- CLI `events` pagination (item 6's CLI half) was **closed in Operator
-  Experience Phase 4**: `atlas events --after <sequence>` now wires the same
-  `afterSequence` query parameter the route already accepted (and the
-  dashboard's "Load more" already used), so a script can walk multiple pages.
-  `--tail` is unchanged (still widens the single page to 100 rows) and
-  combines with `--after`. There is still no live tail/follow mode — that
-  remains a distinct, larger feature, not attempted here.
+- CLI `events --tail --after <sequence>` are the only pagination controls
+  exposed; there is still no live tail/follow mode that streams new events as
+  they occur (`atlas events` remains a one-shot page read, repeated
+  invocations required to walk the log). This is a distinct, larger feature
+  than pagination and was not attempted in any tranche so far.
+- Backups dashboard run-status is shown per-target from the existing runs
+  feed and refreshes whenever any operator action on the page completes, but
+  the Backups section is not part of the dashboard's automatic polling set —
+  only Services auto-polls (`SERVICES_POLL_INTERVAL_MS` in
+  `src/dashboard/main.ts`), a deliberate Slice 3 scope decision. Extending
+  automatic polling to Backups (or other sections) is a real product/UX
+  decision — poll interval, per-session read cost, which sections warrant it
+  — not a small presentational fix. See
+  `docs/reviews/operator-experience-final-gap-audit.md` item 5.
 
 ### Closed in the Operator Experience Phase 0-1 tranche
 
@@ -113,3 +107,27 @@ null` field.
 - **Events pagination** — the dashboard Events page now has a "Load more"
   button using the already-existing `hasMore`/`nextAfterSequence` response
   fields; no route or schema change.
+
+### Closed in the Operator Experience Phase 4 tranche
+
+Following Phase 3 (`e665bfe`, machine operating policy persistence, ADR-033),
+this tranche re-verified every remaining item in
+`docs/reviews/operator-experience-final-gap-audit.md` and closed the two that
+were genuinely small:
+
+- **Scheduler health/cursor visibility** (item 4, previously deferred by
+  size) is now surfaced: a new `scheduler.service_availability` `CHECK_ID`
+  reads `ServiceAvailabilityReconciliationSchedulerCursor` through the
+  existing `infra`/`doctor` diagnostics report, wired via
+  `create-administrative-runtime.ts` using the
+  `serviceAvailabilityReconciliationSchedulerCursorFilePath` config field
+  (already present in `EnvironmentConfig` since Phase 3, but previously
+  unused by diagnostics). Implementing this also surfaced and fixed a
+  genuine pre-existing bug: `readLastTick()` did not recognize the
+  `completedThrough` key, so the already-shipped `scheduler.power` check was
+  silently reporting "no tick recorded yet" even when its cursor had
+  advanced. Both checks now report the real last-tick timestamp.
+- **CLI events pagination** (the CLI half of item 6) is now closed:
+  `atlas events --after <sequence>` wires the same `afterSequence` query
+  parameter the route already accepted and the dashboard's "Load more"
+  already used. `--tail` is unchanged and composes with `--after`.
