@@ -9,6 +9,7 @@ import { createEventHistory } from "../../src/event-history/composition/create-e
 import { InMemoryAdministrativeEventHistory } from "../../src/event-history/infrastructure/in-memory-administrative-event-history.js";
 import { createPowerManagement } from "../../src/power-management/composition/create-power-management.js";
 import type { PowerManagementClock } from "../../src/power-management/application/ports/power-management-clock.js";
+import { InMemoryMachineOperatingPolicyStore } from "../../src/power-management/infrastructure/in-memory-machine-operating-policy-store.js";
 
 const PRINCIPAL_ID = "00000000-0000-4000-8000-000000000001";
 const NOW = "2026-08-01T12:00:00.000Z";
@@ -421,5 +422,82 @@ describe("administrative access-control foundation", () => {
       kind: "administrative",
       actorId: `administrator:${PRINCIPAL_ID}`,
     });
+  });
+
+  it("lets a power_operator set, read and remove the machine schedule, fully audited", async () => {
+    const history = createEventHistory();
+    const configured = access(["power_operator"]);
+    const machineOperatingPolicyStore =
+      new InMemoryMachineOperatingPolicyStore();
+    const protectedAdministration = createProtectedAdministration({
+      accessControl: configured.capabilities,
+      machineOperatingPolicyStore,
+      eventHistory: history,
+      clock: clock(),
+    });
+
+    await protectedAdministration.setMachineOperatingPolicy.execute({
+      mode: "manual",
+    });
+    await expect(
+      protectedAdministration.getMachineOperatingPolicy.execute(),
+    ).resolves.toEqual({ policy: { mode: "manual" }, source: "persisted" });
+
+    await protectedAdministration.removeMachineOperatingPolicy.execute();
+    await expect(
+      protectedAdministration.getMachineOperatingPolicy.execute(),
+    ).resolves.toEqual({
+      policy: { mode: "always_on" },
+      source: "environment_default",
+    });
+
+    const page = await history.getAdministrativeEventHistory.execute();
+    expect(
+      page.events
+        .filter(
+          (event) => event.operation !== "authorize_administrative_operation",
+        )
+        .map((event) => [event.operation, event.status]),
+    ).toEqual([
+      ["update_machine_operating_policy", "started"],
+      ["update_machine_operating_policy", "succeeded"],
+      ["remove_machine_operating_policy", "started"],
+      ["remove_machine_operating_policy", "succeeded"],
+    ]);
+    expect(
+      page.events
+        .filter(
+          (event) => event.operation === "update_machine_operating_policy",
+        )
+        .every(
+          (event) =>
+            event.target.kind === "machine" &&
+            event.target.id === "atlas" &&
+            event.source.actorId === `administrator:${PRINCIPAL_ID}`,
+        ),
+    ).toBe(true);
+  });
+
+  it("denies a role without power.schedule permissions from reading or writing the machine schedule", async () => {
+    const history = createEventHistory();
+    const configured = access(["scheduler_operator"]);
+    const machineOperatingPolicyStore =
+      new InMemoryMachineOperatingPolicyStore();
+    const protectedAdministration = createProtectedAdministration({
+      accessControl: configured.capabilities,
+      machineOperatingPolicyStore,
+      eventHistory: history,
+      clock: clock(),
+    });
+
+    await expect(
+      protectedAdministration.getMachineOperatingPolicy.execute(),
+    ).rejects.toMatchObject({ code: "administrative_authorization_denied" });
+    await expect(
+      protectedAdministration.setMachineOperatingPolicy.execute({
+        mode: "manual",
+      }),
+    ).rejects.toMatchObject({ code: "administrative_authorization_denied" });
+    await expect(machineOperatingPolicyStore.find()).resolves.toBeNull();
   });
 });

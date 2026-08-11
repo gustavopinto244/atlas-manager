@@ -181,6 +181,21 @@ export const ATLAS_COMMANDS: readonly AtlasCommand[] = Object.freeze([
     summary: "Show the machine schedule",
     implemented: true,
   },
+  {
+    path: ["machine", "schedule", "preview"],
+    summary: "Preview a candidate machine schedule",
+    implemented: true,
+  },
+  {
+    path: ["machine", "schedule", "set"],
+    summary: "Persist a machine schedule policy",
+    implemented: true,
+  },
+  {
+    path: ["machine", "schedule", "remove"],
+    summary: "Remove the persisted machine schedule policy",
+    implemented: true,
+  },
 ]);
 
 export function findCommand(path: readonly string[]): AtlasCommand | undefined {

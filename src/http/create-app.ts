@@ -34,6 +34,10 @@ import {
   type AdministrativeServiceScheduleRouteDependencies,
 } from "./administrative-service-schedule-route.js";
 import {
+  registerAdministrativeMachineScheduleRoutes,
+  type AdministrativeMachineScheduleRouteDependencies,
+} from "./administrative-machine-schedule-route.js";
+import {
   registerAdministrativeOverviewRoute,
   type AdministrativeOverviewRouteDependencies,
 } from "./administrative-overview-route.js";
@@ -75,6 +79,7 @@ export interface CreateAppDependencies {
   administrativeServices?: AdministrativeServicesRouteDependencies;
   administrativeServiceAvailability?: AdministrativeServiceAvailabilityRouteDependencies;
   administrativeServiceSchedule?: AdministrativeServiceScheduleRouteDependencies;
+  administrativeMachineSchedule?: AdministrativeMachineScheduleRouteDependencies;
   administrativeOverview?: AdministrativeOverviewRouteDependencies;
   administrativeDashboard?: AdministrativeDashboardRouteDependencies;
   administrativeBackups?: AdministrativeBackupsRouteDependencies;
@@ -96,6 +101,7 @@ export function createApp({
   administrativeServices,
   administrativeServiceAvailability,
   administrativeServiceSchedule,
+  administrativeMachineSchedule,
   administrativeOverview,
   administrativeDashboard,
   administrativeBackups,
@@ -116,6 +122,7 @@ export function createApp({
     administrativeServices !== undefined ||
     administrativeServiceAvailability !== undefined ||
     administrativeServiceSchedule !== undefined ||
+    administrativeMachineSchedule !== undefined ||
     administrativeOverview !== undefined ||
     administrativeDashboard !== undefined ||
     administrativeBackups !== undefined ||
@@ -158,6 +165,11 @@ export function createApp({
     registerAdministrativeServiceScheduleRoutes(
       app,
       administrativeServiceSchedule,
+    );
+  if (administrativeMachineSchedule !== undefined)
+    registerAdministrativeMachineScheduleRoutes(
+      app,
+      administrativeMachineSchedule,
     );
   if (administrativeOverview !== undefined)
     registerAdministrativeOverviewRoute(app, administrativeOverview);
@@ -208,6 +220,9 @@ export function createApp({
       ...(administrativeServiceSchedule === undefined
         ? []
         : ["ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY"]),
+      ...(administrativeMachineSchedule === undefined
+        ? []
+        : ["ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY"]),
       ...(administrativeOverview === undefined
         ? []
         : ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]),

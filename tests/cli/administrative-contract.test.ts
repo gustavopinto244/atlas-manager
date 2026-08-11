@@ -8,6 +8,10 @@ import {
   ATLAS_SERVICE_SCHEDULE_MUTATIONS,
   ATLAS_SERVICE_SCHEDULE_OPERATIONS,
   ATLAS_SERVICE_SCHEDULE_READ_PATH_TEMPLATE,
+  ATLAS_MACHINE_SCHEDULE_MUTATIONS,
+  ATLAS_MACHINE_SCHEDULE_OPERATIONS,
+  ATLAS_MACHINE_SCHEDULE_PATH,
+  ATLAS_MACHINE_SCHEDULE_PREVIEW_PATH,
   ATLAS_BACKUP_ACTION_MUTATIONS,
   ATLAS_BACKUP_OPERATIONS,
   ATLAS_BACKUP_RETENTION_MUTATIONS,
@@ -161,6 +165,62 @@ describe("CLI administrative contract binding", () => {
     );
     expect(serviceSchedulePath("task-manager")).toBe(
       "/admin/services/task-manager/schedule",
+    );
+  });
+
+  it("matches the canonical catalog for every machine schedule mutation", () => {
+    for (const operation of ATLAS_MACHINE_SCHEDULE_OPERATIONS) {
+      const declared = ATLAS_MACHINE_SCHEDULE_MUTATIONS[operation];
+      const canonical = descriptorFor(declared.routeId);
+      expect(declared.routeId, operation).toBe(`machine.schedule.${operation}`);
+      expect(declared.method, operation).toBe(canonical.method);
+      expect(declared.pathTemplate, operation).toBe(canonical.pathTemplate);
+      expect(canonical.confirmationPolicy, operation).toBe(
+        `exact:${declared.confirmation}`,
+      );
+    }
+  });
+
+  it("declares no machine schedule confirmation the catalog does not require", () => {
+    const catalogConfirmations = new Set(
+      ADMINISTRATIVE_ROUTE_SECURITY_CATALOG.filter(
+        (entry) => entry.confirmationPolicy !== "none",
+      ).map((entry) => entry.confirmationPolicy),
+    );
+    for (const operation of ATLAS_MACHINE_SCHEDULE_OPERATIONS)
+      expect(
+        catalogConfirmations.has(
+          `exact:${ATLAS_MACHINE_SCHEDULE_MUTATIONS[operation].confirmation}`,
+        ),
+        operation,
+      ).toBe(true);
+  });
+
+  it("keeps every machine schedule mutation behind authentication, RBAC and a mutation gate", () => {
+    for (const operation of ATLAS_MACHINE_SCHEDULE_OPERATIONS) {
+      const canonical = descriptorFor(`machine.schedule.${operation}`);
+      expect(canonical.authenticationPolicy, operation).toBe("required");
+      expect(canonical.permission, operation).toBe("power.schedule.write");
+      expect(canonical.gatePolicy, operation).toBe("service_mutation");
+      expect(canonical.auditPolicy, operation).toBe(
+        "authorization_started_terminal",
+      );
+      expect(canonical.replayPolicy, operation).toBe("state_recheck_required");
+    }
+  });
+
+  it("binds the authoritative machine schedule re-read to the catalog's route", () => {
+    expect(ATLAS_MACHINE_SCHEDULE_PATH).toBe(
+      descriptorFor("machine.schedule.read").pathTemplate,
+    );
+    expect(ATLAS_MACHINE_SCHEDULE_PREVIEW_PATH).toBe(
+      descriptorFor("machine.schedule.preview").pathTemplate,
+    );
+    expect(descriptorFor("machine.schedule.read").permission).toBe(
+      "power.schedule.read",
+    );
+    expect(descriptorFor("machine.schedule.preview").permission).toBe(
+      "power.schedule.read",
     );
   });
 

@@ -24,6 +24,7 @@ import { createBackupTarget } from "../../src/backup-management/domain/backup-ta
 import type { BackupTarget } from "../../src/backup-management/domain/backup-target.js";
 import { MockBackupAdapter } from "../../src/backup-management/infrastructure/mock-backup-adapter.js";
 import type { ServerHealthSnapshot } from "../../src/server-health/domain/server-health-snapshot.js";
+import { InMemoryMachineOperatingPolicyStore } from "../../src/power-management/infrastructure/in-memory-machine-operating-policy-store.js";
 
 /** Extracts a request URL without relying on default stringification. */
 function urlOf(input: RequestInfo | URL): string {
@@ -170,6 +171,7 @@ async function fixture(
     },
   );
   const admission = new FixedAdministrativeRequestAdmission(clock);
+  const machineOperatingPolicyStore = new InMemoryMachineOperatingPolicyStore();
   const createProtected = (reader: CloudflareAccessAssertionReader) =>
     createProtectedAdministration({
       accessControl: createAdministrativeAccessControl({
@@ -179,6 +181,7 @@ async function fixture(
       }),
       serviceManagement,
       backupManagement,
+      machineOperatingPolicyStore,
       eventHistory: history,
       clock,
     });
@@ -232,13 +235,24 @@ async function fixture(
       mutationGate,
       createProtectedAdministration: createProtected,
     },
+    administrativeMachineSchedule: {
+      admission,
+      mutationGate,
+      createProtectedAdministration: createProtected,
+    },
     administrativeBackups: {
       admission,
       mutationGate: backupGate,
       createProtectedAdministration: createProtected,
     },
   });
-  return { app, signAssertion, history, backupAdapter };
+  return {
+    app,
+    signAssertion,
+    history,
+    backupAdapter,
+    machineOperatingPolicyStore,
+  };
 }
 
 async function drain(value: PassThrough): Promise<string> {
@@ -617,6 +631,176 @@ describe("authenticated mutating CLI — service schedule", () => {
 
     expect(result.code).toBe(1);
     expect(errorCodeOf(result.err)).toBe("schedule_invalid");
+  });
+});
+
+/**
+ * Audited machine-schedule operations, read from the same event history an
+ * auditor uses. An empty result proves the mutation never reached the
+ * application layer.
+ */
+async function machineScheduleOperations(
+  history: Awaited<ReturnType<typeof fixture>>["history"],
+): Promise<readonly string[]> {
+  const page = await history.getAdministrativeEventHistory.execute({
+    limit: 50,
+  });
+  return (page.events as readonly Readonly<{ operation: string }>[])
+    .map((event) => event.operation)
+    .filter((operation) => operation.includes("machine_operating_policy"));
+}
+
+describe("authenticated mutating CLI — machine schedule", () => {
+  it("writes a machine schedule policy through the same audited operation the dashboard produces", async () => {
+    const value = await fixture(["power_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "machine",
+        "schedule",
+        "set",
+        "--policy",
+        JSON.stringify({ mode: "manual" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      operation: "update",
+      result: "completed",
+      mode: "manual",
+      authoritativeRead: "ok",
+    });
+    expect(await machineScheduleOperations(value.history)).toContain(
+      "update_machine_operating_policy",
+    );
+
+    // The identical PUT issued the way the dashboard issues it produces the
+    // same audited operation -- there is no CLI-only audit vocabulary.
+    const viaApi = await fixture(["power_operator"]);
+    const apiAssertion = await viaApi.signAssertion({});
+    const apiResponse = await request(viaApi.app)
+      .put("/admin/machine/schedule")
+      .set("host", HOST)
+      .set("Cf-Access-Jwt-Assertion", apiAssertion)
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_machine_operating_policy_update",
+        policy: { mode: "manual" },
+      });
+    expect(apiResponse.status).toBe(200);
+    expect(await machineScheduleOperations(viaApi.history)).toContain(
+      "update_machine_operating_policy",
+    );
+  });
+
+  it("removes a persisted machine schedule, reverting to the environment default", async () => {
+    const value = await fixture(["power_operator"]);
+    const assertion = await value.signAssertion({});
+
+    await runCli(
+      value.app,
+      [
+        "machine",
+        "schedule",
+        "set",
+        "--policy",
+        JSON.stringify({ mode: "manual" }),
+        "--json",
+      ],
+      assertion,
+    );
+    const result = await runCli(
+      value.app,
+      ["machine", "schedule", "remove", "--json"],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    const data = (JSON.parse(result.out) as { data: Record<string, unknown> })
+      .data;
+    expect(data).toMatchObject({ operation: "delete", result: "completed" });
+    // Removal restores the statically configured default policy, which is
+    // `always_on` here -- not the `manual` override that was just written.
+    expect(data.mode).toBe("always_on");
+    await expect(value.machineOperatingPolicyStore.find()).resolves.toBeNull();
+    expect(await machineScheduleOperations(value.history)).toContain(
+      "remove_machine_operating_policy",
+    );
+  });
+
+  it("refuses a machine schedule mutation for a principal without the power.schedule.write permission", async () => {
+    const value = await fixture(["auditor"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "machine",
+        "schedule",
+        "set",
+        "--policy",
+        JSON.stringify({ mode: "manual" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(3);
+    expect(errorCodeOf(result.err)).toBe("administrative_access_denied");
+    expect(await machineScheduleOperations(value.history)).toEqual([]);
+    await expect(value.machineOperatingPolicyStore.find()).resolves.toBeNull();
+  });
+
+  it("rejects an invalid machine policy server-side rather than in the CLI", async () => {
+    const value = await fixture(["power_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "machine",
+        "schedule",
+        "set",
+        "--policy",
+        JSON.stringify({ mode: "whenever-i-feel-like-it" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(1);
+    expect(errorCodeOf(result.err)).toBe("schedule_invalid");
+  });
+
+  it("previews a candidate machine policy through the same evaluator without persisting it", async () => {
+    const value = await fixture(["power_operator"]);
+    const assertion = await value.signAssertion({});
+
+    const result = await runCli(
+      value.app,
+      [
+        "machine",
+        "schedule",
+        "preview",
+        "--policy",
+        JSON.stringify({ mode: "always_on" }),
+        "--json",
+      ],
+      assertion,
+    );
+
+    expect(result.code).toBe(0);
+    expect(
+      (JSON.parse(result.out) as { data: Record<string, unknown> }).data,
+    ).toMatchObject({ expectation: "operating", source: "candidate_preview" });
+    await expect(value.machineOperatingPolicyStore.find()).resolves.toBeNull();
   });
 });
 

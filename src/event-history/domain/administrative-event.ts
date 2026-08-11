@@ -29,6 +29,8 @@ export const ADMINISTRATIVE_EVENT_OPERATIONS = Object.freeze([
   "remove_registered_service_availability",
   "update_registered_service_schedule",
   "remove_registered_service_schedule",
+  "update_machine_operating_policy",
+  "remove_machine_operating_policy",
   "run_registered_backup",
   "update_backup_schedule",
   "remove_backup_schedule",
@@ -161,6 +163,7 @@ export type AdministrativeEventFailureCode =
   | "service_readiness_unavailable"
   | "service_required_during_offline_interval"
   | "service_failed"
+  | "machine_schedule_operation_failed"
   | "service_state_unknown"
   | "backup_state_unknown"
   | "filesystem_state_unknown"
@@ -461,7 +464,11 @@ function createDetails(
     }
     throw new AdministrativeEventValidationError("invalid_details");
   }
-  if (operation === "run_backup_scheduler_tick") {
+  if (
+    operation === "run_backup_scheduler_tick" ||
+    operation === "update_machine_operating_policy" ||
+    operation === "remove_machine_operating_policy"
+  ) {
     if (status === "started") {
       if (!hasExactFields(record, []))
         throw new AdministrativeEventValidationError("invalid_details");
@@ -1095,6 +1102,7 @@ const SAFE_FAILURE_CODES = new Set<string>([
   "service_readiness_unavailable",
   "service_required_during_offline_interval",
   "service_failed",
+  "machine_schedule_operation_failed",
   "service_state_unknown",
   "backup_state_unknown",
   "filesystem_state_unknown",
