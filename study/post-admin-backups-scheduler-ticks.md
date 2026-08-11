@@ -15,7 +15,7 @@ Avança o agendador de backups em um "tick": procura ocorrências agendadas devi
 - **Corpo da requisição** (JSON, mesmas regras de tamanho/tipo das mutações de backup): exatamente `{ "confirmation": "confirm_backup_scheduler_tick" }` (`exactBody`).
 - **Formato da resposta** (200, `application/json`): `BackupSchedulerTickResult` bruto — `{ result: "idle"|"initialized"|"advanced"|"incomplete"|"conflict"|"blocked", processedCount: number, duplicateCount: number }` (sem função de mapeamento).
 - **Códigos de status possíveis**:
-  - `200` — o tick foi *executado* (mesmo que `result` seja `"conflict"` ou `"incomplete"` — não são erros HTTP, são estados de negócio, ver Erros).
+  - `200` — o tick foi _executado_ (mesmo que `result` seja `"conflict"` ou `"incomplete"` — não são erros HTTP, são estados de negócio, ver Erros).
   - `400 invalid_backup_request` — corpo mal formado ou confirmação incorreta.
   - `401` / `503 administrative_identity_unavailable`.
   - `403 administrative_authorization_denied`.

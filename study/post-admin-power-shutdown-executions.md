@@ -48,6 +48,7 @@ Executa de fato o desligamento: se a máquina estiver pronta (sem bloqueios) e d
 ## Observações
 
 A relação entre `preparations` e `executions` **não é modelada por um estado persistido explícito** (não existe um "esta ocorrência foi preparada: sim/não" salvo em disco). A ligação é inteiramente indireta: a preparação executa efeitos reais no mundo (para serviços, drena tarefas, completa backup, sincroniza filesystem), e a execução simplesmente reavalia a mesma checagem de prontidão — que só passa se esses efeitos já tiverem acontecido. Isso implica que:
+
 1. Se algo religar um serviço entre a preparação e a execução, a execução volta a ser bloqueada mesmo já tendo sido "preparada" antes.
 2. Chamar `executions` sem nunca ter chamado `preparations` é um fluxo perfeitamente válido do ponto de vista da API — só costuma falhar (`rejected`) se houver bloqueios reais no momento.
 3. A classe `ExecuteMachineShutdownOccurrence` internamente suporta preparar automaticamente (`automaticallyPrepare`, usado pelo agendador em `src/power-management/composition/create-power-management.ts`), mas o caminho HTTP explicitamente desativa isso (`automaticallyPrepare: false` em `create-protected-administration.ts`) — ou seja, a "automação" existe no código mas está deliberadamente desligada para chamadas manuais via API.

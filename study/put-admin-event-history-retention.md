@@ -33,7 +33,7 @@ Substitui a política de retenção do histórico de eventos (limites de segment
 
 ## Funções-chave
 
-- **`exactPolicy`** (`administrative-event-history-operations-route.ts`) — garante que o corpo tem exatamente `confirmation` e `policy`, nada mais, nada menos, e que a confirmação é a string exata esperada. Não valida o *conteúdo* de `policy` — só a forma do envelope.
+- **`exactPolicy`** (`administrative-event-history-operations-route.ts`) — garante que o corpo tem exatamente `confirmation` e `policy`, nada mais, nada menos, e que a confirmação é a string exata esperada. Não valida o _conteúdo_ de `policy` — só a forma do envelope.
 - **`mutate`** — mesmo gate único de manutenção usado por todas as mutações de histórico; decide se esta atualização pode prosseguir ou deve falhar com 409 imediatamente.
 - **`setRetentionPolicy(value)`** (implementação real na infraestrutura de histórico segmentado) — quem de fato valida `policy` semanticamente e a persiste; é onde erros de validação de domínio (ex. `event_history_retention_invalid`, ver `createRetentionPolicy` em `src/event-history/domain/event-history-record.ts`) originam.
 - **`createRetentionPolicy`** (`src/event-history/domain/event-history-record.ts`) — a validação de domínio da política: exige `schemaVersion: 1`, chaves exatas em `segments`/`exports`, inteiros dentro de faixas (`minSealedSegments` 1–1000, `maxSealedSegments` 1–10000, etc.), e consistência (`maxSealedSegments >= minSealedSegments`, `maxExports >= minExports`).

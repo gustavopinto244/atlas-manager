@@ -15,7 +15,7 @@ Executa a poda (prune) de artefatos de backup de um alvo, aplicando a política 
 - **Corpo da requisição** (JSON, mesmas regras de tamanho/tipo das mutações de backup): exatamente `{ "confirmation": "confirm_registered_backup_retention_prune" }` (`exactBody`).
 - **Formato da resposta** (200, `application/json`): `BackupRetentionResult` bruto — `{ targetId, processedCount, deletedCount, result: "completed"|"busy"|"blocked"|"partial" }` (**sem** passar por função de mapeamento; note que `result: "busy"`/`"blocked"`/`"partial"` são devolvidos com HTTP 200 — ver Erros e Observações).
 - **Códigos de status possíveis**:
-  - `200` — a poda foi *tentada*; o campo `result` no corpo é que diz se completou, ficou bloqueada, parcial ou não rodou por estar ocupada.
+  - `200` — a poda foi _tentada_; o campo `result` no corpo é que diz se completou, ficou bloqueada, parcial ou não rodou por estar ocupada.
   - `400 invalid_backup_request` — corpo mal formado ou confirmação incorreta.
   - `401` / `503 administrative_identity_unavailable`.
   - `403 administrative_authorization_denied`.

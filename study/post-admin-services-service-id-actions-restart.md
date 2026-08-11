@@ -44,6 +44,6 @@ Reinicia um serviço registrado. Não é implementado como "parar tudo, depois i
 
 ## Observações
 
-Confirmando o que a tarefa pediu para investigar: `restart` **não** é um atalho client-side para `stop` seguido de `start` no alvo — é uma operação de controlador própria (`operation: "restart"`), enquanto os *dependentes* do alvo é que recebem `stop` real e depois `start` real ao redor dela. Um leitor que espera simetria perfeita com as rotas de `start`/`stop` deve notar essa assimetria: o alvo tem tratamento especial, os dependentes não.
+Confirmando o que a tarefa pediu para investigar: `restart` **não** é um atalho client-side para `stop` seguido de `start` no alvo — é uma operação de controlador própria (`operation: "restart"`), enquanto os _dependentes_ do alvo é que recebem `stop` real e depois `start` real ao redor dela. Um leitor que espera simetria perfeita com as rotas de `start`/`stop` deve notar essa assimetria: o alvo tem tratamento especial, os dependentes não.
 
 Se o passo `restart` do próprio serviço falha, o plano interrompe antes de religar os dependentes já parados — não há rollback automático que tente restaurar o estado anterior dos dependentes.
