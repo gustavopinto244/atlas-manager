@@ -41,7 +41,11 @@ const commit =
   }).trim();
 if (!/^[0-9a-f]{40}$/u.test(commit)) throw new Error("source_commit_invalid");
 
-if (!/^\d+\.\d+\.\d+-rc\.\d+$/u.test(packageJson.version))
+// Accepts a release candidate (X.Y.Z-rc.N) or a bare GA version (X.Y.Z).
+// Anchored and literal on both shapes, not a generic prerelease pattern: it
+// must keep rejecting anything this project doesn't actually use (betas,
+// build metadata, a leading "v").
+if (!/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/u.test(packageJson.version))
   throw new Error("release_version_invalid");
 if (contract.releaseVersion !== packageJson.version)
   throw new Error("release_contract_version_invalid");
