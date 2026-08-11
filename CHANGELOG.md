@@ -21,7 +21,16 @@
 - aligns the published API contract's declared `maxBodyBytes` with the
   byte limits actually enforced by several mutation routes, which had
   drifted (documented 8192 bytes vs. enforced 512/4096), and regenerates
-  the contract digest accordingly.
+  the contract digest accordingly;
+- removes seven orphaned source files that nothing imported, found by
+  cross-referencing every relative import across `src/`, `tests/`,
+  `scripts/` and `deployment/`: an unused Cloudflare Access JWKS test
+  fake, an unwired `BackupReadinessReader` implementation, four one-line
+  re-export shims for classes now defined directly in
+  `linux-power-helper-adapters.ts`, and an unreferenced
+  `DockerContainerDetailsReader`; note this leaves
+  `src/service-management/domain/docker-container-details.ts` exercised
+  only by its own test, with no remaining production consumer.
 
 ## 1.0.0
 
