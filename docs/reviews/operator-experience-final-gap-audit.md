@@ -87,6 +87,39 @@ planning documents label this "deferred," but no ADR gates it — it is an
 unimplemented observability surface, not a design decision, so it is
 classified `REAL_GAP` rather than `DEFERRED_BY_DESIGN`.
 
+**Phase 4 disposition: CLOSED.** Re-verified against source at `e665bfe`
+(Phase 3's merge commit): `schedulerBackup`/`schedulerPower` `CHECK_ID`s and
+their `schedulerCheck()` wiring already existed (added between this audit's
+original writing and Phase 3, evidently as part of ADR-032's diagnostics
+work), but no check read the _service availability reconciliation_
+scheduler's cursor — only the backup and machine-power schedulers were wired.
+Added `CHECK_ID.schedulerServiceAvailability` (`scheduler.service_availability`),
+appended to `CHECK_ORDER`, and wired a
+`serviceAvailabilityReconciliationSchedulerCursorReader` source through
+`build-infrastructure-diagnostic-report.ts` →
+`create-infrastructure-diagnostics-runtime.ts` →
+`create-administrative-runtime.ts`, backed by the existing
+`FileServiceAvailabilityReconciliationSchedulerCursorStore` and the
+already-present (Phase 3) `config.serviceAvailabilityReconciliationSchedulerCursorFilePath`
+field, which diagnostics never read before this change.
+
+While implementing this, found and fixed a genuine pre-existing bug:
+`readLastTick()` only recognized `lastTickAt`/`observedAt`/`occurredAt`/
+`value` keys, but the machine-power scheduler cursor store
+(`FileMachinePowerSchedulerCursorStore`) — already wired into
+`schedulerPower` before this phase — persists its cursor under a
+`completedThrough` key, identical in shape to the service-availability
+reconciliation cursor. This meant `scheduler.power` was already silently
+reporting "no tick recorded yet" in production even when the cursor had
+advanced. Added `completedThrough` to `readLastTick()`'s recognized key set,
+fixing both the pre-existing `scheduler.power` check and the new
+`scheduler.service_availability` check. No route, RBAC, or CLI/dashboard
+presentation change was needed — the existing `infra status`/`doctor`
+surfaces and the Infrastructure dashboard page render whatever checks the
+report returns generically, with no per-check-id hardcoding on the
+presentation side. Tests:
+`tests/infrastructure-diagnostics/application/build-infrastructure-diagnostic-report.test.ts`.
+
 ## 5. Backups dashboard UX — CLOSED (Phase 0-1, run-now only)
 
 **Phase 0-1 disposition: DONE for manual "run now"; run-status polling stays

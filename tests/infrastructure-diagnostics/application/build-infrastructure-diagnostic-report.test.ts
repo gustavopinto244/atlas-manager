@@ -49,7 +49,10 @@ function healthySources(): InfrastructureDiagnosticSources {
     },
     backupSchedulerCursorReader: { read: async () => "2026-02-02T09:00:00Z" },
     powerSchedulerCursorReader: {
-      read: async () => ({ lastTickAt: "2026-02-02T09:30:00Z" }),
+      read: async () => ({ completedThrough: "2026-02-02T09:30:00.000Z" }),
+    },
+    serviceAvailabilityReconciliationSchedulerCursorReader: {
+      read: async () => ({ completedThrough: "2026-02-02T09:45:00.000Z" }),
     },
     eventHistoryReadinessReader: {
       execute: async () => ({ outcome: "ready" }),
@@ -101,6 +104,7 @@ describe("buildInfrastructureDiagnosticReport", () => {
       pm2ProcessListExecutor: { execute: boom },
       backupSchedulerCursorReader: { read: boom },
       powerSchedulerCursorReader: { read: boom },
+      serviceAvailabilityReconciliationSchedulerCursorReader: { read: boom },
       eventHistoryReadinessReader: { execute: boom },
       powerPostureReader: { execute: boom },
     });
@@ -140,10 +144,39 @@ describe("buildInfrastructureDiagnosticReport", () => {
     for (const check of report.checks)
       expect([check.id, check.status]).not.toEqual([check.id, "down"]);
     expect(find(report, CHECK_ID.schedulerBackup).status).toBe("disabled");
+    expect(find(report, CHECK_ID.schedulerServiceAvailability).status).toBe(
+      "disabled",
+    );
     expect(find(report, CHECK_ID.atlasService).status).toBe("disabled");
     // atlas.health.live is the one check that answers from the process itself.
     expect(find(report, CHECK_ID.atlasHealthLive).status).toBe("ok");
     expect(report.overallStatus).toBe("ok");
+  });
+
+  it("reports the service availability reconciliation scheduler cursor, recognizing completedThrough", async () => {
+    const report = await buildInfrastructureDiagnosticReport(healthySources());
+    const check = find(report, CHECK_ID.schedulerServiceAvailability);
+    expect(check.status).toBe("ok");
+    expect(check.observed).toBe("last tick 2026-02-02T09:45:00.000Z");
+  });
+
+  it("recognizes completedThrough on the power scheduler cursor too", async () => {
+    const report = await buildInfrastructureDiagnosticReport(healthySources());
+    const check = find(report, CHECK_ID.schedulerPower);
+    expect(check.status).toBe("ok");
+    expect(check.observed).toBe("last tick 2026-02-02T09:30:00.000Z");
+  });
+
+  it("reports 'no tick recorded yet' when the cursor store has never advanced", async () => {
+    const report = await buildInfrastructureDiagnosticReport({
+      ...healthySources(),
+      serviceAvailabilityReconciliationSchedulerCursorReader: {
+        read: async () => null,
+      },
+    });
+    const check = find(report, CHECK_ID.schedulerServiceAvailability);
+    expect(check.status).toBe("ok");
+    expect(check.observed).toBe("no tick recorded yet");
   });
 
   it("reads power effects switched off as disabled, keeping the report calm", async () => {

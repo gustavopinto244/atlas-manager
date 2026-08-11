@@ -214,6 +214,13 @@ Check ids are a stable machine contract, namespaced and never display text:
 `event_history.readiness`, `power.posture`, `nginx.service`, `nginx.config`,
 `tunnel.cloudflared.service`.
 
+(Operator Experience Phase 4 added `scheduler.service_availability`, following
+this same namespaced/never-display-text contract, to close the scheduler
+cursor visibility gap tracked in
+`docs/reviews/operator-experience-final-gap-audit.md` item 4. The addition is
+purely additive: no existing check id, ordering guarantee, or precedence rule
+changed.)
+
 ### 7. Scope boundary: `nginx.config` is `nginx -t`, not ingress correctness
 
 `nginx.config` runs `nginx -t` and reports whether the configuration parses and

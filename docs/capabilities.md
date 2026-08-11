@@ -62,11 +62,18 @@ preparation/execution states.
   service card plus the dedicated Schedules section already surface every
   field that has real backing data, and a second page would either duplicate
   that or show fields with no data behind them.
-- Scheduler health/cursor visibility: the reconciliation scheduler's cursor
-  (`ServiceAvailabilityReconciliationSchedulerCursor`) has no route or
-  CLI/dashboard view. Closing it needs a new route, a new `CHECK_ID`, a new
-  `create-administrative-runtime.ts` config field and a `readLastTick()` fix
-  — not a presentation-only change, so it stays open. See
+- Scheduler health/cursor visibility (item 4) was **closed in Operator
+  Experience Phase 4**: a new `scheduler.service_availability` `CHECK_ID`
+  reads `ServiceAvailabilityReconciliationSchedulerCursor` through the
+  existing `infra`/`doctor` diagnostics report, wired via a new
+  `create-administrative-runtime.ts` config field
+  (`serviceAvailabilityReconciliationSchedulerCursorFilePath`, already
+  present in `EnvironmentConfig` since Phase 3 but previously unused by
+  diagnostics). Fixing `readLastTick()` to also recognize the cursor's
+  `completedThrough` key was a genuine, pre-existing bug: the already-shipped
+  `scheduler.power` check reads the same key shape and silently reported "no
+  tick recorded yet" even when the power scheduler cursor had advanced. Both
+  checks now report the real last-tick timestamp. See
   `docs/reviews/operator-experience-final-gap-audit.md` item 4.
 - CLI schedule _mutation_ commands (`set`/`always`/`manual`/`disable`/`remove`)
   and CLI backup mutation commands (`run`, `run-status`, `schedule
