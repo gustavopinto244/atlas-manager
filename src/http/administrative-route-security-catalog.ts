@@ -58,6 +58,12 @@ const ADMINISTRATIVE_ACTIVATION_FLAGS = new Set([
   // implied an operator-settable variable that has never existed, which sent
   // readers looking for it in .env.example.
   "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
+  // Not an environment variable, for the same reason as
+  // ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY above: the machine schedule
+  // routes register when wake-alarm HTTP is enabled *and*
+  // MACHINE_OPERATING_POLICY_FILE gives them a persisted policy store
+  // (ADR-033).
+  "ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY",
   "ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED",
   "ADMINISTRATIVE_BACKUP_HTTP_ENABLED",
   "ADMINISTRATIVE_SECURITY_STATUS_HTTP_ENABLED",
@@ -369,6 +375,38 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY",
       "remove_registered_service_schedule",
       "confirm_registered_service_schedule_removal",
+      "service_mutation",
+    ),
+    read(
+      "machine.schedule.read",
+      "GET",
+      "/admin/machine/schedule",
+      "ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY",
+      "read_machine_operating_policy",
+    ),
+    read(
+      "machine.schedule.preview",
+      "GET",
+      "/admin/machine/schedule/preview",
+      "ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY",
+      "read_machine_operating_policy_preview",
+    ),
+    mutation(
+      "machine.schedule.update",
+      "PUT",
+      "/admin/machine/schedule",
+      "ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY",
+      "update_machine_operating_policy",
+      "confirm_machine_operating_policy_update",
+      "service_mutation",
+    ),
+    mutation(
+      "machine.schedule.delete",
+      "DELETE",
+      "/admin/machine/schedule",
+      "ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY",
+      "remove_machine_operating_policy",
+      "confirm_machine_operating_policy_removal",
       "service_mutation",
     ),
     read(

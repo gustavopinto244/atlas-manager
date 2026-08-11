@@ -8,7 +8,9 @@ import {
 
 describe("administrative route security catalog registration", () => {
   it("keeps the explicit operator-experience route-count contract", () => {
-    expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(48);
+    // 48 + 4: GET/PUT/DELETE /admin/machine/schedule and
+    // GET /admin/machine/schedule/preview (ADR-033).
+    expect(ADMINISTRATIVE_ROUTE_SECURITY_CATALOG).toHaveLength(52);
   });
 
   it("records the implemented power endpoint body limits", () => {

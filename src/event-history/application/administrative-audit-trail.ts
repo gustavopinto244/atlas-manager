@@ -47,6 +47,7 @@ export class AdministrativeAuditPartialEffectError extends Error {
       | "audit_failed_after_shutdown_preparation"
       | "audit_failed_after_scheduler_tick"
       | "audit_failed_after_service_operation"
+      | "audit_failed_after_machine_schedule_operation"
       | "audit_failed_after_backup_operation"
       | "audit_failed_after_event_history_operation",
     public readonly result?: unknown,

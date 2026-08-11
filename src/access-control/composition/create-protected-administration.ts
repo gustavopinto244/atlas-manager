@@ -35,7 +35,17 @@ import type { BackupManagementCapabilities } from "../../backup-management/compo
 import { BackupTargetValidationError } from "../../backup-management/domain/backup-target.js";
 import type { AdministrativeEventHistoryOperations } from "../../event-history/application/ports/administrative-event-history-operations.js";
 import type { MachinePowerPlan } from "../../power-management/domain/machine-power-plan.js";
-import type { MachineOperatingPolicy } from "../../power-management/domain/machine-operating-policy.js";
+import {
+  createMachineOperatingPolicy,
+  MachineOperatingPolicyValidationError,
+  type MachineOperatingPolicy,
+} from "../../power-management/domain/machine-operating-policy.js";
+import { MachineWeeklyOperatingScheduleValidationError } from "../../power-management/domain/machine-weekly-operating-schedule.js";
+import { GetMachineOperatingPolicy } from "../../power-management/application/get-machine-operating-policy.js";
+import { PreviewMachineOperatingPolicy } from "../../power-management/application/preview-machine-operating-policy.js";
+import { SetMachineOperatingPolicy } from "../../power-management/application/set-machine-operating-policy.js";
+import { RemoveMachineOperatingPolicy } from "../../power-management/application/remove-machine-operating-policy.js";
+import type { MachineOperatingPolicyStore } from "../../power-management/application/ports/machine-operating-policy-store.js";
 
 export interface ProtectedAdministrationCompositionInput {
   readonly accessControl: AdministrativeAccessControlCapabilities;
@@ -47,6 +57,7 @@ export interface ProtectedAdministrationCompositionInput {
   readonly powerSafetyReader?: Readonly<{
     execute(): Readonly<Record<string, unknown>>;
   }>;
+  readonly machineOperatingPolicyStore?: MachineOperatingPolicyStore;
   readonly serviceManagement?: ServiceManagementCapabilities;
   readonly backupManagement?: BackupManagementCapabilities;
   readonly eventHistory: EventHistoryCapabilities;
@@ -76,6 +87,18 @@ export interface ProtectedAdministrationCapabilities {
     execute(input: unknown): Promise<unknown>;
   }>;
   readonly runMachinePowerSchedulerTick: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly getMachineOperatingPolicy: Readonly<{
+    execute(): Promise<unknown>;
+  }>;
+  readonly previewMachineOperatingPolicy: Readonly<{
+    execute(candidatePolicy: unknown): Promise<unknown>;
+  }>;
+  readonly setMachineOperatingPolicy: Readonly<{
+    execute(input: unknown): Promise<unknown>;
+  }>;
+  readonly removeMachineOperatingPolicy: Readonly<{
     execute(): Promise<unknown>;
   }>;
   readonly getAdministrativeEventHistory: Readonly<{
@@ -294,6 +317,106 @@ export function createProtectedAdministration(
           at,
           source,
         ),
+      ),
+  });
+  // The declared/logical machine operating policy (ADR-033). This never
+  // reads from or writes to the environment-parsed policy `power` was built
+  // from -- it only overlays `input.machineOperatingPolicyStore` on top of
+  // it for the purpose of `machine schedule show`/edit. The scheduler and
+  // confirmation reader continue to consume only the immutable
+  // startup-captured policy.
+  const machineOperatingPolicyStore = input.machineOperatingPolicyStore;
+  const machineOperatingPolicyDefault =
+    (input.machinePlanReader ?? power)?.machineOperatingPolicy ??
+    createMachineOperatingPolicy({ mode: "always_on" });
+  const getMachineOperatingPolicyUseCase = new GetMachineOperatingPolicy(
+    machineOperatingPolicyDefault,
+    machineOperatingPolicyStore,
+  );
+  const previewMachineOperatingPolicyUseCase =
+    new PreviewMachineOperatingPolicy(input.clock);
+  const requireMachineOperatingPolicyStore =
+    (): MachineOperatingPolicyStore => {
+      if (machineOperatingPolicyStore === undefined)
+        throw new Error("Machine operating policy persistence is unavailable");
+      return machineOperatingPolicyStore;
+    };
+  const getMachineOperatingPolicy = Object.freeze({
+    execute: () =>
+      runner.run("read_machine_operating_policy", () =>
+        getMachineOperatingPolicyUseCase.execute(),
+      ),
+  });
+  const previewMachineOperatingPolicy = Object.freeze({
+    execute: (candidatePolicy: unknown) =>
+      runner.run("read_machine_operating_policy_preview", () =>
+        Promise.resolve(
+          previewMachineOperatingPolicyUseCase.execute(candidatePolicy),
+        ),
+      ),
+  });
+  const runMachineScheduleMutation = (
+    operation:
+      "update_machine_operating_policy" | "remove_machine_operating_policy",
+    invoke: () => Promise<unknown>,
+  ): Promise<unknown> =>
+    runner.run(operation, async (occurredAt, source) => {
+      const attempt = await operationAudit.begin({
+        occurredAt,
+        source,
+        target: Object.freeze({ kind: "machine", id: "atlas" }),
+        operation,
+        details: Object.freeze({}),
+      });
+      try {
+        const result = await invoke();
+        try {
+          await operationAudit.complete(
+            attempt,
+            "succeeded",
+            Object.freeze({ outcome: "succeeded" }),
+          );
+        } catch {
+          throw new AdministrativeAuditPartialEffectError(
+            "audit_failed_after_machine_schedule_operation",
+            result,
+          );
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof AdministrativeAuditPartialEffectError) throw error;
+        try {
+          await operationAudit.complete(
+            attempt,
+            "failed",
+            Object.freeze({ failureCode: "machine_schedule_operation_failed" }),
+          );
+        } catch {
+          throw new AdministrativeAuditTrailError(
+            "administrative_audit_failed",
+          );
+        }
+        throw error;
+      }
+    });
+  const setMachineOperatingPolicy = Object.freeze({
+    execute: (value: unknown) =>
+      runMachineScheduleMutation("update_machine_operating_policy", () =>
+        new SetMachineOperatingPolicy(
+          requireMachineOperatingPolicyStore(),
+        ).execute(value),
+      ),
+  });
+  const removeMachineOperatingPolicy = Object.freeze({
+    execute: () =>
+      runMachineScheduleMutation(
+        "remove_machine_operating_policy",
+        async () => {
+          await new RemoveMachineOperatingPolicy(
+            requireMachineOperatingPolicyStore(),
+          ).execute();
+          return getMachineOperatingPolicyUseCase.execute();
+        },
       ),
   });
   const getAdministrativeEventHistory = Object.freeze({
@@ -896,8 +1019,8 @@ export function createProtectedAdministration(
           machinePlan:
             (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
             null,
-          machineSchedule:
-            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
+          machineSchedule: (await getMachineOperatingPolicyUseCase.execute())
+            .policy,
           backups: Object.freeze({
             registeredTargets: backupTargets.length,
             enabledTargets: backupTargets.filter(
@@ -950,8 +1073,8 @@ export function createProtectedAdministration(
           machinePlan:
             (input.machinePlanReader ?? power)?.getMachinePowerPlan.execute() ??
             null,
-          machineSchedule:
-            (input.machinePlanReader ?? power)?.machineOperatingPolicy ?? null,
+          machineSchedule: (await getMachineOperatingPolicyUseCase.execute())
+            .policy,
         });
       }),
   });
@@ -963,6 +1086,10 @@ export function createProtectedAdministration(
     prepareMachineShutdownOccurrence,
     executeMachineShutdownOccurrence,
     runMachinePowerSchedulerTick,
+    getMachineOperatingPolicy,
+    previewMachineOperatingPolicy,
+    setMachineOperatingPolicy,
+    removeMachineOperatingPolicy,
     getAdministrativeEventHistory,
     getAdministrativeSecurityPosture,
     getInfrastructureDiagnostics,
@@ -1129,7 +1256,9 @@ class ExecuteProtectedAdministrativeOperation {
         error instanceof ServiceAvailabilityModeValidationError ||
         error instanceof ServiceScheduleValidationError ||
         error instanceof ServiceScheduleTimezoneValidationError ||
-        error instanceof BackupTargetValidationError
+        error instanceof BackupTargetValidationError ||
+        error instanceof MachineOperatingPolicyValidationError ||
+        error instanceof MachineWeeklyOperatingScheduleValidationError
       )
         throw error;
       if (error instanceof MachineShutdownOccurrenceExecutionError) throw error;

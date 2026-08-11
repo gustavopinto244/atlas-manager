@@ -507,6 +507,167 @@ describe("administrative control-plane routes", () => {
     ).not.toHaveBeenCalled();
   });
 
+  it("supports protected machine schedule reads and strict mutations", async () => {
+    const machineSchedule = {
+      getMachineOperatingPolicy: {
+        execute: vi.fn(async () => ({
+          policy: { mode: "always_on" },
+          source: "environment_default",
+        })),
+      },
+      setMachineOperatingPolicy: {
+        execute: vi.fn(async (policy: unknown) => policy),
+      },
+      removeMachineOperatingPolicy: {
+        execute: vi.fn(async () => ({
+          policy: { mode: "always_on" },
+          source: "environment_default",
+        })),
+      },
+      previewMachineOperatingPolicy: {
+        execute: vi.fn(),
+      },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => machineSchedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeMachineSchedule: dependencies,
+    });
+
+    const read = await request(app).get("/admin/machine/schedule");
+    expect(read.status).toBe(200);
+    expect(read.body).toEqual({
+      policy: { mode: "always_on" },
+      source: "environment_default",
+    });
+
+    const invalid = await request(app)
+      .put("/admin/machine/schedule")
+      .set("content-type", "application/json")
+      .send({ confirmation: "wrong", policy: { mode: "manual" } });
+    expect(invalid.status).toBe(400);
+    expect(
+      machineSchedule.setMachineOperatingPolicy.execute,
+    ).not.toHaveBeenCalled();
+
+    const update = await request(app)
+      .put("/admin/machine/schedule")
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_machine_operating_policy_update",
+        policy: { mode: "manual" },
+      });
+    expect(update.status).toBe(200);
+    expect(
+      machineSchedule.setMachineOperatingPolicy.execute,
+    ).toHaveBeenCalledWith({ mode: "manual" });
+
+    const removal = await request(app)
+      .delete("/admin/machine/schedule")
+      .set("content-type", "application/json")
+      .send({
+        confirmation: "confirm_machine_operating_policy_removal",
+      });
+    expect(removal.status).toBe(200);
+    expect(
+      machineSchedule.removeMachineOperatingPolicy.execute,
+    ).toHaveBeenCalledWith();
+  });
+
+  it("previews a candidate machine policy without persisting it", async () => {
+    const machineSchedule = {
+      getMachineOperatingPolicy: { execute: vi.fn() },
+      setMachineOperatingPolicy: { execute: vi.fn() },
+      removeMachineOperatingPolicy: { execute: vi.fn() },
+      previewMachineOperatingPolicy: {
+        execute: vi.fn(async () => ({
+          evaluatedAt: "2026-01-01T00:00:00.000Z",
+          expectation: "operating",
+          nextShutdown: { state: "not_planned" },
+          nextWake: { state: "not_planned" },
+          source: "candidate_preview",
+        })),
+      },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => machineSchedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeMachineSchedule: dependencies,
+    });
+
+    const policy = JSON.stringify({ mode: "always_on" });
+    const response = await request(app).get(
+      `/admin/machine/schedule/preview?policy=${encodeURIComponent(policy)}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      evaluatedAt: "2026-01-01T00:00:00.000Z",
+      expectation: "operating",
+      nextShutdown: { state: "not_planned" },
+      nextWake: { state: "not_planned" },
+      source: "candidate_preview",
+    });
+    expect(
+      machineSchedule.previewMachineOperatingPolicy.execute,
+    ).toHaveBeenCalledWith({ mode: "always_on" });
+    expect(
+      machineSchedule.setMachineOperatingPolicy.execute,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rejects a machine schedule preview missing the required query parameter", async () => {
+    const machineSchedule = {
+      getMachineOperatingPolicy: { execute: vi.fn() },
+      setMachineOperatingPolicy: { execute: vi.fn() },
+      removeMachineOperatingPolicy: { execute: vi.fn() },
+      previewMachineOperatingPolicy: { execute: vi.fn() },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => machineSchedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeMachineSchedule: dependencies,
+    });
+
+    const response = await request(app).get("/admin/machine/schedule/preview");
+    expect(response.status).toBe(400);
+    expect(
+      machineSchedule.previewMachineOperatingPolicy.execute,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported method on the machine schedule resource", async () => {
+    const machineSchedule = {
+      getMachineOperatingPolicy: { execute: vi.fn() },
+      setMachineOperatingPolicy: { execute: vi.fn() },
+      removeMachineOperatingPolicy: { execute: vi.fn() },
+      previewMachineOperatingPolicy: { execute: vi.fn() },
+    };
+    const dependencies = {
+      admission: new FixedAdministrativeRequestAdmission(base().clock),
+      mutationGate: new FixedAdministrativePowerOperationGate(),
+      createProtectedAdministration: vi.fn(() => machineSchedule),
+    };
+    const app = createApp({
+      ...base(),
+      administrativeMachineSchedule: dependencies,
+    });
+
+    const response = await request(app).post("/admin/machine/schedule");
+    expect(response.status).toBe(405);
+  });
+
   it("protects overview and dashboard delivery with the shared headers", async () => {
     const protectedAdministration = {
       getOperationsOverview: {

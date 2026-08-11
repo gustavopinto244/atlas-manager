@@ -37,7 +37,7 @@ etc.), with the same pairwise-distinctness checks in `parseEnvironment`.
 
 ### Ownership and precedence
 
-The store is authoritative for the *declared* policy that operators read and
+The store is authoritative for the _declared_ policy that operators read and
 edit; `MACHINE_OPERATING_POLICY` remains the environment-owned default. A new
 `GetMachineOperatingPolicy` use case resolves the effective policy on every
 read: the persisted policy when the store holds one, otherwise the

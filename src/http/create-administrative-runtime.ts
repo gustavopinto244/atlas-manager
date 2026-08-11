@@ -28,6 +28,9 @@ import type { AdministrativeShutdownRouteDependencies } from "./administrative-s
 import type { AdministrativeServicesRouteDependencies } from "./administrative-services-route.js";
 import type { AdministrativeServiceAvailabilityRouteDependencies } from "./administrative-service-availability-route.js";
 import type { AdministrativeServiceScheduleRouteDependencies } from "./administrative-service-schedule-route.js";
+import type { AdministrativeMachineScheduleRouteDependencies } from "./administrative-machine-schedule-route.js";
+import { FileMachineOperatingPolicyStore } from "../power-management/infrastructure/file-machine-operating-policy-store.js";
+import type { MachineOperatingPolicyStore } from "../power-management/application/ports/machine-operating-policy-store.js";
 import type { AdministrativeOverviewRouteDependencies } from "./administrative-overview-route.js";
 import type { AdministrativeDashboardRouteDependencies } from "./administrative-dashboard-route.js";
 import type { GetServerHealthCapability } from "../server-health/http/server-health-handler.js";
@@ -62,6 +65,7 @@ export interface AdministrativeRuntime {
   readonly services?: AdministrativeServicesRouteDependencies;
   readonly availability?: AdministrativeServiceAvailabilityRouteDependencies;
   readonly schedule?: AdministrativeServiceScheduleRouteDependencies;
+  readonly machineSchedule?: AdministrativeMachineScheduleRouteDependencies;
   readonly overview?: AdministrativeOverviewRouteDependencies;
   readonly dashboard?: AdministrativeDashboardRouteDependencies;
   readonly backups?: AdministrativeBackupsRouteDependencies;
@@ -86,6 +90,8 @@ export interface AdministrativeRuntimeCompositionDependencies extends Configured
    * ever spawns a real subprocess or reads real host state (ADR-032 §11).
    */
   readonly infrastructureDiagnosticsHostAdapters?: InfrastructureDiagnosticsCompositionInput["hostAdapters"];
+  /** Overridden by tests so no test ever touches the real filesystem. */
+  readonly machineOperatingPolicyStore?: MachineOperatingPolicyStore;
 }
 
 export function createAdministrativeRuntime(
@@ -122,6 +128,13 @@ export function createAdministrativeRuntime(
         machineOperatingPolicy,
       });
     })();
+  const machineOperatingPolicyStore =
+    compositionDependencies.machineOperatingPolicyStore ??
+    (config.machineOperatingPolicyFilePath === undefined
+      ? undefined
+      : new FileMachineOperatingPolicyStore(
+          config.machineOperatingPolicyFilePath,
+        ));
   const powerSafetyReader = Object.freeze({
     execute: () => {
       const effects = config.machinePowerEffectsActivation?.kind ?? "disabled";
@@ -182,6 +195,10 @@ export function createAdministrativeRuntime(
     ...(config.administrativeServiceAvailabilityHttpEnabled &&
     config.serviceAvailabilityPolicyFilePath !== undefined
       ? ["ADMINISTRATIVE_SERVICE_SCHEDULE_CAPABILITY"]
+      : []),
+    ...(config.administrativeWakeAlarmHttpEnabled &&
+    config.machineOperatingPolicyFilePath !== undefined
+      ? ["ADMINISTRATIVE_MACHINE_SCHEDULE_CAPABILITY"]
       : []),
     ...(config.administrativeOverviewHttpEnabled
       ? ["ADMINISTRATIVE_OVERVIEW_HTTP_ENABLED"]
@@ -312,6 +329,9 @@ export function createAdministrativeRuntime(
       ...(powerManagement === undefined ? {} : { powerManagement }),
       machinePlanReader,
       powerSafetyReader,
+      ...(machineOperatingPolicyStore === undefined
+        ? {}
+        : { machineOperatingPolicyStore }),
       eventHistory,
       clock,
       ...(serviceManagement === undefined ? {} : { serviceManagement }),
@@ -398,6 +418,18 @@ export function createAdministrativeRuntime(
     config.serviceAvailabilityPolicyFilePath !== undefined
       ? {
           schedule: Object.freeze({
+            admission,
+            mutationGate: serviceMutationGate,
+            createProtectedAdministration: (
+              reader: CloudflareAccessAssertionReader,
+            ) => createProtected(reader),
+          }),
+        }
+      : {}),
+    ...((config.administrativeWakeAlarmHttpEnabled ?? false) &&
+    machineOperatingPolicyStore !== undefined
+      ? {
+          machineSchedule: Object.freeze({
             admission,
             mutationGate: serviceMutationGate,
             createProtectedAdministration: (

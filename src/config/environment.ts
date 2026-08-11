@@ -258,6 +258,7 @@ const environmentObjectSchema = z.object({
     persistenceFilePathSchema.optional(),
   SERVICE_AVAILABILITY_OVERRIDE_FILE: persistenceFilePathSchema.optional(),
   SERVICE_AVAILABILITY_POLICY_FILE: persistenceFilePathSchema.optional(),
+  MACHINE_OPERATING_POLICY_FILE: persistenceFilePathSchema.optional(),
   CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
   CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
   ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: z
@@ -749,6 +750,7 @@ const environmentSchema = environmentObjectSchema.superRefine(
       environment.ADMINISTRATIVE_EVENT_HISTORY_DIRECTORY,
       environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE,
       environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
+      environment.MACHINE_OPERATING_POLICY_FILE,
       environment.BACKUP_RUN_HISTORY_FILE,
       environment.BACKUP_SCHEDULER_CURSOR_FILE,
       environment.BACKUP_OCCURRENCE_CLAIM_FILE,
@@ -836,6 +838,10 @@ const environmentSchema = environmentObjectSchema.superRefine(
         "MACHINE_POWER_SCHEDULER_CURSOR_FILE",
         environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE,
       ],
+      [
+        "MACHINE_OPERATING_POLICY_FILE",
+        environment.MACHINE_OPERATING_POLICY_FILE,
+      ],
     ] as const)
       if (value !== undefined && servicePersistencePaths.includes(value))
         context.addIssue({
@@ -843,6 +849,21 @@ const environmentSchema = environmentObjectSchema.superRefine(
           path: [variable],
           message: "must differ from service-management persistence files",
         });
+
+    if (
+      environment.MACHINE_OPERATING_POLICY_FILE !== undefined &&
+      isValidPersistenceFilePath(environment.MACHINE_OPERATING_POLICY_FILE) &&
+      (environment.MACHINE_OPERATING_POLICY_FILE ===
+        environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE ||
+        environment.MACHINE_OPERATING_POLICY_FILE ===
+          environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE)
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["MACHINE_OPERATING_POLICY_FILE"],
+        message:
+          "must differ from the machine shutdown occurrence claim and power scheduler cursor file paths",
+      });
 
     const claimFile = environment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE;
     const cursorFile = environment.MACHINE_POWER_SCHEDULER_CURSOR_FILE;
@@ -966,6 +987,7 @@ export interface EnvironmentConfig {
   readonly machinePowerEffectsActivation: MachinePowerEffectsActivation;
   readonly machinePowerSchedulerEnabled: boolean;
   readonly machineOperatingPolicy: MachineOperatingPolicy;
+  readonly machineOperatingPolicyFilePath?: string;
   readonly serviceAvailabilityReconciliationSchedulerCursorFilePath?: string;
   readonly serviceAvailabilityReconciliationOccurrenceClaimFilePath?: string;
   readonly serviceAvailabilityOverrideFilePath?: string;
@@ -1153,6 +1175,12 @@ export function parseEnvironment(
       : {
           serviceAvailabilityPolicyFilePath:
             parsedEnvironment.SERVICE_AVAILABILITY_POLICY_FILE,
+        }),
+    ...(parsedEnvironment.MACHINE_OPERATING_POLICY_FILE === undefined
+      ? {}
+      : {
+          machineOperatingPolicyFilePath:
+            parsedEnvironment.MACHINE_OPERATING_POLICY_FILE,
         }),
     ...(cloudflareAccess === undefined ? {} : { cloudflareAccess }),
     ...(parsedEnvironment.ADMINISTRATIVE_EVENT_HISTORY_FILE === undefined

@@ -317,6 +317,12 @@ function start(): void {
         : {
             administrativeServiceSchedule: administrativeRuntime.schedule,
           }),
+      ...(administrativeRuntime?.machineSchedule === undefined
+        ? {}
+        : {
+            administrativeMachineSchedule:
+              administrativeRuntime.machineSchedule,
+          }),
       ...(administrativeRuntime?.overview === undefined
         ? {}
         : { administrativeOverview: administrativeRuntime.overview }),
