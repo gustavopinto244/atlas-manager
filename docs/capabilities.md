@@ -80,10 +80,13 @@ preparation/execution states.
 set`/`remove`, `retention set`/`prune`) are built: they reuse the ADR-031
   authenticated transport with zero new administrative routes. This item is
   closed as of `feat/operator-cli-schedule-backup-mutations` (#318).
-- CLI `events --tail` currently only widens the single page (100 rows instead
-  of 20); it does not wire `afterSequence` for true multi-page reads or a
-  live tail. The dashboard's Events page gained "Load more" pagination in the
-  Operator Experience Phase 0-1 tranche (below); the CLI side is unchanged.
+- CLI `events` pagination (item 6's CLI half) was **closed in Operator
+  Experience Phase 4**: `atlas events --after <sequence>` now wires the same
+  `afterSequence` query parameter the route already accepted (and the
+  dashboard's "Load more" already used), so a script can walk multiple pages.
+  `--tail` is unchanged (still widens the single page to 100 rows) and
+  combines with `--after`. There is still no live tail/follow mode — that
+  remains a distinct, larger feature, not attempted here.
 
 ### Closed in the Operator Experience Phase 0-1 tranche
 

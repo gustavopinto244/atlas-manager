@@ -154,6 +154,20 @@ Prior text (pre-Phase-0-1), for record: the dashboard fetched a single fixed
 page with no cursor UI, and the CLI `events` command had no visible
 pagination/tail flag wiring beyond `--tail` doubling the page size to 100.
 
+**Phase 4 disposition: CLOSED for the CLI's remaining half.** Re-verified
+`src/cli/http-transport.ts`: the `events` case only ever built
+`?limit=${limit}`, so no CLI invocation could ever advance past the first
+page even though the route (`administrative-event-history-query-parser.ts`)
+already accepted `afterSequence` and the dashboard already used it. Added a
+`readEventHistoryQueryOptions()` parser recognizing `--after <sequence>`
+(a non-negative integer, validated the same way the server-side parser
+validates it) alongside the pre-existing `--tail`; both compose (`--tail
+--after N` widens the page and advances the cursor together). No route,
+RBAC or schema change — purely a CLI argument-to-querystring mapping over an
+already-existing, already-accepting parameter. A live tail/follow mode is a
+distinct, larger feature and was not attempted. Tests:
+`tests/cli/http-transport.test.ts`.
+
 ## 7. Compose resource aggregation — DEFERRED_BY_DESIGN
 
 `src/service-management/infrastructure/compose-service-resource-reader.ts`
