@@ -12,6 +12,7 @@ import { renderScheduleTimeline } from "./schedule-view.js";
 import { renderInfrastructureDiagnostics } from "./infrastructure-diagnostics-view.js";
 import { renderSettings } from "./settings-view.js";
 import { renderWeeklyScheduleEditor } from "./weekly-schedule-editor.js";
+import { renderMachineScheduleEditor } from "./machine-schedule-editor.js";
 import {
   controlOperationsFor,
   supportsLogs,
@@ -422,6 +423,20 @@ function renderMachinePlan(value: unknown): void {
     section.append(preview);
   }
   renderMachinePreviewView(document, preview, value);
+  let scheduleEditor = section.querySelector<HTMLElement>(
+    "#machine-schedule-editor",
+  );
+  if (scheduleEditor === null) {
+    scheduleEditor = document.createElement("div");
+    scheduleEditor.id = "machine-schedule-editor";
+    section.append(scheduleEditor);
+  }
+  renderMachineScheduleEditor(
+    document,
+    scheduleEditor,
+    machineSchedule,
+    refresh,
+  );
 }
 
 function renderAvailability(value: readonly unknown[]): void {
