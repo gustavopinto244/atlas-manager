@@ -28,9 +28,12 @@
   fake, an unwired `BackupReadinessReader` implementation, four one-line
   re-export shims for classes now defined directly in
   `linux-power-helper-adapters.ts`, and an unreferenced
-  `DockerContainerDetailsReader`; note this leaves
-  `src/service-management/domain/docker-container-details.ts` exercised
-  only by its own test, with no remaining production consumer.
+  `DockerContainerDetailsReader`;
+- removes the `docker-container-details.ts` domain module and its test,
+  left with no production consumer once its only importer above was
+  deleted; the three container domain types it composed
+  (`docker-container-{health-state,resource-usage,runtime-state}.ts`)
+  stay, since the Docker inspect/stats parsers still use them.
 
 ## 1.0.0
 
