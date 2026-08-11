@@ -25,10 +25,19 @@ dates.
 
 ## Current phase
 
-Atlas Manager is preparing the `1.0.0-rc.13` software candidate. No physical
-Atlas deployment has occurred since `rc.8` was cut (see the historical v0.9
-note below), so `rc.7` remains the installed predecessor on Atlas. Physical
-Atlas deployment and real power effects remain separately approved gates.
+Atlas Manager reached general availability at `1.0.0` on 2026-08-11 — see
+[`docs/release/atlas-manager-1.0.0.md`](release/atlas-manager-1.0.0.md) and
+the full acceptance record in
+[`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`](release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md).
+`1.0.0` is deployed and accepted on the real Atlas host, including the
+first real-Cloudflare verification of the ADR-034 CLI service-token
+authentication path.
+
+The project is now in a **post-GA stabilization window**: no new features.
+A critical fix found during this window becomes a `1.0.x` patch release
+(the same identity-promotion pattern used to cut `1.0.0` itself, at patch
+scope); a non-critical improvement queues for `1.1.0`, scoped below. Real
+power effects remain a separately approved gate, not part of this window.
 
 Completed milestones include:
 
@@ -472,8 +481,10 @@ milestone. Issue #238 selects the production-shaped
 identity mechanism and Issue #240 delivers the first protected read-only HTTP
 route. The later Issues delivered broader protected delivery, verified
 transport/proxy configuration, deployment ownership, and operator recovery
-procedures. The v0.9 milestone is complete in software; the current candidate
-is `1.0.0-rc.8`; `rc.7` remains the installed predecessor and `rc.6` was superseded after physical lastlog build-capability
+procedures. The v0.9 milestone is complete in software; at the time of writing
+the current candidate was `1.0.0-rc.8` (superseded by later candidates
+through `1.0.0`, see "Current phase" above); `rc.7` was its installed
+predecessor and `rc.6` was superseded after physical lastlog build-capability
 inspection, `rc.3` was superseded after account-tool compatibility inspection,
 and `rc.2` was superseded after its runtime-identity password precondition
 defect.
@@ -814,12 +825,43 @@ The administrative route catalog, transport envelope, identity readiness,
 configuration replacement/rollback, and software release qualification are
 implemented.
 
-## v1.0 software release candidate — qualification pending mandatory gates
+## v1.0 software release candidate — completed
 
-`1.0.0-rc.13` is the current software-only candidate. Qualification requires
-the mandatory Node, Go, bundle, and rehearsal gates; the local environment
-must not claim qualification when one of those gates is unavailable.
+`1.0.0-rc.15` passed the mandatory Node, Go, bundle, and rehearsal gates —
+full qualification chain (traceability/evidence/contract/validate/digests)
+reporting `qualified`/`valid` against the real source commit, Candidate A/B
+bundle and rehearsal reproducibility both byte-identical.
 
-## v1.0 stable physical release — pending physical Atlas qualification
+## v1.0 stable physical release — completed
 
-Physical deployment and ingress qualification remain separate gates.
+`1.0.0-rc.15` was deployed to and accepted on the real Atlas host, including
+Cloudflare Access ingress and the first real-Cloudflare verification of the
+ADR-034 CLI service-token authentication path. See
+[`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`](release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md)
+for the full capability-by-capability record. That exact accepted commit
+was then promoted, identity-only, to `1.0.0` and tagged
+[`v1.0.0`](https://github.com/gustavopinto244/atlas-manager/releases/tag/v1.0.0).
+
+## v1.1 — post-GA scope
+
+The two items already flagged deferred at GA (see `docs/capabilities.md`'s
+"Known deferred items"), formalized here as the initial `1.1.0` scope. Both
+need a product/design decision before implementation, not just engineering
+time — that decision is the actual deliverable of this phase, this section
+intentionally does not spec the feature itself.
+
+- **Dashboard automatic-polling scope.** Only the Services section
+  auto-polls today (`SERVICES_POLL_INTERVAL_MS` in `src/dashboard/main.ts`),
+  a deliberate Slice 3 decision. Extending automatic polling to other
+  sections — Backups is the one operators have asked about — requires
+  deciding a poll interval, the per-session read cost it implies, and which
+  sections actually warrant it; this is not a small presentational fix.
+- **Compose resource aggregation semantics.** Per-member vs. aggregate
+  CPU/memory reporting for Compose-based services is undesigned; the reader
+  currently reports `unsupported` rather than fabricating a value.
+  Registered-service _scheduling_ for Compose already works today and is
+  unaffected by this — only resource observability is open.
+
+As with GA, no functional work should be assumed done until it has an
+accepted commit and, where it touches the real Atlas host again, its own
+acceptance evidence.
