@@ -20,6 +20,7 @@ import {
   mapEventHistoryRetention,
 } from "./administrative-event-history-operations-response.js";
 import type {
+  EventHistoryExportResult,
   EventHistoryIntegrityResult,
   EventHistoryRetentionSummary,
 } from "../event-history/application/ports/administrative-event-history-operations.js";
@@ -205,7 +206,7 @@ async function process(
       );
       return;
     }
-    requireMethod(request, "PUT");
+    requireMethod(request, "GET", "PUT");
     const body = await bodyJson(request);
     const policy = exactPolicy(
       body,
@@ -266,14 +267,10 @@ async function process(
     rejectAdministrativeQuery(request.url);
     const body = await bodyJson(request);
     const range = exactExportBody(body);
-    send(
-      response,
-      mapEventHistoryExport(
-        (await mutate(dependencies, () =>
-          protectedAdministration().createEventHistoryExport.execute(range),
-        )) as never,
-      ),
-    );
+    const result = (await mutate(dependencies, () =>
+      protectedAdministration().createEventHistoryExport.execute(range),
+    )) as EventHistoryExportResult;
+    send(response, mapEventHistoryExport(result.metadata));
     return;
   }
   const exportIdValue = request.params.exportId;
@@ -488,6 +485,15 @@ function mapError(error: unknown): HttpError {
       404,
       "event_history_export_not_found",
       "Export not found",
+    );
+  if (
+    error instanceof Error &&
+    error.message === "event_history_retention_invalid"
+  )
+    return new HttpError(
+      400,
+      "invalid_event_history_request",
+      "Invalid event-history request",
     );
   return new HttpError(
     503,

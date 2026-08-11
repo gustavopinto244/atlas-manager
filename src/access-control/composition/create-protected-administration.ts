@@ -580,24 +580,27 @@ export function createProtectedAdministration(
   });
   const getRegisteredServiceAvailability = Object.freeze({
     execute: (serviceId: string) =>
-      runner.run("read_registered_service_schedule", async (observedAt) => {
-        const service = (
-          await requireServices().listRegisteredServices.execute()
-        ).find((candidate) => candidate.id === serviceId);
-        if (service === undefined)
-          throw new Error("registered_service_not_found");
-        const availability =
-          await requireServices().getRegisteredServiceEffectiveAvailability.executeWithOverride(
+      runner.run(
+        "read_registered_service_availability",
+        async (observedAt) => {
+          const service = (
+            await requireServices().listRegisteredServices.execute()
+          ).find((candidate) => candidate.id === serviceId);
+          if (service === undefined)
+            throw new Error("registered_service_not_found");
+          const availability =
+            await requireServices().getRegisteredServiceEffectiveAvailability.executeWithOverride(
+              serviceId,
+            );
+          return Object.freeze({
             serviceId,
-          );
-        return Object.freeze({
-          serviceId,
-          policy: service.availabilityPolicy,
-          effectiveAvailability: availability.expectation,
-          override: availability.override,
-          observedAt,
-        });
-      }),
+            policy: service.availabilityPolicy,
+            effectiveAvailability: availability.expectation,
+            override: availability.override,
+            observedAt,
+          });
+        },
+      ),
   });
   const getRegisteredServiceAvailabilityPreview = Object.freeze({
     execute: (
@@ -625,7 +628,7 @@ export function createProtectedAdministration(
   });
   const getRegisteredServiceSchedule = Object.freeze({
     execute: (serviceId: string) =>
-      runner.run("read_registered_service_availability", async (observedAt) => {
+      runner.run("read_registered_service_schedule", async (observedAt) => {
         const service = (
           await requireServices().listRegisteredServices.execute()
         ).find((candidate) => candidate.id === serviceId);

@@ -51,13 +51,16 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     getEventHistoryExport: { execute: vi.fn(async () => undefined) },
     createEventHistoryExport: {
       execute: vi.fn(async () => ({
-        exportId: "a".repeat(64),
-        fromSequence: 1,
-        throughSequence: 2,
-        eventCount: 2,
-        byteCount: 10,
-        createdAt: "2026-08-02T12:00:00.000Z",
-        contentSha256: "b".repeat(64),
+        outcome: "created",
+        metadata: {
+          exportId: "a".repeat(64),
+          fromSequence: 1,
+          throughSequence: 2,
+          eventCount: 2,
+          byteCount: 10,
+          createdAt: "2026-08-02T12:00:00.000Z",
+          contentSha256: "b".repeat(64),
+        },
       })),
     },
     downloadEventHistoryExport: {
@@ -135,6 +138,15 @@ describe("event-history operational routes", () => {
         throughSequence: 2,
       });
     expect(exportResponse.status).toBe(200);
+    expect(exportResponse.body).toEqual({
+      exportId: "a".repeat(64),
+      fromSequence: 1,
+      throughSequence: 2,
+      eventCount: 2,
+      byteCount: 10,
+      createdAt: "2026-08-02T12:00:00.000Z",
+      contentSha256: "b".repeat(64),
+    });
     expect(deps.values.createEventHistoryExport.execute).toHaveBeenCalledWith({
       fromSequence: 1,
       throughSequence: 2,

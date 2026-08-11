@@ -529,6 +529,8 @@ function mapError(error: unknown): HttpError {
     )
   )
     return new HttpError(404, error.message, "Backup resource not found");
+  if (error instanceof Error && error.message === "backup_query_invalid")
+    return new HttpError(400, "invalid_backup_request", "Invalid backup request");
   if (error instanceof Error && error.message === "backup_operation_busy")
     return new HttpError(
       409,

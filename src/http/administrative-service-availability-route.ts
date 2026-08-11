@@ -1,7 +1,8 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import type { CloudflareAccessAssertionReader } from "../access-control/application/ports/cloudflare-access-assertion-reader.js";
-import { AdministrativeAccessControlError } from "../access-control/application/errors.js";
 import { parseStrictJson } from "../config/strict-json.js";
+import { ServiceAvailabilityPolicyValidationError } from "../service-scheduling/domain/service-availability-policy-validation-error.js";
+import { ServiceAvailabilityModeValidationError } from "../service-scheduling/domain/service-availability-mode.js";
 import {
   mapAdministrativeAccessControlError,
   rejectAdministrativeQuery,
@@ -332,12 +333,6 @@ function mapAvailabilityError(error: unknown): HttpError {
   if (error instanceof HttpError) return error;
   const access = mapAdministrativeAccessControlError(error);
   if (access !== undefined) return access;
-  if (error instanceof AdministrativeAccessControlError)
-    return new HttpError(
-      503,
-      "administrative_service_management_unavailable",
-      "Service availability unavailable",
-    );
   if (
     error instanceof Error &&
     (error.message === "registered_service_not_found" ||
@@ -349,6 +344,15 @@ function mapAvailabilityError(error: unknown): HttpError {
       404,
       "registered_service_not_found",
       "Service not found",
+    );
+  if (
+    error instanceof ServiceAvailabilityPolicyValidationError ||
+    error instanceof ServiceAvailabilityModeValidationError
+  )
+    return new HttpError(
+      400,
+      "invalid_service_availability_request",
+      "Invalid availability request",
     );
   if (
     error instanceof Error &&

@@ -65,7 +65,7 @@ function handler(
       // The report aggregates its own per-check failures and always resolves.
       // A failing *check* must never become a failing *response* (ADR-032
       // §5.2): a 5xx here is reserved for this route being unable to answer at
-      // all, and would otherwise hide the eleven checks that did succeed.
+      // all, and would otherwise hide the other checks that did succeed.
       const body = await dependencies
         .createProtectedAdministration(
           createCloudflareAccessAssertionReader(request),

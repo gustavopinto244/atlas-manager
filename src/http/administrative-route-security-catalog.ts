@@ -92,6 +92,23 @@ const SHUTDOWN_JSON_BODY = Object.freeze({
   ...JSON_BODY,
   maxBodyBytes: 1_024,
 });
+// Matches ADMINISTRATIVE_SERVICE_MAX_BODY_BYTES in administrative-services-route.ts —
+// these bodies only ever carry a fixed confirmation string.
+const SERVICE_ACTION_JSON_BODY = Object.freeze({
+  ...JSON_BODY,
+  maxBodyBytes: 512,
+});
+// Matches MAX_BODY_BYTES in administrative-service-availability-route.ts,
+// administrative-service-schedule-route.ts and administrative-machine-schedule-route.ts.
+const SCHEDULE_JSON_BODY = Object.freeze({
+  ...JSON_BODY,
+  maxBodyBytes: 4_096,
+});
+// Matches MAX_BODY_BYTES in administrative-backups-route.ts.
+const BACKUP_JSON_BODY = Object.freeze({
+  ...JSON_BODY,
+  maxBodyBytes: 4_096,
+});
 
 function route(
   input: Omit<
@@ -294,6 +311,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "start_registered_service",
       "confirm_registered_service_start",
       "service_mutation",
+      "state_recheck_required",
+      SERVICE_ACTION_JSON_BODY,
     ),
     mutation(
       "services.stop",
@@ -303,6 +322,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "stop_registered_service",
       "confirm_registered_service_stop",
       "service_mutation",
+      "state_recheck_required",
+      SERVICE_ACTION_JSON_BODY,
     ),
     mutation(
       "services.restart",
@@ -312,6 +333,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "restart_registered_service",
       "confirm_registered_service_restart",
       "service_mutation",
+      "state_recheck_required",
+      SERVICE_ACTION_JSON_BODY,
     ),
     read(
       "services.availability.read",
@@ -349,6 +372,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "update_registered_service_availability",
       "confirm_registered_service_availability_update",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     mutation(
       "services.availability.delete",
@@ -358,6 +383,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "remove_registered_service_availability",
       "confirm_registered_service_availability_removal",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     mutation(
       "services.schedule.update",
@@ -367,6 +394,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "update_registered_service_schedule",
       "confirm_registered_service_schedule_update",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     mutation(
       "services.schedule.delete",
@@ -376,6 +405,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "remove_registered_service_schedule",
       "confirm_registered_service_schedule_removal",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     read(
       "machine.schedule.read",
@@ -399,6 +430,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "update_machine_operating_policy",
       "confirm_machine_operating_policy_update",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     mutation(
       "machine.schedule.delete",
@@ -408,6 +441,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "remove_machine_operating_policy",
       "confirm_machine_operating_policy_removal",
       "service_mutation",
+      "state_recheck_required",
+      SCHEDULE_JSON_BODY,
     ),
     read(
       "operations.read",
@@ -452,6 +487,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "run_registered_backup",
       "confirm_registered_backup_run",
       "backup_operation",
+      "state_recheck_required",
+      BACKUP_JSON_BODY,
     ),
     read(
       "backups.schedule.read",
@@ -468,6 +505,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "update_backup_schedule",
       "confirm_registered_backup_schedule_update",
       "backup_operation",
+      "state_recheck_required",
+      BACKUP_JSON_BODY,
     ),
     mutation(
       "backups.schedule.delete",
@@ -477,6 +516,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "remove_backup_schedule",
       "confirm_registered_backup_schedule_removal",
       "backup_operation",
+      "state_recheck_required",
+      BACKUP_JSON_BODY,
     ),
     read(
       "backups.retention.read",
@@ -493,6 +534,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "update_backup_retention",
       "confirm_registered_backup_retention_update",
       "backup_operation",
+      "state_recheck_required",
+      BACKUP_JSON_BODY,
     ),
     mutation(
       "backups.retention.prune",
@@ -502,6 +545,8 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "run_backup_retention_prune",
       "confirm_registered_backup_retention_prune",
       "backup_operation",
+      "state_recheck_required",
+      BACKUP_JSON_BODY,
     ),
     mutation(
       "backups.scheduler.tick",
@@ -512,6 +557,7 @@ export const ADMINISTRATIVE_ROUTE_SECURITY_CATALOG: readonly AdministrativeRoute
       "confirm_backup_scheduler_tick",
       "backup_operation",
       "claim_protected",
+      BACKUP_JSON_BODY,
     ),
     read(
       "event_history.integrity.read",
