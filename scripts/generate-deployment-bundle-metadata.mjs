@@ -101,7 +101,12 @@ export const generateDeploymentBundleMetadata = async ({
 }) => {
   if (!commitPattern.test(sourceCommit ?? ""))
     throw new Error("deployment_bundle_source_commit_invalid");
-  if (!releaseVersion || !/^\d+\.\d+\.\d+[-a-z0-9.]+$/u.test(releaseVersion))
+  // Accepts a bare GA version (X.Y.Z) or one with a prerelease suffix
+  // (X.Y.Z-rc.N and similar): the suffix group is optional, not required.
+  if (
+    !releaseVersion ||
+    !/^\d+\.\d+\.\d+(?:[-a-z0-9.]+)?$/u.test(releaseVersion)
+  )
     throw new Error("deployment_bundle_release_version_invalid");
   await requireFile(bundleArchive, "deployment_bundle_archive_missing");
   await requireFile(

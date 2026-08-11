@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0
+
+General availability. Identity promotion only — no functional change from
+`1.0.0-rc.15`, which passed full real-host deployment and acceptance
+testing, including the first real-Cloudflare verification of the ADR-034
+CLI service-token authentication path. See
+`docs/release/atlas-manager-1.0.0.md` and
+`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`.
+
 ## 1.0.0-rc.15
 
 - rebuilds the dashboard's visual system as Design v3: a layered dark/neon

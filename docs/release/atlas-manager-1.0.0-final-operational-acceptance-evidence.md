@@ -89,20 +89,18 @@ No application-level defect was found in `1.0.0-rc.15` itself.
 
 ## GA decision
 
-**Decision:** Deferred pending the one open item above (dashboard visual
-confirmation). Everything else — including the previously entirely
-unverified CLI service-token authentication path — has passed, with the
-service-token result being the strongest evidence gathered in this entire
-promotion sequence, since it exercises real Cloudflare Access rather than
-synthetic test fixtures.
+**Decision:** PROMOTE `956826e07c916b512fe408ef9eae28b65ead7f17` (`1.0.0-rc.15`)
+to `1.0.0`. Identity promotion (Phase 3) proceeds now; the dashboard visual
+confirmation remains open and must be obtained before the `v1.0.0` tag is
+cut (Phase 4), not before Phase 3's identity-only reconciliation.
 
-**Rationale:** the dashboard result is not a failure; it is an unconfirmed
-PASS with strong indirect evidence (byte-identical served assets to an
-already visually-validated build). Promoting to `1.0.0` before that
-confirmation would not violate any known defect, but would leave one cell
-of this table unconfirmed by a human at the moment the GA tag is cut. The
-recommendation is to obtain that confirmation before Phase 4 (tag +
-release), not to block Phase 3 (identity promotion) on it, since Phase 3 is
-reversible (another identity-only commit) and produces no new deployment.
+**Rationale:** every capability passed except the dashboard's live visual
+confirmation, which is not a failure — it is an unconfirmed PASS backed by
+strong indirect evidence (served assets byte-identical to an
+already visually-validated build). The operator explicitly authorized
+proceeding to Phase 3 without waiting for it. Phase 3 is reversible
+(another identity-only commit) and produces no new deployment, so nothing
+about promoting the identity now forecloses catching a real dashboard
+problem before the tag is published.
 
-**Decided by:** pending operator sign-off.
+**Decided by:** operator, 2026-08-11.
