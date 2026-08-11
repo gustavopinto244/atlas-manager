@@ -113,6 +113,27 @@ describe("SectionStatusRegion", () => {
     );
   });
 
+  // The stylesheet distinguishes the four non-ready states only through this
+  // modifier. Without it "still loading", "nothing here" and "this failed" all
+  // render as the same grey sentence.
+  it("carries the state kind as a modifier class the stylesheet can target", () => {
+    const { container, region } = createRegion();
+    expect(container.children[0]?.className).toBe(
+      "section-status section-status--loading",
+    );
+    for (const state of [
+      { kind: "empty", message: "No registered services." },
+      { kind: "failed", outcome: "forbidden" },
+      { kind: "stale", outcome: "busy" },
+      { kind: "ready" },
+    ] as const) {
+      region.set(state);
+      expect(container.children[0]?.className).toBe(
+        `section-status section-status--${state.kind}`,
+      );
+    }
+  });
+
   it("offers a retry control that invokes the section reload", () => {
     let retries = 0;
     const { container, region } = createRegion(() => {

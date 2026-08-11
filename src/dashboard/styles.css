@@ -913,6 +913,78 @@ button:disabled {
 }
 
 /*
+ * Per-section async state (SectionStatusRegion). The state kind arrives as a
+ * `section-status--<kind>` modifier so the four non-ready states are visually
+ * distinct: "still loading", "nothing here" and "this failed" must not all
+ * render as the same grey sentence.
+ */
+.section-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--wash-neutral);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.section-status[hidden] {
+  display: none;
+}
+
+.section-status--loading::before {
+  content: "";
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: atlas-spin 700ms linear infinite;
+}
+
+.section-status--empty {
+  border-style: dashed;
+  color: var(--text-faint);
+}
+
+/* A hard read failure: the section has nothing trustworthy to show. */
+.section-status--failed {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: var(--wash-danger);
+  color: var(--danger);
+}
+
+/*
+ * Stale is deliberately amber, not red. The section is still showing real,
+ * previously authoritative data — only the refresh failed. Colouring it as an
+ * outage would tell the operator to distrust numbers that are merely old.
+ */
+.section-status--stale {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: var(--wash-warning);
+  color: var(--warning);
+}
+
+.section-retry {
+  margin-left: auto;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  background: transparent;
+  border-color: currentcolor;
+  color: inherit;
+}
+
+.section-retry:hover:not(:disabled) {
+  background: color-mix(in srgb, currentcolor 14%, transparent);
+  border-color: currentcolor;
+}
+
+/*
  * Empty and loading states. Both are quiet on purpose: "nothing here yet" and
  * "still fetching" are not failures and must not read like one.
  */

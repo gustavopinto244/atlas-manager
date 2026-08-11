@@ -58,6 +58,12 @@ export class SectionStatusRegion {
   private render(): void {
     this.#region.replaceChildren();
     const state = this.#state;
+    // The state kind is carried on the element as a modifier class so the
+    // stylesheet can tell the four non-ready states apart. Without it every
+    // state renders as identical grey prose, and "still loading", "nothing
+    // here" and "this failed" are three very different things to an operator
+    // scanning a page.
+    this.#region.className = `section-status section-status--${state.kind}`;
     if (state.kind === "ready") {
       this.#region.hidden = true;
       return;
