@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.0.0-rc.14
+
+- closes four Operator Experience gap-audit items that were re-verified as
+  genuinely small and additive over already-existing backend/domain code:
+  following transitions on service availability, active-override + expiry
+  reporting, a dashboard "Run now" button for backups, and CLI/dashboard
+  events pagination (#321);
+- adds authenticated Settings contracts: exposes the already-backend-complete
+  event-history retention policy (`GET`/`PUT /admin/event-history/retention`)
+  on a new dashboard Settings page, reusing the existing RBAC scope,
+  confirmation gate and audit logging rather than inventing new ones (#322);
+- adds machine operating policy persistence (ADR-033): a file-backed
+  `MachineOperatingPolicyStore` overlaying the ADR-012 environment default,
+  new `GET/PUT/DELETE /admin/machine/schedule` and preview routes, `atlas
+machine schedule set|remove|preview` CLI commands, and a dashboard editor;
+  the machine power scheduler and its confirmation reader continue to consume
+  only the ADR-012 environment-parsed policy captured at startup — this only
+  changes what operators can read, preview and declare (#323);
+- closes the remaining two Operator Experience product gaps: scheduler
+  health/cursor visibility (new `scheduler.service_availability` `CHECK_ID`,
+  plus a fix for `readLastTick()` not recognizing the `completedThrough` key
+  that was silently hiding the already-shipped `scheduler.power` check's last
+  tick) and CLI events pagination (`atlas events --after <sequence>`) (#324);
+- formalizes this release candidate: reconciles release metadata (contract,
+  snapshots, traceability, evidence, CLI version test) against the current
+  source commit via the project's existing release-identity tooling, with no
+  hand-edited digests;
+- retains mock-only power safety and no real host deployment:
+  `POWER_MANAGEMENT_BACKEND=mock`, `MACHINE_POWER_EFFECTS_ACTIVATION=disabled`,
+  `MACHINE_POWER_SCHEDULER_ENABLED=false`.
+
 ## 1.0.0-rc.13
 
 - derives dashboard service controls (start/stop/restart/logs) from each
