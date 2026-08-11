@@ -580,27 +580,24 @@ export function createProtectedAdministration(
   });
   const getRegisteredServiceAvailability = Object.freeze({
     execute: (serviceId: string) =>
-      runner.run(
-        "read_registered_service_availability",
-        async (observedAt) => {
-          const service = (
-            await requireServices().listRegisteredServices.execute()
-          ).find((candidate) => candidate.id === serviceId);
-          if (service === undefined)
-            throw new Error("registered_service_not_found");
-          const availability =
-            await requireServices().getRegisteredServiceEffectiveAvailability.executeWithOverride(
-              serviceId,
-            );
-          return Object.freeze({
+      runner.run("read_registered_service_availability", async (observedAt) => {
+        const service = (
+          await requireServices().listRegisteredServices.execute()
+        ).find((candidate) => candidate.id === serviceId);
+        if (service === undefined)
+          throw new Error("registered_service_not_found");
+        const availability =
+          await requireServices().getRegisteredServiceEffectiveAvailability.executeWithOverride(
             serviceId,
-            policy: service.availabilityPolicy,
-            effectiveAvailability: availability.expectation,
-            override: availability.override,
-            observedAt,
-          });
-        },
-      ),
+          );
+        return Object.freeze({
+          serviceId,
+          policy: service.availabilityPolicy,
+          effectiveAvailability: availability.expectation,
+          override: availability.override,
+          observedAt,
+        });
+      }),
   });
   const getRegisteredServiceAvailabilityPreview = Object.freeze({
     execute: (

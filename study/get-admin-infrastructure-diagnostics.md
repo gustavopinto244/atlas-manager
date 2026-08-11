@@ -15,7 +15,7 @@ Roda uma bateria de checagens de infraestrutura do host (serviço systemd do atl
 - **Corpo da requisição**: não aceito.
 - **Formato da resposta** (200, `application/json`, teto de 64 KiB): `{ generatedAt: string, overallStatus: "ok"|"degraded"|"down"|"disabled"|"unavailable", checks: [ { id, status, observed?, expected?, errorCode?, hint?, requiresPrivilege?, observedAt }, ... ] }` — ver Funções-chave para a lista de `id`s possíveis.
 - **Códigos de status possíveis**:
-  - `200` — sempre que a rota consegue *gerar* o relatório, mesmo que várias checagens individuais estejam `down`/`unavailable`/`degraded` (ver Erros e casos de borda — um 5xx aqui é reservado para a rota não conseguir responder de jeito nenhum, nunca para uma checagem falhar).
+  - `200` — sempre que a rota consegue _gerar_ o relatório, mesmo que várias checagens individuais estejam `down`/`unavailable`/`degraded` (ver Erros e casos de borda — um 5xx aqui é reservado para a rota não conseguir responder de jeito nenhum, nunca para uma checagem falhar).
   - `400 invalid_administrative_request` — query ou corpo presente.
   - `401 administrative_authentication_required` / `503 administrative_identity_unavailable`.
   - `403 administrative_authorization_denied`.
