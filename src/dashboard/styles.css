@@ -399,8 +399,13 @@ main > section > h2 {
   margin-bottom: var(--space-2);
 }
 
-/* The lede paragraph directly under a section heading. */
-main > section > h2 + p {
+/*
+ * The lede paragraph directly under a section heading. `.section-status` is
+ * excluded because it is also a <p> and lands in this position whenever a view
+ * appends its status region before any other content — inheriting the lede's
+ * measure would render it at 62ch while its sibling states run full width.
+ */
+main > section > h2 + p:not(.section-status) {
   margin: 0 0 var(--space-5);
   color: var(--text-muted);
   font-size: var(--text-sm);
