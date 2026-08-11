@@ -440,7 +440,7 @@ describe("application persistence adapter selection", () => {
         "/tmp/atlas-manager-administrative-events.jsonl",
       administrativeRoleAssignments: [
         {
-          principal: { principalId },
+          principal: { principalId, kind: "human" as const },
           roles: ["auditor"],
         },
       ],

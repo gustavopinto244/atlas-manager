@@ -9,11 +9,27 @@ import type { AtlasAdministrativeMutationDescriptor } from "./administrative-con
  * Command handlers receive `read` and `mutate` and nothing else — they never
  * see `fetch`, a header name, or a credential.
  *
+ * Two credential shapes are accepted, in a fixed precedence (ADR-034):
+ *
+ * 1. a **Cloudflare Access service token** (`CF_ACCESS_CLIENT_ID` +
+ *    `CF_ACCESS_CLIENT_SECRET`), the supported way to authenticate a
+ *    non-interactive caller. Cloudflare validates the pair at the edge and
+ *    issues the assertion the origin actually authenticates;
+ * 2. a **human Access assertion** (`ATLAS_CLOUDFLARE_ACCESS_JWT`), retained as
+ *    a deprecated fallback so existing operator workflows keep working.
+ *
+ * A service token wins when both are present: a machine identity must not
+ * silently borrow an operator's. Supplying only one half of the pair is a
+ * configuration error and fails closed rather than quietly falling back to the
+ * human credential.
+ *
  * Security properties enforced here, all required by ADR-031:
  *
- * - the Access assertion is forwarded only when supplied externally, only in
- *   the `Cf-Access-Jwt-Assertion` header, and never to a non-loopback
- *   plaintext origin;
+ * - credentials are forwarded only when supplied externally, only in their own
+ *   headers, and never to a non-loopback plaintext origin;
+ * - the service-token secret is read from the environment only, is never
+ *   accepted as a command argument, and is never logged, printed, returned or
+ *   embedded in an error;
  * - a mutation against a non-loopback plaintext origin fails closed before any
  *   network activity;
  * - redirects are never followed, so a server cannot bounce the credential to
@@ -30,6 +46,16 @@ export const ATLAS_READ_TIMEOUT_MS = 15_000;
 export const ATLAS_MUTATION_TIMEOUT_MS = 30_000;
 
 const ACCESS_ASSERTION_HEADER = "Cf-Access-Jwt-Assertion";
+const SERVICE_TOKEN_ID_HEADER = "CF-Access-Client-Id";
+const SERVICE_TOKEN_SECRET_HEADER = "CF-Access-Client-Secret";
+
+/**
+ * A credential ready to be attached to a request, reduced to headers so the
+ * rest of the client never handles a secret value directly.
+ */
+type ResolvedCredential = Readonly<{
+  headers: Readonly<Record<string, string>>;
+}>;
 
 /**
  * Network failure causes that prove the request never reached the server. Any
@@ -105,7 +131,12 @@ export type AtlasAdministrativeMutationRequest = Readonly<{
 export interface AtlasAdministrativeClientOptions {
   readonly baseUrl?: string;
   readonly fetchImplementation?: typeof fetch;
+  /** Deprecated human Access assertion; falls back to `ATLAS_CLOUDFLARE_ACCESS_JWT`. */
   readonly administrativeAccessToken?: string;
+  /** Service-token Client ID; falls back to `CF_ACCESS_CLIENT_ID`. */
+  readonly serviceTokenClientId?: string;
+  /** Service-token secret; falls back to `CF_ACCESS_CLIENT_SECRET`. */
+  readonly serviceTokenClientSecret?: string;
   readonly readTimeoutMs?: number;
   readonly mutationTimeoutMs?: number;
 }
@@ -115,9 +146,7 @@ export function createAtlasAdministrativeClient(
 ): AtlasAdministrativeClient {
   const baseUrl = parseBaseUrl(options.baseUrl ?? process.env.ATLAS_BASE_URL);
   const fetchImplementation = options.fetchImplementation ?? fetch;
-  const accessToken =
-    options.administrativeAccessToken ??
-    process.env.ATLAS_CLOUDFLARE_ACCESS_JWT;
+  const credential = resolveCredential(options);
   const readTimeoutMs = options.readTimeoutMs ?? ATLAS_READ_TIMEOUT_MS;
   const mutationTimeoutMs =
     options.mutationTimeoutMs ?? ATLAS_MUTATION_TIMEOUT_MS;
@@ -141,9 +170,9 @@ export function createAtlasAdministrativeClient(
           ...(init.body === undefined
             ? {}
             : { "content-type": "application/json" }),
-          ...(accessToken === undefined || !credentialAllowed
+          ...(credential === undefined || !credentialAllowed
             ? {}
-            : { [ACCESS_ASSERTION_HEADER]: accessToken }),
+            : credential.headers),
         },
         ...(init.body === undefined ? {} : { body: init.body }),
       });
@@ -224,6 +253,66 @@ export function createAtlasAdministrativeClient(
       );
     },
   });
+}
+
+/**
+ * Selects the credential this invocation will present (ADR-034).
+ *
+ * A Cloudflare Access service token takes precedence over the deprecated human
+ * assertion, so a host configured for non-interactive use cannot accidentally
+ * act as whichever operator last exported a JWT.
+ *
+ * Half a service token is rejected outright. Falling back to the human
+ * assertion in that case would silently reattribute every subsequent action to
+ * a person, which is precisely the confusion the two identities exist to
+ * prevent; and reporting nothing would leave an operator debugging a 401 with
+ * a credential they believe is configured. Neither value is echoed.
+ */
+function resolveCredential(
+  options: AtlasAdministrativeClientOptions,
+): ResolvedCredential | undefined {
+  const clientId =
+    options.serviceTokenClientId ?? process.env.CF_ACCESS_CLIENT_ID;
+  const clientSecret =
+    options.serviceTokenClientSecret ?? process.env.CF_ACCESS_CLIENT_SECRET;
+  if (clientId !== undefined || clientSecret !== undefined) {
+    if (
+      clientId === undefined ||
+      clientSecret === undefined ||
+      !isSafeHeaderValue(clientId) ||
+      !isSafeHeaderValue(clientSecret)
+    )
+      throw new AtlasCliError(
+        "invalid_arguments",
+        "CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET must both be set to a single-line value",
+      );
+    return Object.freeze({
+      headers: Object.freeze({
+        [SERVICE_TOKEN_ID_HEADER]: clientId,
+        [SERVICE_TOKEN_SECRET_HEADER]: clientSecret,
+      }),
+    });
+  }
+  const assertion =
+    options.administrativeAccessToken ??
+    process.env.ATLAS_CLOUDFLARE_ACCESS_JWT;
+  if (assertion === undefined) return undefined;
+  return Object.freeze({
+    headers: Object.freeze({ [ACCESS_ASSERTION_HEADER]: assertion }),
+  });
+}
+
+/**
+ * Rejects header values that could inject a second header or a request line.
+ * The value itself is never included in the resulting error.
+ */
+function isSafeHeaderValue(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 4_096 &&
+    !/[\r\n\0]/u.test(value) &&
+    value.trim() === value
+  );
 }
 
 /**

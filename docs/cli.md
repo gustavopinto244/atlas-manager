@@ -57,17 +57,48 @@ The default endpoint is `http://127.0.0.1:3000`. Set `ATLAS_BASE_URL` to use a
 different HTTP endpoint. Public health responses are read directly. Protected
 administrative responses require an already authenticated transport; the
 default CLI transport does not forge Cloudflare Access assertions and reports
-`authentication_required` in a partial `atlas status` result. If the operator
-already has a real Cloudflare Access JWT, it may be supplied in memory through
-`ATLAS_CLOUDFLARE_ACCESS_JWT`; the adapter forwards it as
-`Cf-Access-Jwt-Assertion`. Never put it in `ATLAS_BASE_URL`, command arguments
-or shell history.
+`authentication_required` in a partial `atlas status` result.
 
 `atlas doctor` is read-only and never invokes a repair action. Its checks cover
 `/health/live`, `/health/server`, administrative overview, the protected
 security posture endpoint and — appended — every infrastructure diagnostic
 check. A failed check is reported individually rather than hidden behind a
 generic failure.
+
+## Authentication (ADR-034)
+
+The CLI accepts two credentials, in a fixed precedence.
+
+**Cloudflare Access service token — preferred.** Set both halves:
+
+```sh
+export CF_ACCESS_CLIENT_ID='<client-id>.access'
+export CF_ACCESS_CLIENT_SECRET='<client-secret>'
+```
+
+The adapter sends them as `CF-Access-Client-Id` and `CF-Access-Client-Secret`.
+Cloudflare validates the pair at its edge and issues the origin the signed
+assertion that actually authenticates the request — the secret never reaches
+Atlas Manager.
+
+This authenticates the CLI as its **own service identity**, audited as
+`service:<principalId>` and never as `administrator:<principalId>`. The
+operator must declare the token server-side in
+`ADMINISTRATIVE_SERVICE_TOKEN_PRINCIPALS` and grant it roles in
+`ADMINISTRATIVE_ROLE_ASSIGNMENTS`; an undeclared token authenticates as nobody
+even when Cloudflare accepted it.
+
+**Human assertion — deprecated.** `ATLAS_CLOUDFLARE_ACCESS_JWT` still works and
+is forwarded as `Cf-Access-Jwt-Assertion`, so existing operator workflows keep
+running. It borrows the operator's own identity: every action is recorded
+against the person whose browser session produced the assertion.
+
+A service token takes precedence when both are set, so a host configured for
+non-interactive use cannot act as whichever operator last exported a JWT.
+Setting only one half of a service token is refused with `invalid_arguments`
+rather than falling back to the human assertion.
+
+Never put any of these in `ATLAS_BASE_URL`, command arguments or shell history.
 
 ## Infrastructure diagnostics (ADR-032)
 
@@ -141,10 +172,12 @@ atlas backups retention prune <target-id>
 ```
 
 These are the mutating commands, delivered under ADR-031. They require an
-externally issued Cloudflare Access assertion in
-`ATLAS_CLOUDFLARE_ACCESS_JWT`, and they call the same protected administrative
-routes the dashboard calls — same RBAC, same exact confirmation, same mutation
-gate, same audit event with the same principal.
+authenticated transport — a Cloudflare Access service token, or the deprecated
+human assertion (see Authentication above) — and they call the same protected
+administrative routes the dashboard calls: same RBAC, same exact confirmation,
+same mutation gate, same audit event. The audited principal is whichever
+identity authenticated, attributed as `service:` or `administrator:`
+accordingly.
 
 ```text
 $ atlas services restart task-manager
@@ -235,11 +268,18 @@ whose correctness depends on not being invoked ad hoc.
 ## Security boundary
 
 The CLI must not forge Cloudflare Access assertions or bypass administrative
-authorization. The assertion is accepted only through the
-`ATLAS_CLOUDFLARE_ACCESS_JWT` environment variable, is sent only in the
-`Cf-Access-Jwt-Assertion` header, and is never logged, printed, embedded in an
-error, emitted in JSON output, or written to disk. Never place it in
-`ATLAS_BASE_URL`, in command arguments, or in shell history.
+authorization. Credentials are accepted only through the environment
+(`CF_ACCESS_CLIENT_ID` + `CF_ACCESS_CLIENT_SECRET`, or the deprecated
+`ATLAS_CLOUDFLARE_ACCESS_JWT`), are sent only in their own headers
+(`CF-Access-Client-Id` / `CF-Access-Client-Secret`, or
+`Cf-Access-Jwt-Assertion`), and are never logged, printed, embedded in an
+error, emitted in JSON output, or written to disk. A credential is never
+accepted as a command argument. Never place one in `ATLAS_BASE_URL`, in command
+arguments, or in shell history.
+
+A credential is withheld entirely from a plaintext non-loopback origin, and
+redirects are never followed, so a server cannot bounce a credential to an
+origin of its choosing.
 
 ## Exit codes
 

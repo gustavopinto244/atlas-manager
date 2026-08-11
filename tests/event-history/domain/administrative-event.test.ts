@@ -325,3 +325,45 @@ describe("authorization audit details coverage", () => {
     ).toThrow();
   });
 });
+
+describe("administrative event source attribution (ADR-034)", () => {
+  const PRINCIPAL_ID = "caf45cc3-4312-5d41-8603-cc0102346a1f";
+
+  it.each([
+    `administrator:${PRINCIPAL_ID}`,
+    `service:${PRINCIPAL_ID}`,
+    "unattributed-local",
+    "unauthenticated",
+  ])("accepts administrative actor %s", (actorId) => {
+    expect(
+      createAdministrativeEventSource({ kind: "administrative", actorId }),
+    ).toEqual({ kind: "administrative", actorId });
+  });
+
+  // The prefix alone is not evidence of identity: both attributed forms are
+  // held to the same canonical principal check.
+  it.each([
+    "service:",
+    "service:not-a-uuid",
+    `service:${PRINCIPAL_ID} `,
+    `SERVICE:${PRINCIPAL_ID}`,
+    `service:${PRINCIPAL_ID.toUpperCase()}`,
+    "administrator:not-a-uuid",
+  ])("rejects malformed administrative actor %s", (actorId) => {
+    expect(() =>
+      createAdministrativeEventSource({ kind: "administrative", actorId }),
+    ).toThrow("invalid_source");
+  });
+
+  it.each(["automated", "system"])(
+    "does not let a %s source claim a principal",
+    (kind) => {
+      expect(() =>
+        createAdministrativeEventSource({
+          kind,
+          actorId: `service:${PRINCIPAL_ID}`,
+        }),
+      ).toThrow("invalid_source");
+    },
+  );
+});

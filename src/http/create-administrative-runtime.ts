@@ -164,6 +164,13 @@ export function createAdministrativeRuntime(
     createCloudflareAccessAdministrativeAuthentication({
       configuration: cloudflareAccess,
       clock,
+      // Absent unless the operator declared service tokens (ADR-034); the
+      // composition then refuses every service-token assertion.
+      ...(config.administrativeServiceTokenPrincipals === undefined
+        ? {}
+        : {
+            serviceTokenPrincipals: config.administrativeServiceTokenPrincipals,
+          }),
     });
   let routeCatalogReconciled = false;
   const routeCatalogStatus = Object.freeze({

@@ -26,7 +26,10 @@ function access(
   const authenticator = new MockAdministrativeAuthenticationProvider({
     result:
       result === "authenticated"
-        ? { outcome: result, principal: { principalId: PRINCIPAL_ID } }
+        ? {
+            outcome: result,
+            principal: { principalId: PRINCIPAL_ID, kind: "human" },
+          }
         : { outcome: result, reason: "credentials_absent" },
   });
   const rolesReader = new InMemoryAdministrativeRoleAssignmentReader({
@@ -252,7 +255,7 @@ describe("administrative access-control foundation", () => {
     const authenticator = new MockAdministrativeAuthenticationProvider({
       result: {
         outcome: "authenticated",
-        principal: { principalId: PRINCIPAL_ID },
+        principal: { principalId: PRINCIPAL_ID, kind: "human" },
       },
     });
     const roles = new InMemoryAdministrativeRoleAssignmentReader({

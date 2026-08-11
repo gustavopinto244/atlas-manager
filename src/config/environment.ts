@@ -3,6 +3,10 @@ import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { createCloudflareAccessConfiguration } from "../access-control/domain/cloudflare-access-configuration.js";
 import {
+  createCloudflareAccessServiceTokenPrincipals,
+  type CloudflareAccessServiceTokenPrincipals,
+} from "../access-control/domain/cloudflare-access-service-token-principals.js";
+import {
   createAdministrativePrincipal,
   type AdministrativePrincipal,
 } from "../access-control/domain/administrative-principal.js";
@@ -145,6 +149,33 @@ const administrativeEventHistoryFileSchema = z
       });
   });
 
+/**
+ * Declared Cloudflare Access service tokens (ADR-034), as a JSON array of
+ * `{ clientId, principalId }`. The Client ID is public (it travels in a
+ * request header); the matching **secret is never configured here** and never
+ * reaches this process — Cloudflare validates it at the edge and this service
+ * only ever sees the signed assertion that results.
+ */
+const administrativeServiceTokenPrincipalsSchema = z
+  .string()
+  .superRefine((value, context) => {
+    if (Buffer.byteLength(value, "utf8") > 8_192) {
+      context.addIssue({
+        code: "custom",
+        message: "must not exceed 8192 UTF-8 bytes",
+      });
+      return;
+    }
+    try {
+      parseAdministrativeServiceTokenPrincipals(value);
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "must be a valid service-token principal JSON array",
+      });
+    }
+  });
+
 const administrativeRoleAssignmentsSchema = z
   .string()
   .superRefine((value, context) => {
@@ -261,6 +292,8 @@ const environmentObjectSchema = z.object({
   MACHINE_OPERATING_POLICY_FILE: persistenceFilePathSchema.optional(),
   CLOUDFLARE_ACCESS_TEAM_NAME: cloudflareAccessTeamNameSchema.optional(),
   CLOUDFLARE_ACCESS_AUDIENCE: cloudflareAccessAudienceSchema.optional(),
+  ADMINISTRATIVE_SERVICE_TOKEN_PRINCIPALS:
+    administrativeServiceTokenPrincipalsSchema.optional(),
   ADMINISTRATIVE_EVENT_HISTORY_HTTP_ENABLED: z
     .enum(["true", "false"], {
       error: "must be exactly true or false",
@@ -1023,6 +1056,7 @@ export interface EnvironmentConfig {
   readonly administrativeEventHistoryRetentionPolicy?: unknown;
   readonly administrativeEventHistoryAutomaticRetentionEnabled?: boolean;
   readonly administrativeRoleAssignments?: readonly AdministrativeRoleAssignment[];
+  readonly administrativeServiceTokenPrincipals?: CloudflareAccessServiceTokenPrincipals;
   readonly machineShutdownOccurrenceClaimFilePath?: string;
   readonly machinePowerSchedulerCursorFilePath?: string;
 }
@@ -1063,6 +1097,12 @@ export function parseEnvironment(
       ? undefined
       : parseAdministrativeRoleAssignments(
           parsedEnvironment.ADMINISTRATIVE_ROLE_ASSIGNMENTS,
+        );
+  const administrativeServiceTokenPrincipals =
+    parsedEnvironment.ADMINISTRATIVE_SERVICE_TOKEN_PRINCIPALS === undefined
+      ? undefined
+      : parseAdministrativeServiceTokenPrincipals(
+          parsedEnvironment.ADMINISTRATIVE_SERVICE_TOKEN_PRINCIPALS,
         );
   const registeredBackupTargets =
     createBackupTargetCatalogFromEnvironment(parsedEnvironment);
@@ -1226,6 +1266,9 @@ export function parseEnvironment(
     ...(administrativeRoleAssignments === undefined
       ? {}
       : { administrativeRoleAssignments }),
+    ...(administrativeServiceTokenPrincipals === undefined
+      ? {}
+      : { administrativeServiceTokenPrincipals }),
     ...(parsedEnvironment.MACHINE_SHUTDOWN_OCCURRENCE_CLAIM_FILE === undefined
       ? {}
       : {
@@ -1255,6 +1298,20 @@ export function formatEnvironmentValidationError(
   });
 
   return ["Invalid environment configuration:", ...issues].join("\n");
+}
+
+function parseAdministrativeServiceTokenPrincipals(
+  encoded: string,
+): CloudflareAccessServiceTokenPrincipals {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(encoded) as unknown;
+  } catch {
+    throw new Error("Invalid administrative service-token principals");
+  }
+  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 32)
+    throw new Error("Invalid administrative service-token principals");
+  return createCloudflareAccessServiceTokenPrincipals(parsed);
 }
 
 function parseAdministrativeRoleAssignments(

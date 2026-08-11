@@ -139,7 +139,7 @@ describe("Cloudflare Access JWT verification", () => {
     );
     expect(result).toEqual({
       outcome: "authenticated",
-      principal: { principalId: PRINCIPAL_ID },
+      principal: { principalId: PRINCIPAL_ID, kind: "human" },
     });
     expect(fetch.calls).toHaveLength(1);
     expect(fetch.calls[0]).toBe(
@@ -192,7 +192,7 @@ describe("Cloudflare Access JWT verification", () => {
       ),
     ).resolves.toEqual({
       outcome: "authenticated",
-      principal: { principalId: PRINCIPAL_ID },
+      principal: { principalId: PRINCIPAL_ID, kind: "human" },
     });
   });
 
@@ -270,7 +270,7 @@ describe("Cloudflare Access JWT verification", () => {
     expect(fetchCount).toBe(2);
     expect(result).toEqual({
       outcome: "authenticated",
-      principal: { principalId: PRINCIPAL_ID },
+      principal: { principalId: PRINCIPAL_ID, kind: "human" },
     });
     expect(fetchCount).toBe(2);
   });
@@ -414,7 +414,7 @@ describe("Cloudflare Access JWT verification", () => {
     ).execute();
     expect(authenticated).toEqual({
       outcome: "authenticated",
-      principal: { principalId: PRINCIPAL_ID },
+      principal: { principalId: PRINCIPAL_ID, kind: "human" },
     });
     await expect(
       accessControl.authorizeAdministrativeOperation.execute({
@@ -473,7 +473,7 @@ describe("Cloudflare Access authentication composition", () => {
         .authenticate(),
     ).resolves.toEqual({
       outcome: "authenticated",
-      principal: { principalId: PRINCIPAL_ID },
+      principal: { principalId: PRINCIPAL_ID, kind: "human" },
     });
     expect(clock.now).toHaveBeenCalledTimes(1);
   });
@@ -511,6 +511,7 @@ type Fixture = {
     sub?: string;
     protectedType?: string | null;
     aud?: string;
+    commonName?: string;
   }) => Promise<string>;
 };
 
@@ -540,6 +541,11 @@ async function createFixture(kid = "K1"): Promise<Fixture> {
         iss: configuration.issuer,
         sub: overrides.sub ?? PRINCIPAL_ID,
         type: "app",
+        // Cloudflare puts the service token's Client ID here and leaves `sub`
+        // empty; a human login carries no common_name at all.
+        ...(overrides.commonName === undefined
+          ? {}
+          : { common_name: overrides.commonName }),
       })
         .setProtectedHeader({
           alg: "RS256",

@@ -185,7 +185,13 @@ export type AdministrativeEventSource = Readonly<{
     | "unauthenticated"
     | "machine-power-scheduler"
     | "atlas-manager"
-    | `administrator:${string}`;
+    // A human operator who passed an interactive Cloudflare Access login.
+    | `administrator:${string}`
+    // A non-interactive caller that presented a Cloudflare Access service
+    // token (ADR-034). Kept as its own prefix rather than folded into
+    // `administrator:` so the trail can never imply a person approved
+    // something a machine did.
+    | `service:${string}`;
 }>;
 export type AdministrativeEventTarget = Readonly<{
   kind: "machine";
@@ -317,18 +323,21 @@ function createSource(input: unknown): AdministrativeEventSource {
   assertFields(record, ["kind", "actorId"]);
   const kind = record["kind"];
   const actorId = record["actorId"];
-  const verifiedAdministrator =
+  // Both attributed forms must name a canonical principal id: the prefix
+  // alone is not evidence, so `administrator:` and `service:` are held to the
+  // same identity check.
+  const attributedTo = (prefix: string): boolean =>
     typeof actorId === "string" &&
-    actorId.startsWith("administrator:") &&
-    isCanonicalAdministrativePrincipalId(
-      actorId.slice("administrator:".length),
-    );
+    actorId.startsWith(prefix) &&
+    isCanonicalAdministrativePrincipalId(actorId.slice(prefix.length));
+  const verifiedPrincipal =
+    attributedTo("administrator:") || attributedTo("service:");
   if (
     (kind !== "administrative" && kind !== "automated" && kind !== "system") ||
     (kind === "administrative" &&
       actorId !== "unattributed-local" &&
       actorId !== "unauthenticated" &&
-      !verifiedAdministrator) ||
+      !verifiedPrincipal) ||
     (kind === "automated" && actorId !== "machine-power-scheduler") ||
     (kind === "system" && actorId !== "atlas-manager")
   )
