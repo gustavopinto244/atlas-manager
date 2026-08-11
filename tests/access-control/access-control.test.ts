@@ -22,13 +22,14 @@ function clock(): PowerManagementClock {
 function access(
   roles: readonly string[],
   result: "authenticated" | "unauthenticated" = "authenticated",
+  kind: "human" | "service" = "human",
 ) {
   const authenticator = new MockAdministrativeAuthenticationProvider({
     result:
       result === "authenticated"
         ? {
             outcome: result,
-            principal: { principalId: PRINCIPAL_ID, kind: "human" },
+            principal: { principalId: PRINCIPAL_ID, kind },
           }
         : { outcome: result, reason: "credentials_absent" },
   });
@@ -117,6 +118,41 @@ describe("administrative access-control foundation", () => {
           (event) => event.source.actorId === `administrator:${PRINCIPAL_ID}`,
         ),
     ).toBe(true);
+  });
+
+  // End-to-end attribution (ADR-034): the same operation, authorized through
+  // the same RBAC table, must land in the audit trail as a machine rather than
+  // as a person purely because the authentication result said so.
+  it("attributes a service principal as service: through the whole flow", async () => {
+    const history = createEventHistory();
+    const configured = access(["power_operator"], "authenticated", "service");
+    const power = createPowerManagement({
+      clock: clock(),
+      administrativeEventHistoryCapabilities: history,
+    });
+    const protectedAdministration = createProtectedAdministration({
+      accessControl: configured.capabilities,
+      powerManagement: power,
+      eventHistory: history,
+      clock: clock(),
+    });
+
+    await protectedAdministration.scheduleWakeAlarm.execute({
+      scheduledFor: LATER,
+    });
+    const page = await history.getAdministrativeEventHistory.execute();
+    // RBAC is unchanged: the same principal id is looked up in the same table.
+    expect(configured.rolesReader.lookupPrincipalIds).toEqual([PRINCIPAL_ID]);
+    expect(page.events.map((event) => event.source.actorId)).toEqual([
+      `service:${PRINCIPAL_ID}`,
+      `service:${PRINCIPAL_ID}`,
+      `service:${PRINCIPAL_ID}`,
+    ]);
+    expect(
+      page.events.some((event) =>
+        event.source.actorId.startsWith("administrator:"),
+      ),
+    ).toBe(false);
   });
 
   it("denies unauthenticated requests before role lookup and target effects", async () => {
