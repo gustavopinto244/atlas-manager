@@ -9,6 +9,10 @@ import {
 } from "../infrastructure/cloudflare-access-jwks-provider.js";
 import { CloudflareAccessJwtVerifierAdapter } from "../infrastructure/cloudflare-access-jwt-verifier.js";
 import {
+  emptyServiceTokenPrincipals,
+  type CloudflareAccessServiceTokenPrincipals,
+} from "../domain/cloudflare-access-service-token-principals.js";
+import {
   createAdministrativeIdentityReadiness,
   type AdministrativeIdentityReadiness,
 } from "../domain/administrative-identity-readiness.js";
@@ -31,11 +35,19 @@ export function createCloudflareAccessAdministrativeAuthentication(input: {
   readonly configuration?: CloudflareAccessConfiguration;
   readonly clock: AdministrativeAuthenticationClock;
   readonly overrides?: CloudflareAccessAdministrativeAuthenticationOverrides;
+  /**
+   * Declared Cloudflare Access service tokens (ADR-034). Omitted means no
+   * service token can authenticate, which is the default posture.
+   */
+  readonly serviceTokenPrincipals?: CloudflareAccessServiceTokenPrincipals;
 }): CloudflareAccessAdministrativeAuthenticationCapabilities {
   if (
     Reflect.ownKeys(input).some(
       (key) =>
-        key !== "configuration" && key !== "clock" && key !== "overrides",
+        key !== "configuration" &&
+        key !== "clock" &&
+        key !== "overrides" &&
+        key !== "serviceTokenPrincipals",
     )
   )
     throw new Error("Invalid Cloudflare Access authentication configuration");
@@ -76,6 +88,7 @@ export function createCloudflareAccessAdministrativeAuthentication(input: {
   const verifier = new CloudflareAccessJwtVerifierAdapter(
     input.configuration,
     jwksProvider,
+    input.serviceTokenPrincipals ?? emptyServiceTokenPrincipals(),
   );
   const factory = new CloudflareAccessAuthenticationProviderFactory(
     verifier,

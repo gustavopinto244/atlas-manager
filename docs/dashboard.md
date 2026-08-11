@@ -15,6 +15,61 @@ text, status colors, spacing, radius) back the visual system; status uses an
 icon prefix plus text, never color alone. Focus moves to the page heading and
 a live region announces the page on navigation.
 
+Three structural contracts in the shell markup are load-bearing, because
+`navigation.ts` selects against them:
+
+- every page container is a **direct child of `<main>`** (`main > section`);
+- each section's `aria-labelledby` names its own `<h2>` id, which is the key
+  pages are matched on;
+- element ids consumed by `src/dashboard/*.ts` are part of the shell contract.
+
+## Design system (v3)
+
+### Palette provenance
+
+No portfolio reference URL was supplied when this theme was built, so the
+palette below is the **documented fallback**, not an extraction from an
+external reference. It is a deep blue-tinted dark base with layered elevation
+and neon accents. Replacing it with a portfolio-derived palette means changing
+the token values in `src/dashboard/styles.css`; nothing outside that `:root`
+block encodes a specific colour.
+
+| Role             | Token                         | Value                 |
+| ---------------- | ----------------------------- | --------------------- |
+| Page base        | `--bg-base`                   | `#070b12`             |
+| Surface (raised) | `--surface-1` … `--surface-3` | `#0d131f` → `#1a2437` |
+| Primary accent   | `--accent`                    | `#22d3ee` (cyan)      |
+| Secondary accent | `--accent-secondary`          | `#a78bfa` (violet)    |
+| Success          | `--success`                   | `#4ade80`             |
+| Warning          | `--warning`                   | `#fbbf24`             |
+| Danger           | `--danger`                    | `#fb7185`             |
+| Info             | `--info`                      | `#60a5fa`             |
+
+Accents are used as **outlines, washes and glows rather than large fills**: at
+this saturation a solid neon fill competes with every status colour on the
+page, which is the opposite of what an operations console needs.
+
+### Contrast
+
+Text tokens are chosen to clear WCAG 2.1 AA against `--surface-1`, the darkest
+surface they sit on: `--text` 16.1:1, `--text-muted` 7.5:1, `--text-faint`
+5.4:1. `--text-faint` carries 12px labels (card titles, table headers, `dl`
+terms) which never qualify as "large text", so it must clear 4.5:1 unaided —
+it does, and lowering it below that threshold is a regression even if it looks
+better.
+
+### CSP constraints on styling
+
+Two rules in the dashboard route's Content-Security-Policy directly constrain
+what the stylesheet may do, and are enforced by the browser at runtime rather
+than by the build:
+
+- `font-src 'none'` — **no web fonts.** The system font stack is the entire
+  typography story.
+- `img-src 'self'` — **no `data:` URI imagery.** Icons are inline `<svg>` in
+  the served markup (the nav toggle) or drawn in CSS (the brand mark, status
+  chip glyphs, the loading spinner).
+
 ## Pages
 
 The navigation shell exposes Overview, Services, Schedules, Machine, Backups,

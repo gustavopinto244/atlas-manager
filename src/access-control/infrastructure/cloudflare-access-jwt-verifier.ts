@@ -6,7 +6,14 @@ import {
   createAdministrativeAuthenticationResult,
   type AdministrativeAuthenticationResult,
 } from "../domain/administrative-authentication-result.js";
-import { createAdministrativePrincipal } from "../domain/administrative-principal.js";
+import {
+  createAdministrativePrincipal,
+  isCanonicalAdministrativePrincipalId,
+} from "../domain/administrative-principal.js";
+import {
+  emptyServiceTokenPrincipals,
+  type CloudflareAccessServiceTokenPrincipals,
+} from "../domain/cloudflare-access-service-token-principals.js";
 import type { CloudflareAccessConfiguration } from "../domain/cloudflare-access-configuration.js";
 import { type CloudflareAccessJwtAssertion } from "../domain/cloudflare-access-jwt-assertion.js";
 
@@ -42,13 +49,19 @@ export type CloudflareAccessJwtVerificationKind =
 export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVerifier {
   readonly #configuration: CloudflareAccessConfiguration;
   readonly #jwksProvider: CloudflareAccessJwksProvider;
+  readonly #serviceTokenPrincipals: CloudflareAccessServiceTokenPrincipals;
 
   public constructor(
     configuration: CloudflareAccessConfiguration,
     jwksProvider: CloudflareAccessJwksProvider,
+    // Omitted by every caller that does not accept service tokens. The default
+    // resolves nothing, so a deployment that has not declared any service
+    // token cannot authenticate one by accident.
+    serviceTokenPrincipals: CloudflareAccessServiceTokenPrincipals = emptyServiceTokenPrincipals(),
   ) {
     this.#configuration = configuration;
     this.#jwksProvider = jwksProvider;
+    this.#serviceTokenPrincipals = serviceTokenPrincipals;
     Object.freeze(this);
   }
 
@@ -109,12 +122,17 @@ export class CloudflareAccessJwtVerifierAdapter implements CloudflareAccessJwtVe
           reason,
         });
       }
-      const principal = createAdministrativePrincipal({
-        principalId: claims.sub,
-      });
+      // Resolved only after the signature verified: an unverified assertion
+      // must never reach the service-token mapping.
+      const identity = resolveIdentity(claims, this.#serviceTokenPrincipals);
+      if (identity === undefined)
+        return createAdministrativeAuthenticationResult({
+          outcome: "unauthenticated",
+          reason: "claims_invalid",
+        });
       return createAdministrativeAuthenticationResult({
         outcome: "authenticated",
-        principal,
+        principal: createAdministrativePrincipal(identity),
       });
     } catch (error) {
       if (isUnavailable(error))
@@ -226,7 +244,35 @@ type ValidClaims = {
   iat: number;
   nbf?: number;
   type: "app";
+  /** Present on service-token assertions; carries the token's Client ID. */
+  common_name?: string;
 };
+
+/**
+ * Which principal a verified assertion acts as (ADR-034).
+ *
+ * Cloudflare distinguishes the two authentication paths by claim shape, not by
+ * a flag: an interactive login carries the operator's identity in `sub`, while
+ * a service token leaves `sub` empty and names the token in `common_name`.
+ *
+ * The two forms are matched exclusively and in that order, so an assertion can
+ * never be read as both. Returning `undefined` means "authenticated by
+ * Cloudflare, but not anybody this deployment recognises" — which is an
+ * authentication failure here, not an authorization one, because there is no
+ * principal to authorize.
+ */
+function resolveIdentity(
+  claims: ValidClaims,
+  serviceTokenPrincipals: CloudflareAccessServiceTokenPrincipals,
+): Readonly<{ principalId: string; kind: "human" | "service" }> | undefined {
+  if (isCanonicalAdministrativePrincipalId(claims.sub))
+    return { principalId: claims.sub, kind: "human" };
+  if (claims.sub !== "" || claims.common_name === undefined) return undefined;
+  const principalId = serviceTokenPrincipals.resolve(claims.common_name);
+  return principalId === undefined
+    ? undefined
+    : { principalId, kind: "service" };
+}
 
 function validateClaims(
   input: Record<string, unknown>,
@@ -252,6 +298,17 @@ function validateClaims(
     throw new CloudflareAccessJwtVerificationError("claims_invalid");
   if (nbf !== undefined && !isSafeInteger(nbf))
     throw new CloudflareAccessJwtVerificationError("claims_invalid");
+  // Bounded before it is carried any further: it is attacker-influenced only
+  // to the extent Cloudflare signs it, but it is still a lookup key and has no
+  // business being unbounded.
+  const commonName = input["common_name"];
+  if (
+    commonName !== undefined &&
+    (typeof commonName !== "string" ||
+      commonName.length === 0 ||
+      commonName.length > 128)
+  )
+    throw new CloudflareAccessJwtVerificationError("claims_invalid");
   return {
     iss,
     aud,
@@ -260,6 +317,7 @@ function validateClaims(
     iat,
     ...(nbf === undefined ? {} : { nbf }),
     type: "app",
+    ...(commonName === undefined ? {} : { common_name: commonName }),
   };
 }
 

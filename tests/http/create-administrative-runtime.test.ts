@@ -24,7 +24,7 @@ function shutdownConfig(): EnvironmentConfig {
     administrativeEventHistoryFilePath: "/tmp/atlas-manager-events.jsonl",
     administrativeRoleAssignments: [
       {
-        principal: { principalId: PRINCIPAL_ID },
+        principal: { principalId: PRINCIPAL_ID, kind: "human" as const },
         roles: ["administrator"],
       },
     ],
