@@ -41,16 +41,18 @@ closed rather than silently falling back to the human assertion.
 
 ## Real-host acceptance status
 
-**Pending.** Neither #326's dashboard redesign nor its CLI service-token
-authentication path has been deployed to, or exercised against, the real
-Atlas host or a real Cloudflare Access application yet. The service-token
-path in particular was built and unit-tested entirely against synthetic
-signed assertions (`tests/access-control/cloudflare-access-service-token.test.ts`)
-and has never been verified against Cloudflare's actual edge validation of a
-real Client ID/secret pair. This is the first candidate for which that
-real-host and real-Cloudflare verification occurs; see
-`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`
-for the outcome once acceptance completes.
+**Complete, see full evidence in
+`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`.**
+Deployed to the real Atlas host on 2026-08-11. Every capability passed,
+including — for the first time — the CLI service-token authentication path
+(ADR-034) against a genuine Cloudflare Access service token created for this
+verification: real `curl` against the real Cloudflare edge returned `HTTP
+200`, and the resulting audit events were attributed `service:<uuid>`, never
+`administrator:<uuid>`, proving the actor-id discrimination holds under real
+validation and not just the synthetic signed assertions used in unit tests.
+One item (a live human confirmation of the dashboard's visual rendering) was
+still pending at the time this note was written; see the evidence document
+for its resolution before the `v1.0.0` tag.
 
 ## Release identity
 
