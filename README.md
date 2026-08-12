@@ -1,5 +1,29 @@
 # Atlas Manager
 
+Atlas Manager is a personal, self-hosted homelab operations platform, built
+end-to-end as a portfolio project to learn and demonstrate production-grade
+backend engineering: Clean Architecture with a ports-and-adapters boundary
+between domain, application, and infrastructure; Cloudflare Access
+authentication with application-level RBAC; multiple infrastructure adapters
+(PM2, Docker, Compose) behind a single service-management use case; an
+auditable event history for administrative mutations; and a mock-first
+approach to dangerous operations (shutdown, power, restore) before they are
+allowed to touch real hardware. Every architectural decision is written down
+as it is made — see [Architecture](docs/architecture.md) and the 34
+[Architecture Decision Records](docs/adr/) — and the release history in
+[`CHANGELOG.md`](CHANGELOG.md) and [`docs/release/`](docs/release/) tracks
+the project from its foundation phase through general availability at
+`1.0.0`.
+
+**Stack**: Node.js/TypeScript, Express 5, Zod, Pino, `jose` (JWT/JWKS),
+Vitest/Supertest, systemd, Nginx, Cloudflare Tunnel/Access.
+
+This is not a product with a public demo or hosted trial — it runs on a
+single personal Linux server ("Atlas") that its creator, Gustavo Pinto,
+operates day to day. The sections below are the operational runbook used to
+run it on that host; the documentation in [`docs/`](docs/) is the best way to
+evaluate the engineering depth of the project.
+
 ## What it is
 
 Atlas Manager is a self-hosted application for monitoring, managing, and

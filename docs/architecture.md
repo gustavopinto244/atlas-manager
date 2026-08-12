@@ -60,9 +60,11 @@ Manager.
 It defines architectural boundaries, dependency rules, integration patterns,
 and security principles that should guide implementation.
 
-This document does not represent a complete implementation. Atlas Manager is
-currently in its foundation phase, and most feature modules described here have
-not been created yet.
+Atlas Manager reached general availability at `1.0.0`, and most feature
+modules described here are implemented; see `docs/capabilities.md` for the
+current implementation status of each capability. This document remains a
+living reference for the architectural boundaries and patterns that continue
+to guide new work, not a record of a finished, unchanging design.
 
 Detailed product behavior is defined in:
 
