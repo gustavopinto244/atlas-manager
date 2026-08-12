@@ -245,7 +245,8 @@ Report:
 
 ## Product scope
 
-The planned initial capabilities include:
+The initial capabilities delivered through `1.0.0` general availability
+include:
 
 - server health monitoring;
 - registered service status and control;
@@ -256,6 +257,10 @@ The planned initial capabilities include:
 - backup orchestration;
 - event history;
 - administrative API and dashboard.
+
+See `docs/capabilities.md` for the current, capability-by-capability
+implementation status and `docs/roadmap.md` for scope planned beyond `1.0.0`
+— do not rely on this list alone to determine what is already implemented.
 
 Database engines are treated as Docker-managed services in the initial
 release.

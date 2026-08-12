@@ -2,10 +2,15 @@
 
 ## Document status
 
-- Status: Draft
+- Status: Baseline (implemented through `1.0.0` general availability)
 - Version: 0.1
 - Author: Gustavo Pinto
-- Last updated: 2026-07-31
+- Last updated: 2026-08-11
+
+The requirements below reflect the initial functional and non-functional
+scope; they were delivered through the `1.0.0` GA release. See
+`docs/capabilities.md` for the current, capability-by-capability
+implementation status and `docs/roadmap.md` for scope planned beyond `1.0.0`.
 
 ## 1. Purpose
 

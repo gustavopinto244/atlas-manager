@@ -2,10 +2,10 @@
 
 ## Document status
 
-- Status: Draft
+- Status: Baseline (general availability reached at `1.0.0`)
 - Version: 0.1
 - Author: Gustavo Pinto
-- Last updated: 2026-07-18
+- Last updated: 2026-08-11
 
 ## 1. Product summary
 
@@ -109,18 +109,23 @@ Each version should deliver a limited, testable, and documented capability.
 
 ## 8. Initial success criteria
 
-The first stable version will be considered successful when it can:
+The first stable version, released as `1.0.0`, achieved this by delivering:
 
-- monitor the Atlas server and its main services;
-- control registered PM2 applications;
-- schedule individual application availability;
-- monitor and control allowlisted Docker services;
-- monitor supported databases and create logical backups;
-- schedule safe shutdown and wake-up;
-- maintain an operational event history;
-- provide a protected administrative interface;
-- recover from a documented deployment rollback;
-- run reliably on the Atlas server.
+- monitoring of the Atlas server and its main services;
+- control of registered PM2, Docker, and Compose applications;
+- individual application availability schedules;
+- monitoring and control of allowlisted Docker services;
+- scheduled safe shutdown and wake-up;
+- an operational event history;
+- a protected administrative interface (dashboard, API, and CLI);
+- a documented deployment rollback path;
+- reliable operation on the Atlas server.
+
+Logical database administration, backup, and restoration remain out of scope
+unless explicitly added to the roadmap (see section 6, "Non-goals").
+
+See `docs/roadmap.md` for the current post-GA stabilization window and
+`docs/capabilities.md` for the up-to-date capability matrix and `1.1.0` scope.
 
 ## 9. Long-term vision
 
