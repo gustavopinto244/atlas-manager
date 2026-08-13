@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- adds `docs/study/deploy-container-no-atlas.md`, an end-to-end study guide
+  for putting an already-working application into production on Atlas as a
+  container: the Docker configuration files that live in the application's
+  own repository, delivery by `git push` to a bare `repo.git` on the server
+  and the checkout into the `app/` work-tree, the container build, the nginx
+  vhost and Cloudflare Tunnel hostname, optional registration in a service
+  manager, verification, redeploy and rollback. Written as a reusable
+  procedure with placeholders (`<app>`, `<port>`, `<domain>`) rather than
+  around any one application, and with every command in the form it takes
+  when run from a session on the host — the `git push` is the only step
+  marked as running from the workstation;
+- marks the Cloudflare Public Hostname item in
+  `docs/study/migracao-task-manager-docker.md` as resolved, and notes there
+  that the apex vhost referenced by that document was later split into one
+  file per domain;
+- extends the `deployment/sudoers/atlas-manager-operator` template with the
+  reverse-proxy commands an operator actually runs unattended (`nginx -t`,
+  `systemctl reload/is-active/status nginx`). `systemctl restart nginx` is
+  deliberately excluded, since it would drop every site on the host, and so
+  are file-manipulation commands, which are equivalent to root under sudo
+  because they can write to `/etc/sudoers.d`;
 - adds a per-route HTTP study guide (`study/`, one document per registered
   route grouped by domain) written while re-learning the request flow of
   every administrative endpoint;

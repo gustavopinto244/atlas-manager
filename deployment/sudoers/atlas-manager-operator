@@ -24,3 +24,19 @@ operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active atlas-manager.service
 
 # Service logs: journalctl
 operator ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u atlas-manager.service
+
+# Reverse proxy: validate and apply nginx configuration.
+#
+# "nginx -t" needs root because the vhost files are not world-readable. Only
+# "-t" is granted: it parses and tests, never serves. "reload" re-reads the
+# configuration without dropping connections; "restart" is deliberately absent,
+# since it would drop every site on the host.
+#
+# Editing the vhost files themselves is NOT granted here. File-manipulation
+# commands (install, cp, ln, rm, tee, sed) are equivalent to root when run
+# through sudo, because they can write to /etc/sudoers.d. Changes to the vhost
+# content stay behind an interactive credential.
+operator ALL=(ALL) NOPASSWD: /usr/sbin/nginx -t
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload nginx
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active nginx
+operator ALL=(ALL) NOPASSWD: /usr/bin/systemctl status nginx
