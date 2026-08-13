@@ -4,6 +4,11 @@ import { join } from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
+const checkVersioned = process.argv[2] === "--check-versioned";
+if (process.argv.length !== (checkVersioned ? 3 : 2))
+  throw new Error("traceability_arguments_invalid");
+if (checkVersioned && process.env.RELEASE_ARTIFACT_DIR)
+  throw new Error("traceability_arguments_invalid");
 const outputDirectory = process.env.RELEASE_ARTIFACT_DIR
   ? process.env.RELEASE_ARTIFACT_DIR
   : root;
@@ -11,7 +16,7 @@ const packageJson = JSON.parse(
   await readFile(join(root, "package.json"), "utf8"),
 );
 const sourceCommit =
-  process.env.RELEASE_SNAPSHOT === "true"
+  checkVersioned || process.env.RELEASE_SNAPSHOT === "true"
     ? null
     : (process.env.SOURCE_COMMIT ??
       execFileSync("git", ["rev-parse", "HEAD"], {
@@ -32,13 +37,41 @@ if (identifiers.length === 0) throw new Error("requirements_inventory_empty");
 const implementedWithPhysicalGate = new Map(
   Object.entries(statusConfiguration.implementedWithPhysicalGate ?? {}),
 );
-const deferred = new Set(statusConfiguration.deferredByAcceptedScope ?? []);
+const implementedValues = statusConfiguration.implemented ?? [];
+const deferredValues = statusConfiguration.deferredByAcceptedScope ?? [];
+if (!Array.isArray(implementedValues) || !Array.isArray(deferredValues))
+  throw new Error("requirement_status_invalid");
+if (
+  implementedValues.some((id) => typeof id !== "string") ||
+  deferredValues.some((id) => typeof id !== "string")
+)
+  throw new Error("requirement_status_invalid");
+const implemented = new Set(implementedValues);
+const deferred = new Set(deferredValues);
+if (
+  implemented.size !== implementedValues.length ||
+  deferred.size !== deferredValues.length
+)
+  throw new Error("requirement_status_duplicate");
 const requirementIds = new Set(identifiers.map(({ id }) => id));
-for (const id of [...implementedWithPhysicalGate.keys(), ...deferred]) {
+for (const remainingGate of implementedWithPhysicalGate.values()) {
+  if (typeof remainingGate !== "string" || remainingGate.length === 0)
+    throw new Error("requirement_status_invalid");
+}
+for (const id of [
+  ...implemented,
+  ...implementedWithPhysicalGate.keys(),
+  ...deferred,
+]) {
   if (!requirementIds.has(id)) throw new Error("requirement_status_unknown");
 }
-for (const id of implementedWithPhysicalGate.keys()) {
-  if (deferred.has(id)) throw new Error("requirement_status_conflict");
+for (const id of requirementIds) {
+  const classificationCount =
+    Number(implemented.has(id)) +
+    Number(implementedWithPhysicalGate.has(id)) +
+    Number(deferred.has(id));
+  if (classificationCount === 0) throw new Error("requirement_status_missing");
+  if (classificationCount !== 1) throw new Error("requirement_status_conflict");
 }
 function table(headers, values) {
   const widths = headers.map((header, index) =>
@@ -57,7 +90,11 @@ const rows = identifiers.map(({ id, title }) => {
     ? "implemented_with_physical_gate"
     : deferred.has(id)
       ? "deferred_by_accepted_scope"
-      : "implemented";
+      : implemented.has(id)
+        ? "implemented"
+        : (() => {
+            throw new Error("requirement_status_missing");
+          })();
   const remaining =
     status === "implemented_with_physical_gate"
       ? implementedWithPhysicalGate.get(id)
@@ -107,9 +144,9 @@ const sourceLine = sourceCommit
   : "Source commit: detached CI qualification artifact";
 const output = `# Atlas Manager v1 requirements traceability
 
-Release candidate: \`${process.env.RELEASE_VERSION ?? packageJson.version}\`
+Release: \`${process.env.RELEASE_VERSION ?? packageJson.version}\`
 ${sourceLine}
-Scope: software-only qualification; physical gates are intentionally separate.
+Scope: software/control-plane traceability; physical-effect gates remain separate.
 
 The table is generated from the normative identifiers in \`docs/requirements.md\`.
 \`implemented\` means the software path exists and is covered by the relevant
@@ -122,9 +159,13 @@ Additional accepted scope boundaries:
 
 ${scopeTable}
 `;
-await writeFile(
-  process.env.RELEASE_ARTIFACT_DIR
-    ? join(outputDirectory, "atlas-manager-v1-requirements-traceability.md")
-    : join(root, "docs/release/atlas-manager-v1-requirements-traceability.md"),
-  output,
-);
+const outputPath = process.env.RELEASE_ARTIFACT_DIR
+  ? join(outputDirectory, "atlas-manager-v1-requirements-traceability.md")
+  : join(root, "docs/release/atlas-manager-v1-requirements-traceability.md");
+if (checkVersioned) {
+  if ((await readFile(outputPath, "utf8")) !== output)
+    throw new Error("versioned_traceability_generation_mismatch");
+  process.stdout.write('{"result":"equivalent"}\n');
+} else {
+  await writeFile(outputPath, output);
+}

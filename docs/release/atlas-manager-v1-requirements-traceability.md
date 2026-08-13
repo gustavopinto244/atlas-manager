@@ -1,8 +1,8 @@
 # Atlas Manager v1 requirements traceability
 
-Release candidate: `1.0.0`
+Release: `1.0.0`
 Source commit: detached CI qualification artifact
-Scope: software-only qualification; physical gates are intentionally separate.
+Scope: software/control-plane traceability; physical-effect gates remain separate.
 
 The table is generated from the normative identifiers in `docs/requirements.md`.
 `implemented` means the software path exists and is covered by the relevant

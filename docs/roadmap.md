@@ -838,7 +838,7 @@ full qualification chain (traceability/evidence/contract/validate/digests)
 reporting `qualified`/`valid` against the real source commit, Candidate A/B
 bundle and rehearsal reproducibility both byte-identical.
 
-## v1.0 stable physical release — completed
+## v1.0 stable GA deployment on Atlas — completed
 
 `1.0.0-rc.15` was deployed to and accepted on the real Atlas host, including
 Cloudflare Access ingress and the first real-Cloudflare verification of the
