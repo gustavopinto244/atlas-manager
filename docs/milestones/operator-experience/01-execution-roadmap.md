@@ -1,5 +1,10 @@
 # Execution roadmap
 
+> **Historical milestone plan.** Counts and deferred classifications below are
+> frozen at the dated Operator Experience milestones. Current source has 52
+> route descriptors and 39 implemented CLI nodes with zero stubs; machine
+> policy persistence is delivered under ADR-033. See `docs/capabilities.md`.
+
 ## Delivery model
 
 Use vertical slices with one architectural purpose per commit. Every slice must

@@ -43,7 +43,11 @@ The installer uses only these fixed production locations:
 `install-disabled` installs the unit and safe environment template but does
 not create the real `atlas-manager.env`, enable the unit, reload systemd,
 start the service, or restart it. The unit uses `Restart=no` and the exact
-runtime identity. `/run/atlas-manager` is treated as an active-service
+runtime identity. The installed default has no power supplementary group and
+sets `NoNewPrivileges=true` plus `RestrictSUIDSGID=true`.
+`systemd/profiles/atlas-manager-power-enabled.service` is a separately
+checksummed future template; this installer never selects or copies it, even
+when a helper exists. `/run/atlas-manager` is treated as an active-service
 indicator; install, rollback, and uninstall stop rather than signal a process
 when it exists.
 

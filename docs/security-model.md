@@ -22,6 +22,12 @@ and power-safe. Wake/shutdown routes and power effects are disabled, the
 machine-power scheduler is disabled, and the helper is unused. The control
 plane does not authorize physical deployment or real power effects.
 
+The current default systemd profile also omits the `atlas-manager-power`
+supplementary group and applies `NoNewPrivileges=true` plus
+`RestrictSUIDSGID=true`. A distinct future power-enabled template is
+inventoried but never selected by the default installer or mock lifecycle
+(ADR-035).
+
 ## Privileged helper installation
 
 The helper installation boundary is deliberately separate from the Node.js
@@ -549,9 +555,10 @@ established.
 
 Infrastructure adapters must not be responsible for user-level authorization.
 
-### Current administrative access-control foundation
+### Current administrative access control
 
-ADR-003 defines the current fail-closed chain:
+ADR-003 established the fail-closed chain used by the current Cloudflare
+Access delivery:
 
 ```text
 authentication provider → principal → fixed policy → audited decision
@@ -559,11 +566,12 @@ authentication provider → principal → fixed policy → audited decision
 ```
 
 The default provider returns `credentials_absent`; no implicit local
-administrator exists. Principals contain only canonical lowercase UUIDs.
-Exactly four roles and seven permissions are accepted, with a reviewed fixed
-role-permission mapping. Unknown principals, unavailable role data, and policy
-failures deny the operation. Callers cannot choose a principal, role,
-permission, or audit actor.
+administrator exists. Protected routes use the Cloudflare Access verifier.
+Principals are canonical UUID-backed identities discriminated as human or
+service. Roles and permissions come only from fixed application policy and
+trusted local assignments. Unknown principals, unavailable role data, and
+policy failures deny the operation. Callers cannot choose a principal, kind,
+role, permission, or audit actor.
 
 Authorization events contain only the requested operation, mapped permission,
 allow/deny decision, and safe reason code when denied. Credentials, tokens,
@@ -571,11 +579,12 @@ headers, role collections, provider errors, and unrestricted metadata are never
 persisted. A failed authorization audit prevents the target operation. Explicit
 shutdown confirmation remains a separate safeguard after authorization.
 
-This is not production authentication. It adds no password, token, cookie,
-session, identity-provider integration, HTTP middleware, or public route. Real
-administrative exposure remains blocked until identity verification, protected
-delivery, transport and deployment validation, recovery procedures, and rate-
-limiting decisions are reviewed.
+Historical note: ADR-003 by itself was only an access-control foundation and
+did not provide production authentication or HTTP middleware. ADR-004 and the
+protected delivery decisions that followed closed that gap. `1.0.0` has
+Cloudflare Access verification, protected API/dashboard delivery, an
+authenticated CLI transport, and distinct service-token identities; the
+deny-all provider remains the safe fallback when that composition is absent.
 
 ## Network exposure
 
@@ -943,9 +952,10 @@ application JWT before creating an administrative principal. Only the bounded
 `Cf-Access-Jwt-Assertion` header is accepted; cookies and unsigned identity
 headers are ignored. Verification is bound to the configured team issuer and
 one exact application audience, accepts RS256 only, requires `type: app`, and
-requires a canonical lowercase UUID `sub`. Empty subjects therefore cannot
-authenticate service tokens as human administrators. Email is not an identity
-or role-assignment input.
+requires a canonical lowercase UUID `sub` for a human. Under ADR-034, an empty
+`sub` plus a bounded declared `common_name` may resolve only to a configured
+service principal. It can never authenticate as a human administrator. Email
+is not an identity or role-assignment input.
 
 The fixed team JWKS endpoint is fetched with no credentials, no redirect
 following, a five-second timeout, and a 65,536-byte streaming limit. Validated
@@ -955,10 +965,12 @@ fetch cooldown. Required-key or provider failures return the safe
 `identity_provider_unavailable` outcome; they never authenticate or expose
 provider details. Missing configuration preserves deny-by-default behavior.
 
-The identity foundation alone is not a complete protected HTTP delivery
-mechanism. The separate event-history route below is the first consumer; it
-does not add sessions, cookie authentication, trusted-proxy policy, helper
-activation, or real machine effects.
+Historical note: the identity foundation alone was not a complete protected
+HTTP delivery mechanism; the event-history route below was its first consumer.
+The current administrative catalog, dashboard and CLI now consume the same
+verified identity boundary. They still add no Atlas-managed session, cookie
+authentication, trusted-proxy policy, helper activation, or real machine
+effects.
 
 ## Protected administrative event-history HTTP delivery
 
@@ -1040,7 +1052,8 @@ ADR-005 accepts a compiled, memory-safe Go helper as the future privilege
 boundary while keeping Atlas Manager unprivileged. The intended installation
 is `/usr/local/libexec/atlas-manager-power-helper`, root-owned, group-owned by
 the dedicated `atlas-manager-power` group, and mode `04750`. The application
-must belong to that group, and the parent directory must be root-owned and
+must belong to that group only in the explicitly selected future
+power-enabled profile, and the parent directory must be root-owned and
 not writable by group or others. Installation inspection reports safe project
 categories and never repairs or prints filesystem details.
 
@@ -1220,7 +1233,7 @@ or permanent occurrence claims. Physical Atlas deployment, application-user
 enrollment, host qualification, and real-effect certification remain separate
 gates. No host or VM drill occurred for this delivery.
 
-### Dedicated runtime identity
+### Dedicated runtime identity for Linux effects
 
 Linux power effects require the process to run as the exact dedicated
 `atlas-manager` service identity. The fixed contract is primary group
@@ -1237,11 +1250,14 @@ NSS commands, and never creates or modifies accounts, groups, memberships,
 permissions, ownership, or privileges. Numeric IDs are internal facts and are
 not logged or exposed through HTTP.
 
-Disabled, mock, and inert configurations do not inspect account files. The
-exact admitted helper-group GID is shared by startup preflight and
-operation-time transport inspection. Enrollment, systemd configuration,
-deployment, host qualification, and real-effect certification remain
-deferred.
+The mock/default systemd profile deliberately omits this supplementary group,
+and deployment runtime verification rejects unexpected helper-group
+authority. The relationship in this section is an activation precondition,
+not a default runtime grant. Disabled, mock, and inert application
+configurations do not perform the TypeScript Linux-effects identity admission.
+The exact admitted helper-group GID is shared by startup preflight and
+operation-time transport inspection. Enrollment, explicit power-profile
+selection, host qualification, and real-effect certification remain separate.
 
 ### Disabled Atlas Manager deployment boundary
 
@@ -1251,9 +1267,11 @@ manifest, file modes, file types, and SHA-256 inventory agree. The installer
 rejects unsafe identity data, an unsafe fixed Node runtime, active or enabled
 service state, unknown releases, modified managed files, and lock conflicts.
 
-The systemd unit fixes `atlas-manager:atlas-manager`, supplies
-`atlas-manager-power` as a supplementary group, uses `Restart=no`, and keeps
-the helper-compatible privilege model. Installation does not create or modify
+The default systemd unit fixes `atlas-manager:atlas-manager`, omits
+`atlas-manager-power`, sets `NoNewPrivileges=true` and
+`RestrictSUIDSGID=true`, and uses `Restart=no`. The separately inventoried
+power-enabled template is not installed without a future explicit selection.
+Installation does not create or modify
 accounts, group membership, configuration secrets, helper files, RTC state,
 D-Bus state, or service activation. Physical deployment and real-effect
 certification remain deferred.
@@ -1337,7 +1355,7 @@ provides deterministic integrity evidence only; it does not provide external
 authenticity, non-repudiation, trusted timestamping, or third-party
 attestation.
 
-## v1 software release-candidate envelope
+## Historical v1 software release-candidate envelope
 
 Administrative routes are registered through one closed security catalog and
 remain bound to loopback. The configured HTTPS public origin is checked against
@@ -1347,9 +1365,13 @@ Cloudflare Access assertions remain stateless authentication inputs only; JWT
 claims never assign application roles. The dashboard stores no assertions or
 roles and mutations remain strictly parsed, confirmed, and audited.
 
-The `1.0.0-rc.8` result is software qualification only. It does not certify a
-physical Atlas host, Cloudflare ingress, RTC, helper, or real machine-power
-effect.
+The following statement records the historical `1.0.0-rc.8` boundary, not the
+current GA state: that candidate's result was software qualification only and
+did not certify a physical Atlas host, Cloudflare ingress, RTC, helper, or real
+machine-power effect. Later acceptance established the specific real Atlas and
+Cloudflare evidence documented in
+`docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md`;
+physical power effects remain separately unqualified.
 
 Runtime identity readiness uses a fail-closed package gate before selecting
 `login_logs_backend_proven_safe`: only the exact Ubuntu amd64 `passwd`/`shadow`

@@ -36,7 +36,10 @@ This decision separates:
 
 The service unit continues to use `Restart=no`. The lifecycle tool has no
 restart, repair, force, custom-command, or power-activation action. The helper
-is absent and unused in this profile.
+is absent and unused in this profile. ADR-035 further hardens this exact mock
+profile with `NoNewPrivileges=true`, `RestrictSUIDSGID=true`, and no
+`atlas-manager-power` supplementary group; a separately inventoried future
+power-enabled template is never selected by this lifecycle.
 
 ## Rehearsal
 

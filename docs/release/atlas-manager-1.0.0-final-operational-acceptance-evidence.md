@@ -80,6 +80,21 @@ cut instead of bumping straight to `1.0.0`.
 | `task-manager` registered service                            | PASS              | Continuous PM2 supervision confirmed throughout (uptime never reset); port 3001 healthy before, during and after the upgrade                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Rollback readiness                                           | PASS (structural) | `1.0.0-rc.14`'s release directory is preserved side-by-side under `/opt/atlas-manager/releases/` and untouched. A live rollback-and-restore drill was deliberately **not** executed for this acceptance pass: `atlas-manager-installer rollback-disabled`'s correctness is already covered by passing Go integration tests (`deployment/internal/installer`, exercised in Phase 1b's qualification), and performing a live drill would have required repeating the state-drift-recovery dance from step 5 twice more against a personal production host for no additional assurance beyond what those tests already provide.                                                                                                                                                          |
 
+## Operational evidence boundaries
+
+These are evidence gaps, not fabricated software failures:
+
+- infrastructure diagnostics were not exercised because the capability was
+  disabled on the accepted host;
+- the backup read path was exercised with `targets: []`, so this acceptance did
+  not prove a live backup execution against a registered target;
+- rollback was validated structurally and through integration tests, not by a
+  live production rollback-and-restore drill.
+
+No later evidence is asserted here. Closing any of these gaps requires a new,
+explicitly scoped operational exercise; it must not be inferred from the GA
+decision.
+
 ## Bugs found during acceptance
 
 One operational issue, not a code bug: out-of-band host configuration

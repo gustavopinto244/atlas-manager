@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+Updated by ADR-035: the historical helper-ready unit described below is an
+accepted predecessor, not the current default. New bundles install a hardened
+mock-only unit and inventory a separate, non-selected power-enabled template.
+
 ## Decision
 
 Atlas Manager is distributed as a fixed `linux/amd64` tarball containing the
@@ -42,7 +46,7 @@ It does not create accounts or groups, enroll `atlas-manager-power`, install
 the helper, create the real environment file, enable or start systemd,
 activate Linux effects, qualify Atlas, or certify a real effect.
 
-## Disabled contract
+## Historical disabled contract
 
 The unit runs as `atlas-manager:atlas-manager` with
 `SupplementaryGroups=atlas-manager-power`, uses `/usr/bin/node`, and has
@@ -52,6 +56,11 @@ environment file. Upgrade and rollback change only managed release files and
 the `current` selector; configuration, application state, event history,
 scheduler cursors, occurrence claims, users, groups, and the helper remain
 outside the mutation scope.
+
+ADR-035 replaces that default unit contract with a mock-only profile that has
+no supplementary helper group and adds `NoNewPrivileges=true` plus
+`RestrictSUIDSGID=true`. The installer still has the same disabled-only
+mutation scope.
 
 ## Security
 

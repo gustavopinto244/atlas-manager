@@ -115,7 +115,7 @@ func TestVerifyAdministrativeUsesLoopbackURLAndConfiguredHost(t *testing.T) {
 		} else if request.URL.Path == HealthServerPath {
 			// The server health probe also intentionally uses the loopback Host.
 			body = `{"capturedAt":"2026-01-01T00:00:00.000Z","uptimeSeconds":1,"memory":{},"cpu":{},"cpuLoadAverage":[],"disk":{}}`
-		} else if request.URL.Path == "/admin/event-history" || strings.HasPrefix(request.URL.Path, "/admin/power/") {
+		} else if isRequiredAdministrativeProbe(request) || strings.HasPrefix(request.URL.Path, "/admin/power/") {
 			if request.Host != "admin.example.test" {
 				t.Fatalf("unexpected administrative authority: %s", request.Host)
 			}
@@ -134,6 +134,33 @@ func TestVerifyAdministrativeUsesLoopbackURLAndConfiguredHost(t *testing.T) {
 	dependencies.CheckIdentity = func(int) error { return nil }
 	if err := VerifyAdministrative(context.Background(), 123, dependencies); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVerifyAdministrativeRejectsEveryMissingRequiredSurface(t *testing.T) {
+	for _, missing := range requiredAdministrativeRoutes {
+		t.Run(missing.path, func(t *testing.T) {
+			dependencies := NewDependencies()
+			dependencies.AdministrativeHost = "admin.example.test"
+			dependencies.HTTPClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				body, status := `{"status":"ok"}`, http.StatusOK
+				switch {
+				case request.URL.Path == HealthServerPath:
+					body = `{"capturedAt":"2026-01-01T00:00:00.000Z","uptimeSeconds":1,"memory":{},"cpu":{},"cpuLoadAverage":[],"disk":{}}`
+				case request.Method == missing.method && request.URL.Path == missing.path:
+					status, body = http.StatusNotFound, `{}`
+				case isRequiredAdministrativeProbe(request):
+					status, body = http.StatusUnauthorized, `{"error":{"code":"administrative_authentication_required"}}`
+				default:
+					status, body = http.StatusNotFound, `{}`
+				}
+				return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+			})}
+			dependencies.CheckIdentity = func(int) error { return nil }
+			if err := VerifyAdministrative(context.Background(), 123, dependencies); err == nil {
+				t.Fatalf("missing required surface was accepted: %s %s", missing.method, missing.path)
+			}
+		})
 	}
 }
 
@@ -169,12 +196,12 @@ func TestVerifyAdministrativeRejectsAnEnabledPowerRouteThatIsAbsent(t *testing.T
 	dependencies.AdministrativeWakeAlarmEnabled = true
 	dependencies.HTTPClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		body, status := `{"status":"ok"}`, http.StatusOK
-		switch request.URL.Path {
-		case HealthServerPath:
+		switch {
+		case request.URL.Path == HealthServerPath:
 			body = `{"capturedAt":"2026-01-01T00:00:00.000Z","uptimeSeconds":1,"memory":{},"cpu":{},"cpuLoadAverage":[],"disk":{}}`
-		case "/admin/event-history":
+		case isRequiredAdministrativeProbe(request):
 			status, body = http.StatusUnauthorized, `{"error":{"code":"administrative_authentication_required"}}`
-		case "/admin/power/wake-alarm":
+		case request.URL.Path == "/admin/power/wake-alarm":
 			status, body = http.StatusNotFound, `{}`
 		default:
 			status, body = http.StatusNotFound, `{}`
@@ -185,6 +212,15 @@ func TestVerifyAdministrativeRejectsAnEnabledPowerRouteThatIsAbsent(t *testing.T
 	if err := VerifyAdministrative(context.Background(), 123, dependencies); err == nil {
 		t.Fatal("enabled wake-alarm routes were accepted while absent")
 	}
+}
+
+func isRequiredAdministrativeProbe(request *http.Request) bool {
+	for _, route := range requiredAdministrativeRoutes {
+		if request.Method == route.method && request.URL.Path == route.path {
+			return true
+		}
+	}
+	return false
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

@@ -59,11 +59,13 @@ Atlas Manager should:
 2. Allow registered applications and services to be started and stopped.
 3. Support independent availability schedules for each service.
 4. Support PM2, Docker, systemd, and database integrations incrementally.
-5. Automate safe shutdown and RTC wake-up routines.
+5. Automate safe shutdown and RTC wake-up routines through a mock-qualified
+   control plane, with physical effects requiring separate activation and host
+   qualification.
 6. Create and validate backups.
 7. Record operational events and failures.
 8. Expose administrative operations securely.
-9. Provide both an API and, later, a web dashboard and CLI.
+9. Provide an administrative API, web dashboard, and CLI.
 10. Remain understandable and useful as an educational open-source project.
 
 ## 6. Non-goals
@@ -115,7 +117,9 @@ The first stable version, released as `1.0.0`, achieved this by delivering:
 - control of registered PM2, Docker, and Compose applications;
 - individual application availability schedules;
 - monitoring and control of allowlisted Docker services;
-- scheduled safe shutdown and wake-up;
+- qualified machine scheduling, shutdown-readiness, and wake/shutdown control
+  software in mock mode; physical RTC wake and shutdown effects remained
+  separately disabled and unqualified;
 - an operational event history;
 - a protected administrative interface (dashboard, API, and CLI);
 - a documented deployment rollback path;

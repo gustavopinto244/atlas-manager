@@ -28,7 +28,7 @@
     "release:generate-traceability": "node scripts/generate-requirements-traceability.mjs",
     "release:generate-digests": "node scripts/generate-release-digests.mjs",
     "release:validate": "node scripts/validate-release-artifacts.mjs",
-    "release:validate-snapshots": "node scripts/validate-versioned-release-snapshots.mjs",
+    "release:validate-snapshots": "node scripts/generate-requirements-traceability.mjs --check-versioned && node scripts/validate-versioned-release-snapshots.mjs",
     "dashboard:generate-assets": "node --import tsx/esm scripts/generate-dashboard-assets.mjs",
     "dashboard:verify-assets": "node scripts/verify-dashboard-assets.mjs",
     "package:operator": "node scripts/build-operator-package.mjs",

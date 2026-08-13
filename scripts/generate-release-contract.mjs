@@ -58,6 +58,8 @@ const documentationFiles = [
   `docs/release/atlas-manager-${packageJson.version}.md`,
   "docs/release/atlas-manager-v1-security-review.md",
   "docs/release/atlas-manager-v1-operational-readiness.md",
+  "docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md",
+  "docs/reviews/final-1.0.0-reconciliation-and-power-hardening.md",
   "docs/release/atlas-manager-v1-requirements-traceability.md",
 ];
 const documentation = Buffer.concat(

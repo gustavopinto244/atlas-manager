@@ -33,8 +33,20 @@ type administrativeRoute struct {
 	path   string
 }
 
-var administrativeRoutes = []administrativeRoute{
+var requiredAdministrativeRoutes = []administrativeRoute{
+	{http.MethodGet, "/"},
+	{http.MethodGet, "/assets/app.js"},
 	{http.MethodGet, "/admin/event-history"},
+	{http.MethodGet, "/admin/event-history/integrity"},
+	{http.MethodGet, "/admin/services"},
+	{http.MethodGet, "/admin/services/probe/availability"},
+	{http.MethodGet, "/admin/services/probe/schedule"},
+	{http.MethodGet, "/admin/overview"},
+	{http.MethodGet, "/admin/backups/targets"},
+	{http.MethodGet, "/admin/security/status"},
+}
+
+var powerAdministrativeRoutes = []administrativeRoute{
 	{http.MethodGet, "/admin/power/wake-alarm"},
 	{http.MethodPut, "/admin/power/wake-alarm"},
 	{http.MethodDelete, "/admin/power/wake-alarm"},
@@ -73,9 +85,11 @@ func Verify(ctx context.Context, pid int, dependencies Dependencies) error {
 	if err := verifyHealth(ctx, dependencies.HTTPClient, dependencies.BaseURL, HealthServerPath, false); err != nil {
 		return fmt.Errorf("service_health_failed")
 	}
-	for _, route := range administrativeRoutes {
-		if err := verifyAbsent(ctx, dependencies.HTTPClient, dependencies.BaseURL, route.method, route.path); err != nil {
-			return fmt.Errorf("administrative_route_exposed")
+	for _, routes := range [][]administrativeRoute{requiredAdministrativeRoutes, powerAdministrativeRoutes} {
+		for _, route := range routes {
+			if err := verifyAbsent(ctx, dependencies.HTTPClient, dependencies.BaseURL, route.method, route.path); err != nil {
+				return fmt.Errorf("administrative_route_exposed")
+			}
 		}
 	}
 	if dependencies.CheckIdentity != nil {
@@ -112,10 +126,12 @@ func VerifyAdministrative(ctx context.Context, pid int, dependencies Dependencie
 	if err := verifyHealth(ctx, dependencies.HTTPClient, dependencies.BaseURL, HealthServerPath, false); err != nil {
 		return fmt.Errorf("service_health_failed")
 	}
-	if err := verifyProtected(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, http.MethodGet, "/admin/event-history"); err != nil {
-		return fmt.Errorf("administrative_route_policy_invalid")
+	for _, route := range requiredAdministrativeRoutes {
+		if err := verifyProtected(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route.method, route.path); err != nil {
+			return fmt.Errorf("administrative_route_policy_invalid")
+		}
 	}
-	for _, route := range administrativeRoutes[1:] {
+	for _, route := range powerAdministrativeRoutes {
 		enabled := (strings.HasPrefix(route.path, "/admin/power/wake-alarm") && dependencies.AdministrativeWakeAlarmEnabled) || (strings.HasPrefix(route.path, "/admin/power/shutdown/") && dependencies.AdministrativeShutdownEnabled)
 		if err := verifyAdministrativeRoute(ctx, dependencies.HTTPClient, dependencies.BaseURL, dependencies.AdministrativeHost, route, enabled, dependencies.Now()); err != nil {
 			return fmt.Errorf("administrative_route_policy_invalid")
@@ -309,7 +325,7 @@ func verifyProcessIdentity(pid int, dependencies Dependencies) error {
 	if err != nil {
 		return err
 	}
-	_, err = runtimeidentity.Validate(string(passwd), string(group), process)
+	_, err = runtimeidentity.ValidateMock(string(passwd), string(group), process)
 	return err
 }
 

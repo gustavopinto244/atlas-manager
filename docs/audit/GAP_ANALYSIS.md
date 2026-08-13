@@ -1,5 +1,10 @@
 # Análise de lacunas — Atlas Manager 1.0.0-rc.1
 
+> **HISTÓRICO (`1.0.0-rc.1`).** Esta análise descreve o baseline auditado em
+> 2026-08-02. As classificações de CLI abaixo foram superadas pela entrega de
+> ADR-027/031/032/034 antes de `1.0.0`; preserve-as como achados do RC, não como
+> estado corrente. Veja `docs/capabilities.md` e a traceability v1 gerada.
+
 ## Objetivo
 
 Este documento separa:

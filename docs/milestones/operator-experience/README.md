@@ -8,6 +8,12 @@ current source reconciliation. The source inventory and capability matrix are
 authoritative when an older planning statement conflicts with implemented
 code.
 
+Current GA note (2026-08-13): the live source now has 52 administrative route
+descriptors and 39 implemented CLI command nodes with zero stubs. The 48/36
+counts below are intentionally retained as the dated `b7b18d1` milestone
+baseline; `docs/capabilities.md` carries the regression-tested current
+inventory.
+
 ## Current implementation baseline (2026-08-10)
 
 See [`docs/reviews/operator-experience-current-state.md`](../../reviews/operator-experience-current-state.md)

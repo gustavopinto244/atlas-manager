@@ -203,6 +203,10 @@ func inspectBundle(root string) error {
 	if err != nil || !systemdunit.Validate(string(unit)) {
 		return fmt.Errorf("systemd_unit_invalid")
 	}
+	powerUnit, err := os.ReadFile(filepath.Join(root, "systemd", "profiles", "atlas-manager-power-enabled.service"))
+	if err != nil || !systemdunit.ValidateForProfile(string(powerUnit), systemdunit.ProfilePowerEnabled) {
+		return fmt.Errorf("systemd_power_profile_invalid")
+	}
 	if _, err := os.Stat(filepath.Join(root, "atlas-manager-installer")); err != nil {
 		return fmt.Errorf("installer_missing")
 	}
@@ -230,8 +234,10 @@ func InspectBundleReadOnly(root string) error { return inspectBundle(root) }
 // ReadState reads managed deployment state without creating or mutating files.
 func ReadState(path string) (State, bool, error) { return readState(path) }
 
-// VerifyManagedDisabled validates an existing disabled installation without
-// acquiring the deployment lock. Qualification uses it for evidence only.
+// VerifyManagedDisabled validates a current mock-profile installation without
+// acquiring the deployment lock. Exact predecessor compatibility is confined
+// to the install/upgrade preflight and cannot admit a power-enabled unit to
+// qualification, configuration, or service activation.
 func VerifyManagedDisabled(paths Paths, identity runtimeidentity.Identity, enforceOwnership bool) error {
 	state, existsState, err := readState(paths.StateFile)
 	if err != nil || !existsState || state.Version == "" {
@@ -244,7 +250,7 @@ func VerifyManagedDisabled(paths Paths, identity runtimeidentity.Identity, enfor
 	if err := verifyCurrent(paths.Current, paths.ReleaseRoot, state.Version, state.Files); err != nil {
 		return err
 	}
-	if err := verifyStatic(config, identity); err != nil {
+	if err := verifyStatic(config, identity, false); err != nil {
 		return err
 	}
 	return nil
@@ -320,7 +326,7 @@ func (installer *Installer) install(ctx context.Context, identity runtimeidentit
 		if err := verifyCurrent(installer.config.Paths.Current, installer.config.Paths.ReleaseRoot, state.Version, state.Files); err != nil {
 			return err
 		}
-		if err := verifyStatic(installer.config, identity); err != nil {
+		if err := verifyStatic(installer.config, identity, true); err != nil {
 			return err
 		}
 	} else if exists(installer.config.Paths.Current) || exists(installer.config.Paths.Unit) || exists(installer.config.Paths.Template) {
@@ -396,7 +402,7 @@ func (installer *Installer) verify(identity runtimeidentity.Identity) error {
 	if err := verifyReleaseSet(installer.config.Paths.ReleaseRoot, state); err != nil {
 		return err
 	}
-	if err := verifyStatic(installer.config, identity); err != nil {
+	if err := verifyStatic(installer.config, identity, false); err != nil {
 		return err
 	}
 	return nil
@@ -492,9 +498,13 @@ func installStatic(config Config, identity runtimeidentity.Identity) error {
 	return nil
 }
 
-func verifyStatic(config Config, identity runtimeidentity.Identity) error {
+func verifyStatic(config Config, identity runtimeidentity.Identity, allowPredecessor bool) error {
 	unit, err := os.ReadFile(config.Paths.Unit)
-	if err != nil || !systemdunit.ValidateManaged(string(unit)) || !managedFileMetadata(config, config.Paths.Unit, 0o644, 0, 0) {
+	unitValid := systemdunit.Validate(string(unit))
+	if allowPredecessor {
+		unitValid = systemdunit.ValidateManaged(string(unit))
+	}
+	if err != nil || !unitValid || !managedFileMetadata(config, config.Paths.Unit, 0o644, 0, 0) {
 		return fmt.Errorf("systemd_unit_invalid")
 	}
 	if !managedFileMetadata(config, config.Paths.Template, 0o640, 0, identity.PrimaryGroupID) {

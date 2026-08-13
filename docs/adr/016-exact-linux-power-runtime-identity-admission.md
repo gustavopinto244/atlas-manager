@@ -2,6 +2,10 @@
 
 Status: Accepted
 
+ADR-035 narrows the current mock/default service profile: the helper-group
+membership below is required only when Linux power effects are explicitly
+admitted. Mock lifecycle verification now rejects that unused authority.
+
 ## Decision
 
 Linux power-effects admission is valid only when the running process is the

@@ -210,6 +210,11 @@ vi.mock("../src/logging/logger.js", () => ({
   logUnexpectedStartupFailure: vi.fn(),
 }));
 
+let unhandledRejectionListenersBeforeTest =
+  process.listeners("unhandledRejection");
+let uncaughtExceptionListenersBeforeTest =
+  process.listeners("uncaughtException");
+
 describe("application persistence adapter selection", () => {
   afterAll(() => {
     for (const modulePath of [
@@ -234,6 +239,10 @@ describe("application persistence adapter selection", () => {
   });
 
   beforeEach(() => {
+    unhandledRejectionListenersBeforeTest =
+      process.listeners("unhandledRejection");
+    uncaughtExceptionListenersBeforeTest =
+      process.listeners("uncaughtException");
     controlled.config = {
       host: "127.0.0.1",
       port: 3000,
@@ -276,6 +285,14 @@ describe("application persistence adapter selection", () => {
   });
 
   afterEach(() => {
+    for (const listener of process.listeners("unhandledRejection")) {
+      if (!unhandledRejectionListenersBeforeTest.includes(listener))
+        process.removeListener("unhandledRejection", listener);
+    }
+    for (const listener of process.listeners("uncaughtException")) {
+      if (!uncaughtExceptionListenersBeforeTest.includes(listener))
+        process.removeListener("uncaughtException", listener);
+    }
     process.exitCode = undefined;
   });
 

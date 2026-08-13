@@ -1,6 +1,22 @@
 # Agent handoff
 
-## Latest active work — rc.8 immutable upgrade identity
+## Current work — post-GA 1.0.0 reconciliation and power hardening
+
+Baseline: `main` at `818daf2` (`1.0.0`). The active branch reconciles current
+requirements, capability inventories, security/architecture/release documents,
+service-token least-privilege guidance, and the default systemd profile. The
+default remains `POWER_MANAGEMENT_BACKEND=mock`,
+`MACHINE_POWER_EFFECTS_ACTIVATION=disabled`, and
+`MACHINE_POWER_SCHEDULER_ENABLED=false`; no physical power effect is part of
+this work. ADR-035 records the new least-privilege default mock unit and the
+separate, never-implicitly-selected future power-enabled template.
+
+The remainder of this file is a historical handoff archive. Its labels such as
+"active candidate" or "latest active work" describe their dated RC context and
+do not override this current section, `docs/capabilities.md`, or the final GA
+acceptance evidence.
+
+## Historical rc.8 immutable upgrade identity
 
 The active candidate is `1.0.0-rc.8`. It gives the Advanced Manager readiness
 source a release identity distinct from the qualified `1.0.0-rc.7` generation

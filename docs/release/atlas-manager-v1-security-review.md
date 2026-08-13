@@ -1,4 +1,12 @@
-# Atlas Manager v1 software security review
+# Historical security review snapshot — Atlas Manager 1.0.0-rc.8
+
+> **HISTORICAL SNAPSHOT.** This document reviews `1.0.0-rc.8` and preserves
+> the conclusions available at that candidate. It is not the current v1/GA
+> security review. Findings were subsequently reconciled through later
+> candidates and GA. See the
+> [final operational acceptance evidence](atlas-manager-1.0.0-final-operational-acceptance-evidence.md)
+> and the
+> [final 1.0.0 reconciliation and power-hardening review](../reviews/final-1.0.0-reconciliation-and-power-hardening.md).
 
 Release candidate: `1.0.0-rc.8`.
 
@@ -23,4 +31,7 @@ bundle, and full rehearsal gates execute successfully.
 The CI workflow uses exact reviewed action release tags rather than immutable
 commit SHAs. This is an accepted supply-chain limitation for this candidate;
 SHA pinning is a follow-up maintenance task and does not weaken the
-application's runtime authorization or filesystem boundaries.
+application’s runtime authorization or filesystem boundaries.
+
+That limitation describes this historical snapshot. The post-GA reconciliation
+pins the same reviewed action versions to their resolved immutable commit SHAs.

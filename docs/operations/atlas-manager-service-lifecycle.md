@@ -14,8 +14,17 @@ atlas-manager-service-lifecycle verify-inactive
 Activation requires a valid disabled deployment, managed runtime identities,
 the exact mock-only environment, and an inactive disabled service. It invokes
 only the fixed `/usr/bin/systemctl` commands. After startup it verifies the
-fixed loopback health endpoints, absence of administrative routes, systemd
-state, and the exact runtime identity.
+fixed loopback health endpoints, systemd state, and the exact mock runtime
+identity. For the plain disabled profile it verifies that every managed
+administrative surface is absent. For the administrative profile it sends
+credential-free, read-only probes to the dashboard shell/assets, event
+history/integrity, services/availability/schedule, overview, backups, and
+security-status surfaces and requires the shared authentication envelope to
+reject each one; power routes must independently match their configured
+enabled/disabled state. These probes cannot invoke a target capability or a
+mutation. The process must not belong to `atlas-manager-power`; helper-group
+membership is reserved for a separately selected future power-enabled profile
+and is rejected here (ADR-035).
 
 Failure rolls back only service enablement and activity. If rollback is
 incomplete, the private transaction journal remains and future mutations are

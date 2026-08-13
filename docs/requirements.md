@@ -231,6 +231,10 @@ Priority: Must
 The system shall provide current RTC and wake-alarm information when
 supported by the operating system.
 
+`1.0.0` implements the software boundary through mock composition and the
+fixed-resource Linux helper reader. Physical RTC observation on Atlas remains
+a separately approved qualification gate and is not claimed by GA.
+
 #### FR-023 — Mock power operations
 
 Priority: Must
@@ -238,11 +242,18 @@ Priority: Must
 Power operations shall first be available through a mock driver that does
 not alter the machine.
 
+This mock path is the `1.0.0` default and remains the qualified production
+configuration.
+
 #### FR-024 — Wake-alarm scheduling
 
 Priority: Must
 
 The system shall be able to schedule the next supported RTC wake alarm.
+
+The control plane, mock behavior, fixed helper protocol, and Linux backend are
+implemented. Activating and qualifying a physical wake alarm on Atlas remains
+a separate gate.
 
 #### FR-025 — Safe shutdown routine
 
@@ -257,11 +268,21 @@ The system shall support a controlled shutdown routine that can coordinate:
 - filesystem synchronization;
 - event logging.
 
+The readiness, preparation, occurrence-claim, wake-before-shutdown, audit, and
+mock execution paths are implemented. A real physical shutdown remains
+unactivated and unqualified.
+
 #### FR-026 — Machine operating schedule
 
 Priority: Must
 
 The system shall support a configurable schedule for the Atlas machine.
+
+The environment-owned scheduler policy and the persisted administrative
+policy CRUD/preview control plane are implemented. Under ADR-033, the
+persisted policy remains declarative and is not consumed by the physical
+scheduler path; choosing that future authority requires a separate activation
+decision. No physical schedule was qualified by `1.0.0`.
 
 #### FR-027 — Independent service and machine schedules
 
@@ -270,6 +291,10 @@ Priority: Must
 Service schedules and machine power schedules shall remain independent.
 
 The system shall evaluate their interaction before powering off the machine.
+
+The software keeps service and machine policies distinct and implements the
+planning/readiness boundary. Authority for a future physical scheduler and its
+Atlas qualification remain separately gated.
 
 ### 3.6 Backup management
 
@@ -353,10 +378,14 @@ stable.
 
 Priority: Should
 
-General command-line administration is deferred by accepted scope. The first
-software release candidate retains only narrow fixed deployment and
-maintenance entrypoints; it does not provide a general CLI for services,
-backups, power, roles, or event-history queries.
+The system shall provide a general administrative command-line interface over
+the same protected application capabilities used by the dashboard and API.
+
+`1.0.0` delivers the packaged `atlas` CLI for health, services, schedules,
+backups, events, machine policy, and read-only infrastructure diagnostics.
+Its administrative transport uses Cloudflare Access human or service-token
+identity and the same RBAC and audit boundaries as the HTTP API (ADR-027,
+ADR-031, ADR-032, and ADR-034).
 
 #### FR-038 — Health endpoint
 

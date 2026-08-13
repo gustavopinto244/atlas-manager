@@ -80,7 +80,7 @@ const evidence = {
   requirements: {
     result: "complete",
     physicalGates: "explicit",
-    cli: "deferred_by_accepted_scope",
+    cli: "implemented",
   },
   tests: {
     node: "passed",
@@ -113,11 +113,19 @@ const evidence = {
     realSystemd: false,
     realPowerEffect: false,
   },
+  operationalAcceptance: {
+    result: "documented_separately",
+    evidence:
+      "docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md",
+    atlasHostDeployment: "accepted_for_1.0.0",
+    cloudflareIngress: "accepted_for_1.0.0",
+    physicalPowerEffects: "not_activated_or_qualified",
+  },
   remainingPhysicalGates: [
-    "Atlas host deployment",
-    "Cloudflare ingress qualification",
-    "RTC and shutdown acceptance",
-    "helper ownership verification",
+    "physical helper installation and ownership verification",
+    "RTC wake and shutdown acceptance",
+    "persisted-policy versus scheduler-policy authority decision",
+    "explicit future power-enabled profile selection and activation approval",
   ],
 };
 await writeFile(

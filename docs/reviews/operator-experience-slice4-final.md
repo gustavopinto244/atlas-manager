@@ -17,6 +17,11 @@
 > `docs/reviews/adr-027-implementation-conformance.md`. See also correction C1
 > in `docs/reviews/operator-experience-current-state.md` and the milestone
 > report `docs/reviews/authenticated-mutating-cli-final.md`.
+>
+> **Current-state note (2026-08-13).** Later phases also delivered schedule
+> and backup mutations, machine-policy CRUD, and infrastructure diagnostics.
+> Any remaining "CLI deferred" wording below describes the Slice 4 baseline,
+> not `1.0.0`; use `docs/capabilities.md` for the current inventory.
 
 ## Initial state
 

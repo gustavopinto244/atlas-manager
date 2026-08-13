@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "1.0.0-rc.14",
+  "releaseVersion": "1.0.0",
   "sourceCommit": null,
   "sourceDateEpoch": 0,
   "targetPlatform": "linux-amd64",
