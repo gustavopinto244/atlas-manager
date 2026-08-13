@@ -176,6 +176,11 @@ nginx -t && systemctl reload nginx   # nunca "restart"
 O vhost do apex (`sites-available/task-manager-project`) **não foi
 tocado**.
 
+> Nota posterior (13/08/2026): aquele arquivo não existe mais como vhost
+> ativo. Ele continha o apex e o admin no mesmo lugar e foi dividido em
+> `sites-available/portfolio` e `sites-available/atlas-manager`, um por
+> domínio. Ver `deploy-container-no-atlas.md` §11.
+
 ---
 
 ## 3. Decisões e porquês
@@ -374,8 +379,12 @@ já que o dashboard web expõe os três verbos normalmente.
   (`112455d1a9050bf3ba16fa8ec74ef931.access`, cujo secret se perdeu, e
   `e85ee8b7f638d1550fcd2b62897f11e6.access`, usado nos testes da Fase 4) — por decisão do operador, ficam ativos para uso em testes
   futuros do CLI, sem revogação por enquanto.
-- **Falta o último passo do lado Cloudflare: adicionar o Public
-  Hostname `task.gustavopinto.dev.br` pelo painel Zero Trust.** O
+- ~~**Falta o último passo do lado Cloudflare: adicionar o Public
+  Hostname `task.gustavopinto.dev.br` pelo painel Zero Trust.**~~
+  **Resolvido** — verificado em 13/08/2026:
+  `https://task.gustavopinto.dev.br` responde `200`. O registro do
+  diagnóstico original fica abaixo, porque a armadilha do túnel gerenciado
+  remotamente continua valendo para o próximo hostname. O
   registro DNS já foi criado (`cloudflared tunnel route dns
 eeb35f4f-979c-49fd-9ef3-75a04ca96928 task.gustavopinto.dev.br`,
   confirmado propagado — resolve para os mesmos IPs anycast de
