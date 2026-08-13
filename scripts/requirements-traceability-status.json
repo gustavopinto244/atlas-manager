@@ -1,0 +1,10 @@
+{
+  "deferredByAcceptedScope": ["FR-004", "FR-015"],
+  "implementedWithPhysicalGate": {
+    "FR-022": "physical RTC observation qualification on Atlas",
+    "FR-024": "physical wake-alarm activation and qualification on Atlas",
+    "FR-025": "physical shutdown activation and qualification on Atlas",
+    "FR-026": "future persisted-policy authority decision; physical activation and qualification",
+    "FR-027": "future physical scheduler-policy authority and integration qualification"
+  }
+}

@@ -21,13 +21,25 @@ if (sourceCommit !== null && !/^[0-9a-f]{40}$/u.test(sourceCommit))
   throw new Error("source_commit_invalid");
 
 const requirements = await readFile("docs/requirements.md", "utf8");
+const statusConfiguration = JSON.parse(
+  await readFile("scripts/requirements-traceability-status.json", "utf8"),
+);
 const identifiers = [
   ...requirements.matchAll(/^#### ((?:FR|NFR|SEC)-\d+) — (.+)$/gmu),
 ].map(([, id, title]) => ({ id, title }));
 if (identifiers.length === 0) throw new Error("requirements_inventory_empty");
 
-const physical = new Set(["FR-022", "FR-024", "FR-025", "FR-026", "FR-027"]);
-const deferred = new Set(["FR-004", "FR-015", "FR-037"]);
+const implementedWithPhysicalGate = new Map(
+  Object.entries(statusConfiguration.implementedWithPhysicalGate ?? {}),
+);
+const deferred = new Set(statusConfiguration.deferredByAcceptedScope ?? []);
+const requirementIds = new Set(identifiers.map(({ id }) => id));
+for (const id of [...implementedWithPhysicalGate.keys(), ...deferred]) {
+  if (!requirementIds.has(id)) throw new Error("requirement_status_unknown");
+}
+for (const id of implementedWithPhysicalGate.keys()) {
+  if (deferred.has(id)) throw new Error("requirement_status_conflict");
+}
 function table(headers, values) {
   const widths = headers.map((header, index) =>
     Math.max(header.length, ...values.map((row) => row[index].length)),
@@ -41,14 +53,14 @@ function table(headers, values) {
   ].join("\n");
 }
 const rows = identifiers.map(({ id, title }) => {
-  const status = physical.has(id)
-    ? "physical_gate"
+  const status = implementedWithPhysicalGate.has(id)
+    ? "implemented_with_physical_gate"
     : deferred.has(id)
       ? "deferred_by_accepted_scope"
       : "implemented";
   const remaining =
-    status === "physical_gate"
-      ? "separately approved physical Atlas qualification"
+    status === "implemented_with_physical_gate"
+      ? implementedWithPhysicalGate.get(id)
       : status === "deferred_by_accepted_scope"
         ? "future reviewed scope"
         : "software qualification evidence and CI release gate";
@@ -64,8 +76,8 @@ const scopeTable = table(
   [
     [
       "General administrative CLI",
-      "deferred_by_accepted_scope",
-      "ADR-025; narrow deployment and maintenance entrypoints remain",
+      "implemented",
+      "ADR-027/031/032/034; source command inventory and operator package tests",
     ],
     [
       "Backup restoration",

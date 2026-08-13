@@ -2,6 +2,11 @@
 
 Status: Accepted
 
+Scope update: the general-CLI deferral below applied to the early release
+candidate covered by this ADR. ADR-027, ADR-031, ADR-032, and ADR-034 later
+delivered the authenticated administrative `atlas` CLI for `1.0.0`; the
+original decision text is retained as history.
+
 ## Decision
 
 Atlas Manager continues to bind administrative HTTP only to `127.0.0.1`. A

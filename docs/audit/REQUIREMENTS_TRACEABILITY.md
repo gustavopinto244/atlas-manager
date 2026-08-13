@@ -1,5 +1,11 @@
 # Rastreabilidade de requisitos — Atlas Manager 1.0.0-rc.1
 
+> **HISTÓRICO (`1.0.0-rc.1`).** Esta matriz é fixa ao commit indicado abaixo.
+> A CLI geral que ela classifica como deferida foi entregue antes de `1.0.0`.
+> A fonte corrente é
+> `docs/release/atlas-manager-v1-requirements-traceability.md`, gerada por
+> `scripts/generate-requirements-traceability.mjs`.
+
 ## Método e legenda
 
 Esta matriz confronta o requisito normativo com código, composição, entrega,

@@ -1,5 +1,10 @@
 # CLI plan
 
+> **Historical milestone plan.** The 36-node/5-stub inventory below describes
+> its 2026-08-10 slice. Current `1.0.0` source has 39 implemented command nodes
+> and zero stubs. See `docs/capabilities.md` and the regression-tested command
+> inventory.
+
 ## Status (2026-08-10, scheduling and backup CLI mutations milestone)
 
 Source: `src/cli/command-tree.ts` (`AtlasCommand.implemented`). 36 command

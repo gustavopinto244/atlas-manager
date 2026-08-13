@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "result": "not_qualified",
-  "releaseVersion": "1.0.0-rc.14",
+  "releaseVersion": "1.0.0",
   "baselineCommit": null,
   "sourceCommit": null,
   "administrativeSecurity": {
@@ -16,12 +16,12 @@
   },
   "routeCatalog": {
     "result": "reconciled",
-    "contractSha256": "bce1ea4c48a08ee0a06cf56dfe759b535716c6acaf45cf30bd036583a1e6ee47"
+    "contractSha256": "b51182c20106535c15613a3c330c6021294a65cd9df8f3cc4d9e41daf7ec5cd2"
   },
   "requirements": {
     "result": "complete",
     "physicalGates": "explicit",
-    "cli": "deferred_by_accepted_scope"
+    "cli": "implemented"
   },
   "tests": {
     "node": "passed",
@@ -56,10 +56,17 @@
     "realSystemd": false,
     "realPowerEffect": false
   },
+  "operationalAcceptance": {
+    "result": "documented_separately",
+    "evidence": "docs/release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md",
+    "atlasHostDeployment": "accepted_for_1.0.0",
+    "cloudflareIngress": "accepted_for_1.0.0",
+    "physicalPowerEffects": "not_activated_or_qualified"
+  },
   "remainingPhysicalGates": [
-    "Atlas host deployment",
-    "Cloudflare ingress qualification",
-    "RTC and shutdown acceptance",
-    "helper ownership verification"
+    "physical helper installation and ownership verification",
+    "RTC wake and shutdown acceptance",
+    "persisted-policy versus scheduler-policy authority decision",
+    "explicit future power-enabled profile selection and activation approval"
   ]
 }

@@ -64,8 +64,9 @@ dispatching integration, service-management composition integration,
 availability scheduling integration, and file-backed scheduler coverage.
 
 The administrative API, dashboard, backup orchestration, event history, and
-managed deployment lifecycle are implemented in the current software
-candidate. The historical milestone text below is retained as project history.
+managed deployment lifecycle are implemented in `1.0.0`. The general `atlas`
+administrative CLI is also delivered and packaged; it is not future scope.
+The historical milestone text below is retained as project history.
 
 ## Roadmap principles
 
@@ -246,7 +247,13 @@ execution, persistent run metadata, atomic local artifacts, checksums,
 retention, shutdown readiness, and dashboard visibility. Restoration, remote
 replication, logical database backup, and physical execution remain deferred.
 
-## v0.6 — Power management (active)
+## v0.6 — Power management (software delivered; physical gate open)
+
+The subsections below preserve the incremental history of this milestone.
+Statements that a slice was "active" or that a later software slice was
+deferred describe that point in development. By `1.0.0`, the logical policy,
+mock control plane, scheduler software, and fixed helper backends exist; real
+RTC/wake/shutdown activation and qualification remain separately gated.
 
 ### Objective
 
@@ -542,7 +549,6 @@ The initial stable release should include:
 
 Possible future work includes:
 
-- command-line administration;
 - notification integrations;
 - expanded monitoring;
 - multiple host support;
