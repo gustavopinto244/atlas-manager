@@ -29,6 +29,12 @@ effects and the machine scheduler disabled. This guide never installs or
 activates the Linux power helper and never performs a real shutdown, reboot,
 wake-alarm or RTC mutation.
 
+The default systemd unit is also mock-only: it has no
+`atlas-manager-power` supplementary group and applies `NoNewPrivileges=true`
+and `RestrictSUIDSGID=true`. The bundle inventories a distinct future
+power-enabled template for review, but no current installer or lifecycle action
+selects it. Its presence is not an activation signal (ADR-035).
+
 ## Never transfer operator secrets to the host
 
 Transfer the release archive only. Do not copy a working tree, a `dist/`
@@ -203,6 +209,10 @@ The installer creates the managed release, atomically selects
 `/opt/atlas-manager/current`, installs the systemd unit and safe configuration
 template, and records deployment state. It does not create the real
 environment, reload systemd, enable the unit or start Atlas Manager.
+
+`install-disabled` always copies the hardened mock unit. It never copies the
+separate `systemd/profiles/atlas-manager-power-enabled.service` template and
+does not inspect the host for a helper in order to choose a profile.
 
 Detailed contract:
 [disabled installation](operations/atlas-manager-disabled-installation.md).

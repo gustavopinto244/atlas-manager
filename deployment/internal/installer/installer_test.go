@@ -36,6 +36,13 @@ func TestSandboxDisabledInstallUpgradeRollbackAndUninstall(t *testing.T) {
 	if err := newInstaller(bundleA).Run(context.Background(), InstallDisabled); err != nil {
 		t.Fatal(err)
 	}
+	installedUnit, err := os.ReadFile(paths.Unit)
+	if err != nil || string(installedUnit) != systemdunit.Content {
+		t.Fatal("default installation did not select the mock-only unit")
+	}
+	if string(installedUnit) == systemdunit.PowerEnabledContent {
+		t.Fatal("default installation selected the opt-in power profile")
+	}
 	releaseInfo, err := os.Stat(filepath.Join(paths.ReleaseRoot, "0.1.0"))
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +117,30 @@ func TestSandboxVerificationRejectsModifiedManagedRelease(t *testing.T) {
 	}
 }
 
+func TestSandboxVerificationRejectsPowerEnabledProfileAsDefault(t *testing.T) {
+	root := t.TempDir()
+	bundle := createBundle(t, filepath.Join(root, "bundle"), "0.1.0")
+	paths := sandboxPaths(filepath.Join(root, "host"))
+	identity := runtimeidentity.Identity{UserID: 1001, PrimaryGroupID: 1001, HelperGroupID: 1002}
+	current := New(Config{
+		Paths: paths, BundleRoot: bundle, EffectiveUID: func() int { return 0 },
+		ResolveIdentity: func() (runtimeidentity.Identity, error) { return identity, nil },
+		CheckNode:       func(_ context.Context) error { return nil },
+	})
+	if err := current.Run(context.Background(), InstallDisabled); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.Unit, []byte(systemdunit.PowerEnabledContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := current.Run(context.Background(), VerifyDisabled); err == nil || err.Error() != "systemd_unit_invalid" {
+		t.Fatalf("power-enabled profile accepted as default: %v", err)
+	}
+	if err := VerifyManagedDisabled(paths, identity, false); err == nil || err.Error() != "systemd_unit_invalid" {
+		t.Fatalf("power-enabled profile admitted to lifecycle verification: %v", err)
+	}
+}
+
 func TestSandboxVerificationRejectsReleaseRootWithUnsafeMode(t *testing.T) {
 	root := t.TempDir()
 	bundle := createBundle(t, filepath.Join(root, "bundle"), "0.1.0")
@@ -179,7 +210,7 @@ func TestRejectsActivationActions(t *testing.T) {
 
 func createBundle(t *testing.T, root, version string) string {
 	t.Helper()
-	for _, directory := range []string{"application/dist", "application/node_modules/runtime", "systemd", "config"} {
+	for _, directory := range []string{"application/dist", "application/node_modules/runtime", "systemd/profiles", "config"} {
 		if err := os.MkdirAll(filepath.Join(root, directory), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -188,20 +219,21 @@ func createBundle(t *testing.T, root, version string) string {
 		content string
 		mode    os.FileMode
 	}{
-		"application/dist/main.js":                  {"console.log('smoke');\n", 0o644},
-		"application/package.json":                  {`{"name":"atlas-manager","version":"0.1.0","type":"module"}`, 0o644},
-		"application/package-lock.json":             {`{"name":"atlas-manager","lockfileVersion":3,"requires":true,"packages":{}}`, 0o644},
-		"application/node_modules/runtime/index.js": {"export {};\n", 0o644},
-		"atlas-manager-installer":                   {"test installer\n", 0o755},
-		"atlas-manager-server-installer":            {"test server installer\n", 0o755},
-		"atlas-manager-host-qualification":          {"test qualification\n", 0o755},
-		"atlas-manager-runtime-identity-installer":  {"test identity installer\n", 0o755},
-		"atlas-manager-runtime-configuration":       {"test runtime configuration\n", 0o755},
-		"atlas-manager-service-lifecycle":           {"test service lifecycle\n", 0o755},
-		"systemd/atlas-manager.service":             {systemdunit.Content, 0o644},
-		"config/atlas-manager.env.example":          {"HOST=127.0.0.1\nPOWER_MANAGEMENT_BACKEND=mock\n", 0o640},
-		"INSTALLATION.md":                           {"disabled\n", 0o644},
-		"LICENSE":                                   {"MIT\n", 0o644},
+		"application/dist/main.js":                             {"console.log('smoke');\n", 0o644},
+		"application/package.json":                             {`{"name":"atlas-manager","version":"0.1.0","type":"module"}`, 0o644},
+		"application/package-lock.json":                        {`{"name":"atlas-manager","lockfileVersion":3,"requires":true,"packages":{}}`, 0o644},
+		"application/node_modules/runtime/index.js":            {"export {};\n", 0o644},
+		"atlas-manager-installer":                              {"test installer\n", 0o755},
+		"atlas-manager-server-installer":                       {"test server installer\n", 0o755},
+		"atlas-manager-host-qualification":                     {"test qualification\n", 0o755},
+		"atlas-manager-runtime-identity-installer":             {"test identity installer\n", 0o755},
+		"atlas-manager-runtime-configuration":                  {"test runtime configuration\n", 0o755},
+		"atlas-manager-service-lifecycle":                      {"test service lifecycle\n", 0o755},
+		"systemd/atlas-manager.service":                        {systemdunit.Content, 0o644},
+		"systemd/profiles/atlas-manager-power-enabled.service": {systemdunit.PowerEnabledContent, 0o644},
+		"config/atlas-manager.env.example":                     {"HOST=127.0.0.1\nPOWER_MANAGEMENT_BACKEND=mock\n", 0o640},
+		"INSTALLATION.md":                                      {"disabled\n", 0o644},
+		"LICENSE":                                              {"MIT\n", 0o644},
 	}
 	for path, file := range files {
 		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), []byte(file.content), file.mode); err != nil {

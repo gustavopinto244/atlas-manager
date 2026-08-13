@@ -49,6 +49,17 @@ type Entry struct {
 }
 
 func Validate(passwd, group string, process Process) (Identity, error) {
+	return validateProcess(passwd, group, process, true)
+}
+
+// ValidateMock requires the dedicated service identity while rejecting the
+// helper execution group. The default systemd profile uses this narrower
+// contract; Linux power-effects admission continues to use Validate.
+func ValidateMock(passwd, group string, process Process) (Identity, error) {
+	return validateProcess(passwd, group, process, false)
+}
+
+func validateProcess(passwd, group string, process Process, requireHelperGroup bool) (Identity, error) {
 	users, err := parsePasswd(passwd)
 	if err != nil {
 		return Identity{}, err
@@ -80,8 +91,12 @@ func Validate(passwd, group string, process Process) (Identity, error) {
 	if identity.PrimaryGroupID != process.GID {
 		return Identity{}, fmt.Errorf("runtime_primary_group_invalid")
 	}
-	if !contains(process.Groups, identity.HelperGroupID) {
+	hasHelperGroup := contains(process.Groups, identity.HelperGroupID)
+	if requireHelperGroup && !hasHelperGroup {
 		return Identity{}, fmt.Errorf("runtime_helper_group_membership_missing")
+	}
+	if !requireHelperGroup && hasHelperGroup {
+		return Identity{}, fmt.Errorf("runtime_helper_group_membership_unexpected")
 	}
 	return identity, nil
 }

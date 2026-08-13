@@ -20,6 +20,17 @@ func TestValidateExactIdentity(t *testing.T) {
 	}
 }
 
+func TestValidateMockRejectsPowerAuthority(t *testing.T) {
+	mockProcess := Process{UID: 1001, EUID: 1001, GID: 1001, EGID: 1001, Groups: []int{1001}}
+	identity, err := ValidateMock(validPasswd, validGroup, mockProcess)
+	if err != nil || identity != (Identity{UserID: 1001, PrimaryGroupID: 1001, HelperGroupID: 1002}) {
+		t.Fatalf("identity = %#v, err = %v", identity, err)
+	}
+	if _, err := ValidateMock(validPasswd, validGroup, validProcess()); err == nil || err.Error() != "runtime_helper_group_membership_unexpected" {
+		t.Fatalf("power-ready process accepted by mock profile: %v", err)
+	}
+}
+
 func TestValidateAccountContractDoesNotRequireInstallerToRunAsService(t *testing.T) {
 	identity, err := ValidateAccountContract(validPasswd, validGroup)
 	if err != nil || identity.UserID != 1001 || identity.HelperGroupID != 1002 {

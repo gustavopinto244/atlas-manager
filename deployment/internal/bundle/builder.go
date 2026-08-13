@@ -190,7 +190,7 @@ func Build(ctx context.Context, config Config) (Result, error) {
 	for index := range paths {
 		paths[index] = filepath.ToSlash(filepath.Join("application", paths[index]))
 	}
-	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-server-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service", "contracts/atlas-manager-administrative-api.json"}
+	metadataPaths := []string{"INSTALLATION.md", "LICENSE", "atlas-manager-installer", "atlas-manager-server-installer", "atlas-manager-host-qualification", "atlas-manager-runtime-identity-installer", "atlas-manager-runtime-configuration", "atlas-manager-service-lifecycle", "atlas-manager.mock-admin.input.example.json", "dashboard/index.html", "dashboard/styles.css", "dashboard/app.js", "config/atlas-manager.env.example", "systemd/atlas-manager.service", "systemd/profiles/atlas-manager-power-enabled.service", "contracts/atlas-manager-administrative-api.json"}
 	if config.AdministrativeRuntimeConfigurationPath != "" {
 		metadataPaths = append(metadataPaths, "atlas-manager-administrative-runtime-configuration")
 	}
@@ -461,6 +461,9 @@ func writeMetadata(root string, config Config) error {
 	if err := os.MkdirAll(filepath.Join(root, "systemd"), 0o755); err != nil {
 		return fmt.Errorf("bundle_metadata_failed")
 	}
+	if err := os.MkdirAll(filepath.Join(root, "systemd", "profiles"), 0o755); err != nil {
+		return fmt.Errorf("bundle_metadata_failed")
+	}
 	if err := os.MkdirAll(filepath.Join(root, "config"), 0o755); err != nil {
 		return fmt.Errorf("bundle_metadata_failed")
 	}
@@ -480,6 +483,9 @@ func writeMetadata(root string, config Config) error {
 		return fmt.Errorf("bundle_metadata_failed")
 	}
 	if err := os.WriteFile(filepath.Join(root, "systemd", "atlas-manager.service"), []byte(systemdunit.Content), 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(root, "systemd", "profiles", "atlas-manager-power-enabled.service"), []byte(systemdunit.PowerEnabledContent), 0o644); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(root, "config", "atlas-manager.env.example"), envTemplate(config), 0o644); err != nil {
@@ -524,6 +530,11 @@ This bundle is installed by a local administrator through
 atlas-manager-installer install-disabled. Installation does not create users
 or groups, create the real environment file, enable or start systemd, install
 the Linux power helper, or activate power effects.
+
+The installer always selects systemd/atlas-manager.service, the hardened
+mock-only profile with no atlas-manager-power supplementary group. The
+separately checksummed systemd/profiles/atlas-manager-power-enabled.service is
+a future opt-in template and is never selected by this installer.
 
 Before any mutation, run atlas-manager-server-installer inspect and
 atlas-manager-server-installer plan. The planner executes fixed read-only

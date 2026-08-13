@@ -309,7 +309,7 @@ func verifyProcessIdentity(pid int, dependencies Dependencies) error {
 	if err != nil {
 		return err
 	}
-	_, err = runtimeidentity.Validate(string(passwd), string(group), process)
+	_, err = runtimeidentity.ValidateMock(string(passwd), string(group), process)
 	return err
 }
 
