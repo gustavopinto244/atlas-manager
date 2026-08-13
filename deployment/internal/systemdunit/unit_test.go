@@ -84,6 +84,27 @@ func TestRejectsProfileCrossOverAndGateInjection(t *testing.T) {
 	}
 }
 
+func TestRejectsEveryUnreviewedSystemdDirectiveOrOverride(t *testing.T) {
+	for name, injected := range map[string]string{
+		"root user override":        "User=root",
+		"ambient boot capability":   "AmbientCapabilities=CAP_SYS_BOOT",
+		"capability bounding set":   "CapabilityBoundingSet=CAP_SYS_BOOT",
+		"filesystem override":       "ProtectSystem=false",
+		"second executable":         "ExecStart=/usr/bin/false",
+		"executable list reset":     "ExecStart=",
+		"power group after comment": "# SupplementaryGroups=atlas-manager-power",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if Validate(Content + injected + "\n") {
+				t.Fatalf("mock profile accepted %q", injected)
+			}
+			if ValidateForProfile(PowerEnabledContent+injected+"\n", ProfilePowerEnabled) {
+				t.Fatalf("power-enabled profile accepted %q", injected)
+			}
+		})
+	}
+}
+
 func TestAcceptsOnlyKnownPowerReadyPredecessorsForManagedUpgrade(t *testing.T) {
 	if !ValidateManaged(PowerEnabledContent) || !ValidateManaged(previousPowerReadyContent) || !ValidateManaged(legacyPowerEnabledContent) {
 		t.Fatal("known predecessor must be accepted during managed upgrade")
@@ -93,5 +114,8 @@ func TestAcceptsOnlyKnownPowerReadyPredecessorsForManagedUpgrade(t *testing.T) {
 	}
 	if ValidateManaged(legacyPowerEnabledContent + "\nNoNewPrivileges=true\n") {
 		t.Fatal("modified predecessor must be rejected")
+	}
+	if ValidateManaged(legacyPowerEnabledContent + "\n") {
+		t.Fatal("predecessor with unreviewed trailing bytes must be rejected")
 	}
 }

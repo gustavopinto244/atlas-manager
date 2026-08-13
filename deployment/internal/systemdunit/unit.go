@@ -122,65 +122,8 @@ func ContentFor(profile Profile) (string, error) {
 func Validate(value string) bool { return ValidateForProfile(value, ProfileMock) }
 
 func ValidateForProfile(value string, profile Profile) bool {
-	for _, required := range []string{
-		"User=atlas-manager", "Group=atlas-manager",
-		"ExecStart=/usr/bin/node /opt/atlas-manager/current/dist/main.js",
-		"WorkingDirectory=/var/lib/atlas-manager", "EnvironmentFile=/etc/atlas-manager/atlas-manager.env",
-		"Restart=no", "StateDirectory=atlas-manager atlas-manager-backups atlas-manager-event-history atlas-manager-service-availability atlas-manager-machine-power", "RuntimeDirectory=atlas-manager", "UMask=0027",
-	} {
-		if !strings.Contains(value, required) {
-			return false
-		}
-	}
-	for _, forbidden := range []string{
-		"systemctl", "sh -c", "sudo", "/usr/local/libexec/atlas-manager-power-helper",
-		"POWER_MANAGEMENT_BACKEND=", "MACHINE_POWER_EFFECTS_ACTIVATION=",
-		"MACHINE_POWER_EFFECTS_CONFIRMATION=", "LINUX_POWER_HELPER_EXPECTED_SHA256=",
-		"MACHINE_POWER_SCHEDULER_ENABLED=", "ADMINISTRATIVE_WAKE_ALARM_HTTP_ENABLED=",
-		"ADMINISTRATIVE_SHUTDOWN_HTTP_ENABLED=",
-	} {
-		if strings.Contains(value, forbidden) {
-			return false
-		}
-	}
-	switch profile {
-	case ProfileMock:
-		return hasExactDirective(value, "NoNewPrivileges", "true") &&
-			hasExactDirective(value, "RestrictSUIDSGID", "true") &&
-			!hasDirective(value, "SupplementaryGroups") &&
-			!strings.Contains(value, "atlas-manager-power")
-	case ProfilePowerEnabled:
-		return hasExactDirective(value, "SupplementaryGroups", "atlas-manager-power") &&
-			!hasDirective(value, "NoNewPrivileges") &&
-			!hasDirective(value, "RestrictSUIDSGID")
-	default:
-		return false
-	}
-}
-
-func hasDirective(value, name string) bool {
-	prefix := name + "="
-	for _, line := range strings.Split(value, "\n") {
-		if strings.HasPrefix(line, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasExactDirective(value, name, expected string) bool {
-	prefix := name + "="
-	seen := false
-	for _, line := range strings.Split(value, "\n") {
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		if seen || line != prefix+expected {
-			return false
-		}
-		seen = true
-	}
-	return seen
+	expected, err := ContentFor(profile)
+	return err == nil && value == expected
 }
 
 // ValidateManaged accepts the default mock contract, the opt-in template, and
@@ -189,7 +132,7 @@ func hasExactDirective(value, name, expected string) bool {
 // applies only while proving an existing installation before replacement.
 func ValidateManaged(value string) bool {
 	return Validate(value) ||
-		strings.TrimSpace(value) == strings.TrimSpace(PowerEnabledContent) ||
-		strings.TrimSpace(value) == strings.TrimSpace(previousPowerReadyContent) ||
-		strings.TrimSpace(value) == strings.TrimSpace(legacyPowerEnabledContent)
+		value == PowerEnabledContent ||
+		value == previousPowerReadyContent ||
+		value == legacyPowerEnabledContent
 }

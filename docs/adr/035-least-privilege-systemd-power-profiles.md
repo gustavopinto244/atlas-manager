@@ -87,12 +87,14 @@ fallback.
 
 ## Compatibility and validation
 
-Managed upgrade inspection accepts the exact historical power-ready units only
-as predecessors so the new bundle can replace them. New bundle inspection and
-mock lifecycle activation require the hardened default unit. The bundle also
-validates and checksums the separate power-enabled template, while the
-installer always copies only the default unit to
-`/etc/systemd/system/atlas-manager.service`.
+Managed upgrade inspection accepts only byte-exact historical power-ready
+units as predecessors so the new bundle can replace them. New bundle
+inspection and mock lifecycle activation require byte equality with the
+hardened default unit; required-substring matching, unknown directives,
+duplicate overrides, added capabilities, and appended comments are not
+accepted. The bundle applies the same closed comparison to the checksummed
+power-enabled template, while the installer always copies only the default
+unit to `/etc/systemd/system/atlas-manager.service`.
 
 Go tests prove profile separation, explicit selection, default installation,
 predecessor compatibility, gate non-override, and mock runtime rejection of
