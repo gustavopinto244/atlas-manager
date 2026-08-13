@@ -21,7 +21,7 @@ const (
 	MaxInputBytes    = 65_536
 )
 
-const ExampleInput = `{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"replace-with-access-application-audience","publicOrigin":"https://atlas.example.com","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]}],"registeredServices":[],"backupSchedulerEnabled":false,"backupTargets":[{"id":"example-backup","displayName":"Example backup","kind":"mock","schedule":{"mode":"manual"},"retention":{"keepLastSuccessful":7},"limits":{"maxFiles":1000,"maxTotalBytes":1073741824,"maxFileBytes":268435456,"maxDepth":16,"maxRelativePathBytes":4096}}]}
+const ExampleInput = `{"schemaVersion":1,"cloudflareTeamName":"example-team","cloudflareAudience":"replace-with-access-application-audience","publicOrigin":"https://atlas.example.com","roleAssignments":[{"principalId":"00000000-0000-4000-8000-000000000001","roles":["administrator"]},{"principalId":"00000000-0000-4000-8000-000000000002","roles":["auditor","service_operator","backup_operator"]}],"registeredServices":[],"backupSchedulerEnabled":false,"backupTargets":[{"id":"example-backup","displayName":"Example backup","kind":"mock","schedule":{"mode":"manual"},"retention":{"keepLastSuccessful":7},"limits":{"maxFiles":1000,"maxTotalBytes":1073741824,"maxFileBytes":268435456,"maxDepth":16,"maxRelativePathBytes":4096}}]}
 `
 
 func ExampleInputBytes() []byte {

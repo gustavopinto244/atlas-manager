@@ -1,8 +1,10 @@
 # Atlas Manager — High-Level Architecture
 
-## Mock-only administrative control plane and dashboard
+## Current administrative control plane and dashboard
 
-ADR-022 adds the first protected product-facing control plane. Service,
+ADR-022 introduced the first protected product-facing control plane. The
+current `1.0.0` implementation extends it through ADR-027 and ADR-031–034.
+Service,
 availability, overview, and dashboard routes use one process-local admission
 boundary and the existing Cloudflare authentication, fixed role policy,
 authorization audit, and persistent event history. HTTP maps explicit safe
@@ -15,7 +17,9 @@ safe DOM text rendering, no browser credential storage, no CORS, and no
 external assets. The managed profile is loopback-only and mock-first:
 administrative control is enabled, but wake/shutdown routes, Linux effects,
 and the machine-power scheduler remain disabled. Service activation and power
-activation are independent boundaries, and no physical host or VM was used.
+activation are independent boundaries. The ADR-022 implementation tranche used
+no physical host or VM; the later GA acceptance exercised the mock-only
+deployment and real Cloudflare ingress without activating physical power.
 
 ## Controlled backup orchestration
 
@@ -216,16 +220,18 @@ power management / event history
 controlled infrastructure adapter
 ```
 
-Authentication creates an immutable UUID-only principal. Authorization maps one
-explicit operation to one fixed permission and reads trusted role assignments
-exactly once. The default authenticator denies all requests and unknown or
-unavailable role data fails closed. Authorization events are stored through the
-same event-history boundary before a target capability runs.
+Authentication creates an immutable UUID-backed human or service principal.
+Authorization maps one explicit operation to one fixed permission and reads
+trusted role assignments exactly once. The default authenticator denies all
+requests and unknown or unavailable role data fails closed. Authorization
+events are stored through the same event-history boundary before a target
+capability runs.
 
 Power-management and event-history adapters do not receive credentials, roles,
-permissions, sessions, or authorization policy. Verified authenticated actors
-are constructed internally as `administrator:<principalId>`; callers cannot
-provide actor fields. Scheduler-generated occurrence events remain
+permissions, sessions, or authorization policy. Verified authenticated human
+actors are constructed internally as `administrator:<principalId>` and
+Cloudflare service-token actors as `service:<principalId>`; callers cannot
+provide actor fields or kind. Scheduler-generated occurrence events remain
 `automated/machine-power-scheduler`, even when a protected administrator
 authorizes the scheduler tick. This application boundary does not authorize
 delivery requests by itself; the Cloudflare identity adapter and the protected
@@ -434,8 +440,12 @@ The composition root is responsible for:
 Dependency construction must not be scattered across controllers or feature
 modules.
 
-The current `src/main.ts` is only a bootstrap validation entry point. It does
-not yet implement the final composition root.
+`src/main.ts` is the production composition root. It parses immutable
+configuration, admits or rejects Linux power effects before HTTP construction,
+builds the shared feature capabilities, creates Express, starts scheduler
+lifecycles only after the listener is ready, and coordinates graceful
+shutdown. Feature-local composition functions keep those responsibilities
+modular while the top-level wiring remains centralized.
 
 ## Request flow
 
@@ -678,14 +688,14 @@ user-relevant administrative actions.
 
 ### Authentication and authorization
 
-Authentication and authorization are separate requirements before exposing
-privileged administrative operations. ADR-003 accepts project-owned
-application authorization and rejects controller-only, adapter-owned, and
-caller-selected roles or actors. The current implementation is mock-first:
-authentication has a deny-all default, authorization uses fixed roles and
-permissions, and every protected decision is audited before target invocation.
-Production identity verification, protected HTTP delivery, transport security,
-and deployment validation remain deferred.
+Authentication and authorization remain separate requirements for privileged
+administration. ADR-003 accepts project-owned application authorization and
+rejects controller-only, adapter-owned, and caller-selected roles or actors.
+The current protected HTTP delivery verifies Cloudflare Access assertions,
+maps trusted local role assignments to fixed permissions, and audits each
+decision before target invocation. Human dashboard identities and CLI service
+principals use the same policy while retaining distinct audit actor prefixes.
+Missing configuration or credentials still follow the deny-all default.
 
 ## Testing strategy
 
@@ -1013,6 +1023,13 @@ start a scheduler. Parsing and composition perform no plan execution, helper
 request, RTC access, D-Bus request, wake mutation, shutdown, lock creation, or
 background work.
 
+ADR-033 later added a separately persisted policy for CLI/dashboard/API CRUD
+and candidate preview. That persisted value is authoritative for what an
+operator reads and edits, but it intentionally does not flow into
+`createPowerManagement`, the scheduler confirmation reader, or any physical
+effect. Selecting the future scheduler authority requires a new activation
+decision; the distinction is not an implicit live reload.
+
 ### Policy-bound scheduler confirmation
 
 ADR-013 keeps scheduler authorization source-specific. The scheduler receives
@@ -1092,6 +1109,13 @@ archive. Its installer uses fixed paths, fixed Node.js `/usr/bin/node`, the
 exact `atlas-manager` identity, and a nonblocking deployment lock. It installs
 only a disabled unit and template; it does not enable systemd, create the real
 environment, execute Atlas, or install the helper.
+
+ADR-035 separates the systemd privilege profiles. The installed default is a
+mock-only unit with `NoNewPrivileges=true`, `RestrictSUIDSGID=true`, and no
+`atlas-manager-power` supplementary group. A separately checksummed
+power-enabled template is an explicit future input and is never selected by
+the current installer or mock lifecycle. Neither profile sets any ADR-015
+activation variable.
 
 ### Read-only deployment qualification
 

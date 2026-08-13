@@ -11,6 +11,13 @@ The file must be a regular root-owned file with mode `0600`. Its
 Access application AUD, and each `principalId` must match the JWT `sub`
 exactly. Canonical lowercase UUID v4 and v5 identifiers are supported.
 
+The example separates the required human/bootstrap `administrator` assignment
+from an automation principal that combines `auditor`, `service_operator`, and
+`backup_operator`. Reduce the automation set when fewer capabilities are
+needed, and use separate least-privilege service principals for unrelated
+automations. The `administrator` role is not the default recommendation for a
+service token.
+
 The administrative origin is `https://admin.gustavopinto.dev.br` without an
 `/admin` path. The public flow is:
 

@@ -1,5 +1,14 @@
 # Auditoria completa do Atlas Manager — v1.0.0-rc.1
 
+> **HISTORICAL AUDIT — baseline `1.0.0-rc.1`, commit
+> `162191dae6415cc33aab4e30a2cb60be7845cb5f` (2026-08-02).** Os findings
+> abaixo registram o estado auditado naquele momento e não descrevem o estado
+> corrente de `1.0.0`. Eles foram posteriormente remediados e revalidados; não
+> foram apagados para preservar a história técnica. Consulte o
+> [relatório de implementação das remediações](AUDIT_REMEDIATION_IMPLEMENTATION_REPORT.md),
+> a [evidência final de acceptance GA](../release/atlas-manager-1.0.0-final-operational-acceptance-evidence.md)
+> e a [reconciliação final pós-GA](../reviews/final-1.0.0-reconciliation-and-power-hardening.md).
+
 ## Resumo executivo
 
 O repositório contém uma implementação ampla e, em vários módulos, madura das

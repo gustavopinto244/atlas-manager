@@ -88,6 +88,15 @@ operator must declare the token server-side in
 `ADMINISTRATIVE_ROLE_ASSIGNMENTS`; an undeclared token authenticates as nobody
 even when Cloudflare accepted it.
 
+Grant a service principal only the roles required by its job. For example,
+service automation should normally use `service_operator`, backup automation
+`backup_operator`, read-only diagnostics `auditor`, event-history maintenance
+`audit_operator`, and machine-policy work `power_operator`. Keep unrelated
+workflows on separate principals. `administrator` remains available for broad
+operator administration but is not the recommended automation default. The GA
+acceptance record preserves the broader role used during that historical test;
+it is evidence of what happened, not current least-privilege guidance.
+
 **Human assertion — deprecated.** `ATLAS_CLOUDFLARE_ACCESS_JWT` still works and
 is forwarded as `Cf-Access-Jwt-Assertion`, so existing operator workflows keep
 running. It borrows the operator's own identity: every action is recorded
