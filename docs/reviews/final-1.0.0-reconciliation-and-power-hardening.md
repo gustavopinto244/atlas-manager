@@ -63,8 +63,11 @@ alarm, shutdown, reboot, suspend, hibernate, or other physical effect occurred.
 
 `scripts/requirements-traceability-status.json` is now the reviewed
 machine-readable classification source consumed by
-`scripts/generate-requirements-traceability.mjs`; the generated Markdown is no
-longer the only place where scope is encoded.
+`scripts/generate-requirements-traceability.mjs`; all 64 normative IDs require
+one explicit and non-overlapping classification, and missing, duplicate,
+conflicting, or unknown IDs fail generation. The generated Markdown is no
+longer the only place where scope is encoded, and snapshot validation requires
+byte equivalence with detached generation.
 
 - FR-004 and FR-015 remain `deferred_by_accepted_scope`.
 - FR-037 is `implemented`, backed by ADR-027/031/032/034, the 39-node command
@@ -127,13 +130,21 @@ ADR-035 adds two explicit deployment profiles:
   helper-presence, or installer-driven implicit selection does not exist. The
   current installer never copies this template into the active unit.
 
-The profile validators reject extra supplementary groups, cross-profile
-directives, helper paths, backend selection, effects activation/confirmation,
-expected-helper digest settings, scheduler activation, and power HTTP flags.
-Current lifecycle and qualification verification accept only the mock profile.
-Exact old power-ready units are accepted solely during managed-upgrade
-preflight and are replaced by the new mock unit before verification or
-activation.
+The profile validators require byte equality with the reviewed mock or
+power-enabled unit. This rejects unknown directives, duplicate overrides,
+extra capabilities or groups, cross-profile hardening, helper paths, backend
+selection, effects activation/confirmation, expected-helper digest settings,
+scheduler activation, power HTTP flags, and appended comments. Current
+lifecycle and qualification verification accept only the mock profile. Exact
+old power-ready units are accepted solely during managed-upgrade preflight and
+are replaced by the new mock unit before verification or activation.
+
+Administrative lifecycle verification now probes every mandatory read-only
+surface of the fixed administrative profile without credentials and requires
+the shared authentication envelope. A missing dashboard, asset, event-history
+operation, services, availability, schedule, overview, backup, or security
+surface blocks `active_mock_verified`; power routes remain independently
+checked against their explicit flags.
 
 Mock runtime verification also rejects effective membership in the helper
 group. The future power identity contract continues to require the exact
@@ -176,7 +187,7 @@ Completed locally against the changed source:
 - `npm run lint` — passed;
 - `npm run typecheck` — passed;
 - full `npm test` with the deterministic power-helper fixture — 260 files,
-  3,482 tests passed;
+  3,484 tests passed;
 - deployment `gofmt -l`, `go vet ./...`, and `go test ./... -count=1` — passed;
 - power-helper `gofmt -l`, `go vet ./...`, and `go test ./... -count=1` —
   passed;
